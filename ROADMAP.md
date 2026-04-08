@@ -1,6 +1,8 @@
-# Roadmap: TSN (TypeScript Native)
+# Roadmap: TSN (TSN Standard Notation)
 
-TSN là một phương ngữ của TypeScript, được thiết kế để biên dịch trực tiếp sang mã máy thông qua LLVM IR. Mục tiêu là giữ 90% cú pháp của TypeScript nhưng mang lại hiệu năng của C/C++.
+TSN là một ngôn ngữ lấy cảm hứng từ TypeScript (recursive acronym: TSN Standard Notation), được thiết kế để biên dịch trực tiếp sang mã máy thông qua LLVM IR. Mục tiêu là giữ 90% cú pháp của TypeScript nhưng mang lại hiệu năng của C/C++.
+
+**Lưu ý**: TSN là dự án độc lập, không liên kết với Microsoft hay TypeScript team.
 
 ## 🎯 Tầm nhìn (Vision)
 Xây dựng một trình biên dịch Self-hosted (tự biên dịch chính nó) có khả năng tạo ra các file thực thi `.exe` (Windows) và `.elf` (Linux) siêu nhỏ gọn, không cần Runtime nặng nề (No V8, No Node.js).
@@ -51,7 +53,7 @@ Xây dựng một trình biên dịch Self-hosted (tự biên dịch chính nó)
 - [ ] **TSN-in-TSN Emitter:** Sinh mã LLVM IR từ TSN.
 - [ ] **Bootstrapping:** Dùng trình biên dịch C++ hiện tại để biên dịch trình biên dịch TSN mới.
 
-### Giai đoạn 4: TypeScript Compatibility (Mở rộng)
+### Giai đoạn 4: TypeScript-Inspired Compatibility (Mở rộng)
 - [ ] **Type Inference:** Tự động suy luận kiểu dữ liệu.
 - [ ] **Standard Library (std):** 
     - `fs`: Đọc/Ghi file native.
@@ -62,14 +64,14 @@ Xây dựng một trình biên dịch Self-hosted (tự biên dịch chính nó)
 
 ## 🛠️ Quy tắc cú pháp (Syntax Rules)
 
-TSN tuân thủ chặt chẽ cú pháp TypeScript nhưng có một số điều chỉnh để phù hợp với môi trường Native:
+TSN tuân thủ cú pháp lấy cảm hứng từ TypeScript nhưng có một số điều chỉnh để phù hợp với môi trường Native:
 
 1. **Kiểu dữ liệu tường minh:** 
    - Thay vì chỉ có `number`, TSN chia nhỏ thành `i32`, `f64`, `u8`... để tối ưu bộ nhớ.
    - `number` trong TypeScript gốc sẽ được ánh xạ sang `f64` (IEEE 754 double precision).
    - Số nguyên có thể dùng `i32`, `i64`, `u32`, `u64` để tối ưu.
 2. **Pointer:** Sử dụng `ptr<T>` thay vì Reference để có quyền kiểm soát bộ nhớ như C.
-3. **Address-of:** Sử dụng `addressof(variable)` để lấy địa chỉ (TypeScript-style), không dùng `&` (C-style).
+3. **Address-of:** Sử dụng `addressof(variable)` để lấy địa chỉ (TypeScript-inspired style), không dùng `&` (C-style).
 4. **Decorator:** Sử dụng `@decorator` để điều hướng Compiler (giống như FFI).
 
 ---

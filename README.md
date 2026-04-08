@@ -1,9 +1,9 @@
 <div align="center">
   <img src="resources/logo.png" alt="TSN Logo" width="200"/>
   
-  # TSN - TypeScript Standard Notation
+  # TSN - TSN Standard Notation
   
-  **A TypeScript dialect that compiles directly to native machine code via LLVM**
+  **A recursive acronym: TSN Standard Notation - A TypeScript-inspired language that compiles to native code via LLVM**
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
@@ -16,13 +16,13 @@
 
 ## 🎯 What is TSN?
 
-**TSN (TypeScript Standard Notation)** is a recursive acronym and a TypeScript dialect that maintains **90% of TypeScript's syntax** while compiling directly to **LLVM IR** for native performance. Previously known as **TypeScript Native**, TSN aims to bring TypeScript's elegant syntax to systems programming.
+**TSN (TSN Standard Notation)** is a recursive acronym for a TypeScript-inspired language that maintains **90% of TypeScript's syntax** while compiling directly to **LLVM IR** for native performance. TSN aims to bring TypeScript's elegant syntax to systems programming without trademark conflicts.
 
 ### Key Features
 
 - 🚀 **Native Performance**: Compiles to machine code via LLVM, no V8 or Node.js runtime
 - 🔒 **Memory Safe**: Uses ARC (Automatic Reference Counting) & ORC (Owned Reference Counting) instead of GC
-- 📝 **TypeScript Syntax**: Keeps 90% of TypeScript's familiar syntax
+- 📝 **TypeScript Syntax**: Keeps 90% of TypeScript's familiar syntax (inspired by, not affiliated with TypeScript)
 - 🎯 **Self-Hosting**: Written in TSN itself (bootstrapped from C++)
 - 🔧 **Zero Runtime**: Generates tiny executables with no heavy runtime dependencies
 - 🌐 **Cross-Platform**: Targets Windows and Linux (macOS coming soon)
@@ -367,8 +367,10 @@ limitations under the License.
   
   **Made with ❤️ in Ho Chi Minh City, Vietnam**
   
-  *Bringing TypeScript to Systems Programming*
+  *Bringing TypeScript-inspired syntax to Systems Programming*
   
   ⭐ Star us on GitHub if you find TSN interesting!
+  
+  **Note**: TSN is inspired by TypeScript syntax but is an independent project not affiliated with or endorsed by Microsoft or the TypeScript team.
   
 </div>

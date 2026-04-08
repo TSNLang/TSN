@@ -98,7 +98,7 @@ struct TypeName {
 
 ### TSN Code (Self-hosting)
 
-- Follow **TypeScript conventions**
+- Follow **TypeScript-inspired conventions**
 - Use **camelCase** for variables and functions
 - Use **PascalCase** for interfaces and classes
 - Add JSDoc comments for public APIs
@@ -239,6 +239,6 @@ Don't be afraid to ask questions! We're here to help.
 
 ---
 
-Thank you for contributing to TSN! Together, we're bringing TypeScript to systems programming. 🚀
+Thank you for contributing to TSN! Together, we're bringing TypeScript-inspired syntax to systems programming. 🚀
 
 *Made with ❤️ by the TSN community*
