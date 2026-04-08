@@ -1,0 +1,14 @@
+import * as console from "std:console";
+
+function main() {
+    let numbers: i32[5];
+    
+    numbers[0] = 10;
+    numbers[1] = 20;
+    numbers[2] = 30;
+    
+    let x = numbers[0];
+    let y = numbers[1];
+    
+    console.log("Array operations test");
+}

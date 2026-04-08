@@ -1,0 +1,36 @@
+import * as console from "std:console";
+
+// Tính diện tích hình tròn
+function circleArea(radius: f64): f64 {
+    let pi: f64 = 3.14159265359;
+    return pi * radius * radius;
+}
+
+// Tính chu vi hình tròn
+function circlePerimeter(radius: f64): f64 {
+    let pi: f64 = 3.14159265359;
+    return 2.0 * pi * radius;
+}
+
+// Tính bình phương
+function square(x: number): number {
+    return x * x;
+}
+
+// Tính trung bình
+function average(a: number, b: number): number {
+    return (a + b) / 2.0;
+}
+
+function main() {
+    let r: f64 = 5.0;
+    let area = circleArea(r);
+    let perimeter = circlePerimeter(r);
+    
+    let num: number = 10.5;
+    let sq = square(num);
+    
+    let avg = average(15.5, 20.3);
+    
+    console.log("Math demo completed successfully");
+}

@@ -1,0 +1,11 @@
+import * as console from "std:console";
+
+interface Point {
+    x: i32;
+    y: i32;
+}
+
+function main() {
+    let p: Point = { x: 10, y: 20 };
+    console.log("Done");
+}

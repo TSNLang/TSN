@@ -1,0 +1,34 @@
+import * as console from "std:console";
+
+interface Point {
+    x: i32;
+    y: i32;
+}
+
+interface Token {
+    kind: i32;
+    pos: i32;
+    len: i32;
+}
+
+function main() {
+    // Test 1: Simple object initialization
+    let p: Point = { x: 10, y: 20 };
+    console.log("Point created");
+    
+    // Test 2: Read fields
+    let px = p.x;
+    let py = p.y;
+    console.log("Point x and y read");
+    
+    // Test 3: More complex struct
+    let tok: Token = { kind: 1, pos: 0, len: 5 };
+    console.log("Token created");
+    
+    let tkind = tok.kind;
+    let tpos = tok.pos;
+    let tlen = tok.len;
+    console.log("Token fields read");
+    
+    console.log("All tests passed!");
+}

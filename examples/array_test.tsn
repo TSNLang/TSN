@@ -1,0 +1,8 @@
+import * as console from "std:console";
+
+function main() {
+    let numbers: i32[10];
+    let values: i32[5];
+    
+    console.log("Array test");
+}

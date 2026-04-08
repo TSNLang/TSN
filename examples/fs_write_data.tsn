@@ -1,0 +1,35 @@
+// Test WriteFile - write string to file
+@ffi.lib("kernel32")
+declare function CreateFileA(
+    lpFileName: ptr<u8>,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: ptr<void>,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: ptr<void>
+): ptr<void>;
+
+@ffi.lib("kernel32")
+declare function WriteFile(
+    hFile: ptr<void>,
+    lpBuffer: ptr<void>,
+    nNumberOfBytesToWrite: u32,
+    lpNumberOfBytesWritten: ptr<u32>,
+    lpOverlapped: ptr<void>
+): bool;
+
+@ffi.lib("kernel32")
+declare function CloseHandle(hObject: ptr<void>): bool;
+
+import * as console from 'std:console';
+
+function main() {
+    console.log("creating hello.txt");
+    let handle = CreateFileA("hello.txt", 1073741824, 0, null, 2, 128, null);
+    console.log("writing data");
+    WriteFile(handle, "hello world", 11, null, null);
+    console.log("file written");
+    CloseHandle(handle);
+    console.log("file closed");
+}

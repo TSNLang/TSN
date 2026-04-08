@@ -1,0 +1,175 @@
+import * as console from "std:console";
+
+// Token kinds (matching ast.tsn)
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_NUMBER: i32 = 3;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_EQUAL: i32 = 11;
+const TK_FUNCTION: i32 = 30;
+const TK_LET: i32 = 31;
+const TK_RETURN: i32 = 33;
+
+interface Token {
+    kind: i32;
+    start: i32;
+    len: i32;
+}
+
+function is_digit(c: i8): bool {
+    if (c < 48) { return false; }
+    if (c > 57) { return false; }
+    return true;
+}
+
+function is_alpha(c: i8): bool {
+    if (c >= 97) { if (c <= 122) { return true; } }
+    if (c >= 65) { if (c <= 90) { return true; } }
+    if (c == 95) { return true; }
+    return false;
+}
+
+function is_ident_char(c: i8): bool {
+    if (is_alpha(c)) { return true; }
+    if (is_digit(c)) { return true; }
+    return false;
+}
+
+function is_whitespace(c: i8): bool {
+    if (c == 32) { return true; }  // space
+    if (c == 9) { return true; }   // tab
+    if (c == 10) { return true; }  // \n
+    if (c == 13) { return true; }  // \r
+    return false;
+}
+
+// Check if identifier matches keyword
+function check_keyword(src: ptr<i8>, start: i32, len: i32): i32 {
+    // "let" = 108, 101, 116
+    if (len == 3) {
+        if (src[start] == 108) {
+            if (src[start + 1] == 101) {
+                if (src[start + 2] == 116) {
+                    return TK_LET;
+                }
+            }
+        }
+    }
+    
+    // "if" = 105, 102
+    if (len == 2) {
+        if (src[start] == 105) {
+            if (src[start + 1] == 102) {
+                return 34; // TK_IF
+            }
+        }
+    }
+    
+    // "function" = 102, 117, 110, 99, 116, 105, 111, 110
+    if (len == 8) {
+        if (src[start] == 102) {
+            if (src[start + 1] == 117) {
+                if (src[start + 2] == 110) {
+                    return TK_FUNCTION;
+                }
+            }
+        }
+    }
+    
+    // "return" = 114, 101, 116, 117, 114, 110
+    if (len == 6) {
+        if (src[start] == 114) {
+            if (src[start + 1] == 101) {
+                if (src[start + 2] == 116) {
+                    return TK_RETURN;
+                }
+            }
+        }
+    }
+    
+    return TK_IDENTIFIER;
+}
+
+function lex_next(src: ptr<i8>, srcLen: i32, pos: ptr<i32>): i32 {
+    let p = pos[0];
+    
+    // Skip whitespace
+    while (p < srcLen) {
+        if (is_whitespace(src[p])) {
+            p = p + 1;
+        } else {
+            break;
+        }
+    }
+    
+    if (p >= srcLen) {
+        pos[0] = p;
+        return TK_END;
+    }
+    
+    let c = src[p];
+    let start = p;
+    
+    // Numbers
+    if (is_digit(c)) {
+        while (p < srcLen) {
+            if (is_digit(src[p])) {
+                p = p + 1;
+            } else {
+                break;
+            }
+        }
+        pos[0] = p;
+        return TK_NUMBER;
+    }
+    
+    // Identifiers and keywords
+    if (is_alpha(c)) {
+        while (p < srcLen) {
+            if (is_ident_char(src[p])) {
+                p = p + 1;
+            } else {
+                break;
+            }
+        }
+        let len = p - start;
+        pos[0] = p;
+        return check_keyword(src, start, len);
+    }
+    
+    // Single character tokens
+    if (c == 59) { pos[0] = p + 1; return TK_SEMICOLON; }  // ;
+    if (c == 40) { pos[0] = p + 1; return TK_LPAREN; }     // (
+    if (c == 41) { pos[0] = p + 1; return TK_RPAREN; }     // )
+    if (c == 123) { pos[0] = p + 1; return TK_LBRACE; }    // {
+    if (c == 125) { pos[0] = p + 1; return TK_RBRACE; }    // }
+    if (c == 58) { pos[0] = p + 1; return TK_COLON; }      // :
+    if (c == 61) { pos[0] = p + 1; return TK_EQUAL; }      // =
+    
+    // Unknown character
+    pos[0] = p + 1;
+    return TK_END;
+}
+
+function main() {
+    let source = "function add(a: i32, b: i32): i32 { return a; }";
+    let len = 48;
+    let pos = 0;
+    let posPtr = &pos;
+    
+    console.log("Lexing TSN source...");
+    
+    while (pos < len) {
+        let kind = lex_next(source, len, posPtr);
+        if (kind == TK_END) {
+            break;
+        }
+    }
+    
+    console.log("Lexing complete");
+}

@@ -1,0 +1,10 @@
+import * as console from "std:console";
+
+interface Point {
+    x: i32;
+    y: i32;
+}
+
+function main() {
+    console.log("Simple struct test");
+}

@@ -1,0 +1,36 @@
+// Test address-of operator with WriteFile
+@ffi.lib("kernel32")
+declare function CreateFileA(
+    lpFileName: ptr<u8>,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: ptr<void>,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: ptr<void>
+): ptr<void>;
+
+@ffi.lib("kernel32")
+declare function WriteFile(
+    hFile: ptr<void>,
+    lpBuffer: ptr<void>,
+    nNumberOfBytesToWrite: u32,
+    lpNumberOfBytesWritten: ptr<u32>,
+    lpOverlapped: ptr<void>
+): bool;
+
+@ffi.lib("kernel32")
+declare function CloseHandle(hObject: ptr<void>): bool;
+
+import * as console from 'std:console';
+
+function main() {
+    console.log("creating write_test.txt");
+    let handle = CreateFileA("write_test.txt", 1073741824, 0, null, 2, 128, null);
+    console.log("writing data");
+    let bytesWritten = 0;
+    WriteFile(handle, "hello from tsn", 14, &bytesWritten, null);
+    console.log("file written");
+    CloseHandle(handle);
+    console.log("file closed");
+}

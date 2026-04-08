@@ -1,0 +1,11 @@
+import * as console from "std:console";
+
+function add(a: i32, b: i32): i32 {
+    return 42; // Tạm thời return constant vì chưa có toán tử +
+}
+
+function main() {
+    console.log("calling add");
+    let res = add(1, 2);
+    console.log("add called");
+}

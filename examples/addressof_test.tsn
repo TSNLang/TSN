@@ -1,0 +1,13 @@
+import * as console from "std:console";
+
+function test_addressof() {
+    let x: i32;
+    let ptr = addressof(x);
+    
+    console.log("addressof() works!");
+}
+
+function main() {
+    test_addressof();
+    console.log("addressof() is the only way!");
+}

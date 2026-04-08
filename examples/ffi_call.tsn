@@ -1,0 +1,22 @@
+// Test FFI function calls với numeric literals
+@ffi.lib("kernel32")
+declare function CreateFileA(
+    lpFileName: ptr<u8>,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: ptr<void>,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: ptr<void>
+): ptr<void>;
+
+@ffi.lib("kernel32")
+declare function CloseHandle(hObject: ptr<void>): bool;
+
+import * as console from 'std:console';
+
+function main() {
+    console.log("testing FFI call");
+    CreateFileA(null, 0, 0, null, 0, 0, null);
+    console.log("FFI call done");
+}

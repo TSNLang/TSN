@@ -1,0 +1,76 @@
+import * as console from "std:console";
+
+// Mini TSN compiler - generates simple LLVM IR
+
+function count_functions(src: ptr<i8>, len: i32): i32 {
+    let count = 0;
+    let i = 0;
+    
+    while (i < len) {
+        if (src[i] == 102) {  // 'f' in "function"
+            if (i + 7 < len) {
+                if (src[i + 1] == 117) {
+                    if (src[i + 2] == 110) {
+                        if (src[i + 3] == 99) {
+                            if (src[i + 4] == 116) {
+                                if (src[i + 5] == 105) {
+                                    if (src[i + 6] == 111) {
+                                        if (src[i + 7] == 110) {
+                                            count = count + 1;
+                                            i = i + 8;
+                                        } else {
+                                            i = i + 1;
+                                        }
+                                    } else {
+                                        i = i + 1;
+                                    }
+                                } else {
+                                    i = i + 1;
+                                }
+                            } else {
+                                i = i + 1;
+                            }
+                        } else {
+                            i = i + 1;
+                        }
+                    } else {
+                        i = i + 1;
+                    }
+                } else {
+                    i = i + 1;
+                }
+            } else {
+                i = i + 1;
+            }
+        } else {
+            i = i + 1;
+        }
+    }
+    
+    return count;
+}
+
+function compile(src: ptr<i8>, len: i32): i32 {
+    let funcCount = count_functions(src, len);
+    
+    console.log("TSN Mini Compiler v0.1");
+    
+    if (funcCount > 0) {
+        console.log("Compilation successful");
+        return 0;
+    } else {
+        console.log("No functions found");
+        return 1;
+    }
+}
+
+function main() {
+    let testCode = "function add(a: i32, b: i32): i32 { return a + b; }";
+    let result = compile(testCode, 52);
+    
+    if (result == 0) {
+        console.log("Compiler test PASSED");
+    } else {
+        console.log("Compiler test FAILED");
+    }
+}

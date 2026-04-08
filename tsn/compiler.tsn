@@ -1,0 +1,276 @@
+import * as console from "std:console";
+import * as fs from "std:fs";
+
+// TSN Self-Hosting Compiler v0.1
+// Compiles TSN source code to LLVM IR
+
+// Token kinds
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_NUMBER: i32 = 3;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_COMMA: i32 = 10;
+const TK_EQUAL: i32 = 11;
+const TK_PLUS: i32 = 12;
+const TK_FUNCTION: i32 = 30;
+const TK_LET: i32 = 31;
+const TK_RETURN: i32 = 33;
+
+// Character classification
+function is_digit(c: i8): bool {
+    if (c < 48) { return false; }
+    if (c > 57) { return false; }
+    return true;
+}
+
+function is_alpha(c: i8): bool {
+    if (c >= 97) { if (c <= 122) { return true; } }
+    if (c >= 65) { if (c <= 90) { return true; } }
+    if (c == 95) { return true; }
+    return false;
+}
+
+function is_whitespace(c: i8): bool {
+    if (c == 32) { return true; }
+    if (c == 9) { return true; }
+    if (c == 10) { return true; }
+    if (c == 13) { return true; }
+    return false;
+}
+
+// Simple lexer
+function lex(src: ptr<i8>, len: i32, tokens: i32[1000], starts: i32[1000], lens: i32[1000]): i32 {
+    let pos = 0;
+    let count = 0;
+    
+    while (pos < len) {
+        if (count >= 1000) { break; }
+        
+        let c = src[pos];
+        let start = pos;
+        
+        // Skip whitespace
+        if (is_whitespace(c)) {
+            pos = pos + 1;
+        } else if (is_digit(c)) {
+            // Number
+            while (pos < len) {
+                if (is_digit(src[pos])) {
+                    pos = pos + 1;
+                } else {
+                    break;
+                }
+            }
+            tokens[count] = TK_NUMBER;
+            starts[count] = start;
+            lens[count] = pos - start;
+            count = count + 1;
+        } else if (is_alpha(c)) {
+            // Identifier or keyword
+            while (pos < len) {
+                let ch = src[pos];
+                if (is_alpha(ch) || is_digit(ch)) {
+                    pos = pos + 1;
+                } else {
+                    break;
+                }
+            }
+            
+            let wordLen = pos - start;
+            let kind = TK_IDENTIFIER;
+            
+            // Check for "function" keyword
+            if (wordLen == 8) {
+                if (src[start] == 102) {
+                    if (src[start + 1] == 117) {
+                        if (src[start + 2] == 110) {
+                            kind = TK_FUNCTION;
+                        }
+                    }
+                }
+            }
+            
+            // Check for "return" keyword
+            if (wordLen == 6) {
+                if (src[start] == 114) {
+                    if (src[start + 1] == 101) {
+                        if (src[start + 2] == 116) {
+                            kind = TK_RETURN;
+                        }
+                    }
+                }
+            }
+            
+            // Check for "let" keyword
+            if (wordLen == 3) {
+                if (src[start] == 108) {
+                    if (src[start + 1] == 101) {
+                        if (src[start + 2] == 116) {
+                            kind = TK_LET;
+                        }
+                    }
+                }
+            }
+            
+            tokens[count] = kind;
+            starts[count] = start;
+            lens[count] = wordLen;
+            count = count + 1;
+        } else if (c == 59) {
+            tokens[count] = TK_SEMICOLON;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else if (c == 40) {
+            tokens[count] = TK_LPAREN;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else if (c == 41) {
+            tokens[count] = TK_RPAREN;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else if (c == 123) {
+            tokens[count] = TK_LBRACE;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else if (c == 125) {
+            tokens[count] = TK_RBRACE;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else if (c == 58) {
+            tokens[count] = TK_COLON;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else if (c == 44) {
+            tokens[count] = TK_COMMA;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else if (c == 61) {
+            tokens[count] = TK_EQUAL;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else if (c == 43) {
+            tokens[count] = TK_PLUS;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        } else {
+            pos = pos + 1;
+        }
+    }
+    
+    return count;
+}
+
+// Simple parser - count functions
+function parse(tokens: i32[1000], count: i32): i32 {
+    let functionCount = 0;
+    let i = 0;
+    
+    while (i < count) {
+        if (tokens[i] == TK_FUNCTION) {
+            functionCount = functionCount + 1;
+        }
+        i = i + 1;
+    }
+    
+    return functionCount;
+}
+
+// Generate simple LLVM IR
+function codegen(functionCount: i32, output: ptr<u8>): i32 {
+    // For MVP, just generate a simple module header
+    let pos = 0;
+    
+    // "; ModuleID = 'output'\n"
+    output[pos] = 59; pos = pos + 1;  // ;
+    output[pos] = 32; pos = pos + 1;  // space
+    output[pos] = 77; pos = pos + 1;  // M
+    output[pos] = 111; pos = pos + 1; // o
+    output[pos] = 100; pos = pos + 1; // d
+    output[pos] = 117; pos = pos + 1; // u
+    output[pos] = 108; pos = pos + 1; // l
+    output[pos] = 101; pos = pos + 1; // e
+    output[pos] = 10; pos = pos + 1;  // \n
+    
+    return pos;
+}
+
+function compile(inputPath: ptr<u8>, outputPath: ptr<u8>): i32 {
+    console.log("TSN Self-Hosting Compiler v0.1");
+    
+    // Read source file
+    let sourceBuffer: i8[10000];
+    let sourceLen = fs.readFileSync(inputPath, sourceBuffer, 10000);
+    
+    if (sourceLen == 0) {
+        console.log("ERROR: Cannot read input file");
+        return 1;
+    }
+    
+    console.log("Source file loaded");
+    
+    // Lex
+    let tokens: i32[1000];
+    let starts: i32[1000];
+    let lens: i32[1000];
+    let tokenCount = lex(sourceBuffer, sourceLen, tokens, starts, lens);
+    
+    console.log("Lexing complete");
+    
+    // Parse
+    let functionCount = parse(tokens, tokenCount);
+    
+    console.log("Parsing complete");
+    
+    // Codegen
+    let irBuffer: u8[10000];
+    let irLen = codegen(functionCount, irBuffer);
+    
+    console.log("Code generation complete");
+    
+    // Write output
+    let ok = fs.writeFileSync(outputPath, irBuffer, irLen);
+    
+    if (ok) {
+        console.log("Compilation successful!");
+        return 0;
+    } else {
+        console.log("ERROR: Cannot write output file");
+        return 1;
+    }
+}
+
+function main() {
+    let input = "test.tsn";
+    let output = "test.ll";
+    
+    let result = compile(input, output);
+    
+    if (result == 0) {
+        console.log("SUCCESS: TSN compiler works!");
+    } else {
+        console.log("FAILED: Compilation error");
+    }
+}

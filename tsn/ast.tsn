@@ -1,0 +1,76 @@
+// AST Node Definitions for TSN Compiler
+
+// Token kinds
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_STRING: i32 = 2;
+const TK_NUMBER: i32 = 3;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_COMMA: i32 = 10;
+const TK_EQUAL: i32 = 11;
+const TK_PLUS: i32 = 12;
+const TK_MINUS: i32 = 13;
+const TK_STAR: i32 = 14;
+const TK_SLASH: i32 = 15;
+const TK_LESS: i32 = 16;
+const TK_GREATER: i32 = 17;
+const TK_AMPERSAND: i32 = 18;
+const TK_LBRACKET: i32 = 19;
+const TK_RBRACKET: i32 = 20;
+const TK_DOT: i32 = 21;
+
+// Keywords
+const TK_FUNCTION: i32 = 30;
+const TK_LET: i32 = 31;
+const TK_CONST: i32 = 32;
+const TK_RETURN: i32 = 33;
+const TK_IF: i32 = 34;
+const TK_ELSE: i32 = 35;
+const TK_WHILE: i32 = 36;
+const TK_INTERFACE: i32 = 37;
+const TK_IMPORT: i32 = 38;
+
+// Token structure
+interface Token {
+    kind: i32;
+    start: i32;
+    len: i32;
+}
+
+// Type kinds
+const TYPE_I32: i32 = 0;
+const TYPE_I8: i32 = 1;
+const TYPE_BOOL: i32 = 2;
+const TYPE_VOID: i32 = 3;
+const TYPE_PTR: i32 = 4;
+
+// Expression kinds
+const EXPR_NUMBER: i32 = 0;
+const EXPR_STRING: i32 = 1;
+const EXPR_IDENT: i32 = 2;
+const EXPR_CALL: i32 = 3;
+const EXPR_BINARY: i32 = 4;
+const EXPR_INDEX: i32 = 5;
+
+// Statement kinds
+const STMT_LET: i32 = 0;
+const STMT_RETURN: i32 = 1;
+const STMT_EXPR: i32 = 2;
+const STMT_IF: i32 = 3;
+const STMT_WHILE: i32 = 4;
+const STMT_ASSIGN: i32 = 5;
+
+// Binary operators
+const OP_ADD: i32 = 0;
+const OP_SUB: i32 = 1;
+const OP_MUL: i32 = 2;
+const OP_DIV: i32 = 3;
+const OP_LT: i32 = 4;
+const OP_GT: i32 = 5;
+const OP_EQ: i32 = 6;
+const OP_NE: i32 = 7;

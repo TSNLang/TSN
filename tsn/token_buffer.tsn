@@ -1,0 +1,54 @@
+// Token buffer for storing lexed tokens
+// Using fixed-size arrays for simplicity
+
+const MAX_TOKENS: i32 = 1000;
+
+// Token kinds
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_NUMBER: i32 = 3;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_COMMA: i32 = 10;
+const TK_EQUAL: i32 = 11;
+const TK_PLUS: i32 = 12;
+const TK_MINUS: i32 = 13;
+const TK_STAR: i32 = 14;
+const TK_LBRACKET: i32 = 19;
+const TK_RBRACKET: i32 = 20;
+
+// Keywords
+const TK_FUNCTION: i32 = 30;
+const TK_LET: i32 = 31;
+const TK_CONST: i32 = 32;
+const TK_RETURN: i32 = 33;
+const TK_IF: i32 = 34;
+const TK_ELSE: i32 = 35;
+const TK_WHILE: i32 = 36;
+const TK_INTERFACE: i32 = 37;
+
+// Global token storage (using parallel arrays)
+let g_token_kinds: i32;     // Will be array when implemented
+let g_token_starts: i32;    // Will be array when implemented
+let g_token_lens: i32;      // Will be array when implemented
+let g_token_count: i32;
+
+function init_tokens() {
+    g_token_count = 0;
+}
+
+function add_token(kind: i32, start: i32, len: i32) {
+    // For now, just increment count
+    // Later: g_token_kinds[g_token_count] = kind;
+    // Later: g_token_starts[g_token_count] = start;
+    // Later: g_token_lens[g_token_count] = len;
+    g_token_count = g_token_count + 1;
+}
+
+function get_token_count(): i32 {
+    return g_token_count;
+}

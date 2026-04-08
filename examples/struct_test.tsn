@@ -1,0 +1,10 @@
+import * as console from "std:console";
+
+interface Token {
+    kind: i32;
+    pos: i32;
+}
+
+function main() {
+    console.log("Struct test");
+}
