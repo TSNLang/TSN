@@ -9,7 +9,7 @@
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
   [![Status](https://img.shields.io/badge/status-Active%20Development-green)](https://github.com/TSNLang/TSN)
   
-  *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developer](https://github.com/SaoTin)*
+  *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
 </div>
 
 ---
