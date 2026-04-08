@@ -11,10 +11,10 @@ Xây dựng một trình biên dịch Self-hosted (tự biên dịch chính nó)
 
 ## 🏗️ Lộ trình thực hiện (Roadmap)
 
-### Giai đoạn 1: MVP Core (Hoàn tất 90%)
+### Giai đoạn 1: MVP Core (Hoàn tất 95%)
 - [x] **Lexer & Parser cơ bản:** Identifier, Number, String, Keywords.
 - [x] **LLVM IR Generation:** Xuất ra file `.ll`, `.obj`, `.exe`.
-- [x] **Cấu trúc điều khiển:** `if/else`, `while` loop.
+- [x] **Cấu trúc điều khiển:** `if/else`, `while` loop, `for` loop.
 - [x] **Hàm (Functions):** Tham số, giá trị trả về, gọi hàm đệ quy.
 - [x] **Kiểu dữ liệu nguyên thủy:** `i8`, `i32`, `i64`, `bool`, `ptr<T>`.
 - [x] **Kiểu số thực (Floating-point):** `f32`, `f64`, `number` (ánh xạ sang `f64`).

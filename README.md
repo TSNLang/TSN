@@ -85,7 +85,7 @@ Compile and run:
 ### ✅ Currently Supported
 
 - **Basic Types**: `i8`, `i32`, `i64`, `u8`, `u32`, `u64`, `f32`, `f64`, `bool`, `number`
-- **Control Flow**: `if/else`, `while` loops
+- **Control Flow**: `if/else`, `while` loops, `for` loops
 - **Functions**: Parameters, return values, recursion
 - **Pointers**: `ptr<T>` with `addressof()` function
 - **Arrays**: Fixed-size arrays with indexing
@@ -95,7 +95,6 @@ Compile and run:
 
 ### 🚧 In Development
 
-- `for` loops
 - `const` keyword
 - String operations
 - Dynamic arrays

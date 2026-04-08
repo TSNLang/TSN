@@ -76,6 +76,7 @@ enum class TokenKind {
     KwIf,
     KwElse,
     KwWhile,
+    KwFor,
     KwInterface,
     KwClass
 };
@@ -143,6 +144,9 @@ public:
             }
             if (text == "while") {
                 return Token{TokenKind::KwWhile, std::move(text), start};
+            }
+            if (text == "for") {
+                return Token{TokenKind::KwFor, std::move(text), start};
             }
             if (text == "interface") {
                 return Token{TokenKind::KwInterface, std::move(text), start};
@@ -498,6 +502,13 @@ struct IfStmt final : Stmt {
 
 struct WhileStmt final : Stmt {
     std::unique_ptr<Expr> cond;
+    std::vector<std::unique_ptr<Stmt>> body;
+};
+
+struct ForStmt final : Stmt {
+    std::unique_ptr<Stmt> init;        // let i = 0
+    std::unique_ptr<Expr> cond;        // i < 10
+    std::unique_ptr<Stmt> increment;   // i = i + 1
     std::vector<std::unique_ptr<Stmt>> body;
 };
 
@@ -1073,6 +1084,57 @@ private:
             return std::optional<std::unique_ptr<Stmt>>(std::move(s));
         }
 
+        if (tok_.kind == TokenKind::KwFor) {
+            advance();
+            if (!consume(TokenKind::LParen, "expected '(' after 'for'")) return std::nullopt;
+            
+            // Parse initialization (let i = 0;)
+            auto init = parseStmt();
+            if (!init) return std::nullopt;
+            
+            // Parse condition (i < 10;)
+            auto cond = parseExpr();
+            if (!cond) return std::nullopt;
+            if (!consume(TokenKind::Semicolon, "expected ';' after condition")) return std::nullopt;
+            
+            // Parse increment (i = i + 1) - as expression, then wrap in statement
+            // We need to handle this specially because it's an expression, not a statement
+            if (tok_.kind == TokenKind::Identifier) {
+                std::string varName = tok_.text;
+                advance();
+                
+                if (tok_.kind == TokenKind::Equal) {
+                    advance();
+                    auto val = parseExpr();
+                    if (!val) return std::nullopt;
+                    
+                    auto assignStmt = std::make_unique<AssignStmt>();
+                    assignStmt->name = varName;
+                    assignStmt->value = std::move(*val);
+                    
+                    if (!consume(TokenKind::RParen, "expected ')' after increment")) return std::nullopt;
+                    
+                    auto s = std::make_unique<ForStmt>();
+                    s->init = std::move(*init);
+                    s->cond = std::move(*cond);
+                    s->increment = std::move(assignStmt);
+                    
+                    if (!consume(TokenKind::LBrace, "expected '{'")) return std::nullopt;
+                    while (tok_.kind != TokenKind::RBrace && tok_.kind != TokenKind::End) {
+                        auto stmt = parseStmt();
+                        if (!stmt) return std::nullopt;
+                        s->body.push_back(std::move(*stmt));
+                    }
+                    if (!consume(TokenKind::RBrace, "expected '}'")) return std::nullopt;
+                    
+                    return std::optional<std::unique_ptr<Stmt>>(std::move(s));
+                }
+            }
+            
+            Diag::error(tok_.pos, "expected assignment in for loop increment");
+            return std::nullopt;
+        }
+
         if (tok_.kind == TokenKind::Identifier && tok_.text == "console") {
             size_t startPos = tok_.pos;
             advance();
@@ -1498,6 +1560,9 @@ static bool needsConsole(const Program &p) {
             }
             if (const auto *whileStmt = dynamic_cast<const WhileStmt *>(s.get())) {
                 for (const auto &bodyS : whileStmt->body) if (dynamic_cast<const LogStmt *>(bodyS.get())) return true;
+            }
+            if (const auto *forStmt = dynamic_cast<const ForStmt *>(s.get())) {
+                for (const auto &bodyS : forStmt->body) if (dynamic_cast<const LogStmt *>(bodyS.get())) return true;
             }
         }
         return false;
@@ -2148,6 +2213,53 @@ static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, co
                 b.CreateBr(condBB);
             }
 
+            b.SetInsertPoint(endBB);
+        }
+    } else if (const auto *forStmt = dynamic_cast<const ForStmt *>(stmt)) {
+        // For loop: for (init; cond; increment) { body }
+        // Translates to:
+        //   init
+        //   br cond
+        // cond:
+        //   if (cond) br body else br end
+        // body:
+        //   ...body...
+        //   increment
+        //   br cond
+        // end:
+        
+        // Emit initialization
+        emitStmt(b, forStmt->init.get(), m, prog, llvmFn, strIndex);
+        
+        llvm::BasicBlock *condBB = llvm::BasicBlock::Create(ctx, "for.cond", llvmFn);
+        llvm::BasicBlock *bodyBB = llvm::BasicBlock::Create(ctx, "for.body", llvmFn);
+        llvm::BasicBlock *incrBB = llvm::BasicBlock::Create(ctx, "for.incr", llvmFn);
+        llvm::BasicBlock *endBB = llvm::BasicBlock::Create(ctx, "for.end", llvmFn);
+        
+        b.CreateBr(condBB);
+        b.SetInsertPoint(condBB);
+        
+        llvm::Value *cond = emitExpr(b, forStmt->cond.get(), m, prog);
+        if (cond) {
+            if (!cond->getType()->isIntegerTy(1)) {
+                cond = b.CreateICmpNE(cond, llvm::Constant::getNullValue(cond->getType()), "forcond");
+            }
+            b.CreateCondBr(cond, bodyBB, endBB);
+            
+            b.SetInsertPoint(bodyBB);
+            for (const auto &s : forStmt->body) {
+                emitStmt(b, s.get(), m, prog, llvmFn, strIndex);
+            }
+            if (!b.GetInsertBlock()->getTerminator()) {
+                b.CreateBr(incrBB);
+            }
+            
+            b.SetInsertPoint(incrBB);
+            emitStmt(b, forStmt->increment.get(), m, prog, llvmFn, strIndex);
+            if (!b.GetInsertBlock()->getTerminator()) {
+                b.CreateBr(condBB);
+            }
+            
             b.SetInsertPoint(endBB);
         }
     }
