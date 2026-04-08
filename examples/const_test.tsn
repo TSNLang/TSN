@@ -1,0 +1,30 @@
+import * as console from "std:console";
+
+interface Point {
+    x: i32;
+    y: i32;
+}
+
+function main() {
+    // Test 1: const with primitive types
+    const x: i32 = 42;
+    const y = 100;  // type inference (will be i32)
+    console.log("Const primitives declared");
+    
+    // Test 2: const with struct
+    const p: Point = { x: 10, y: 20 };
+    console.log("Const struct declared");
+    
+    // Test 3: const in for loop
+    for (let i = 0; i < 3; i = i + 1) {
+        const msg = i;
+        console.log("Loop with const");
+    }
+    
+    // Test 4: Using const values
+    let sum = x + y;
+    let px = p.x;
+    console.log("Const values used");
+    
+    console.log("All const tests passed!");
+}

@@ -411,6 +411,7 @@ struct LetStmt final : Stmt {
     std::unique_ptr<Expr> init;
     TypeName type;
     bool hasType = false;
+    bool isConst = false;  // true for const, false for let
 };
 
 struct AssignStmt final : Stmt {
@@ -1206,7 +1207,8 @@ private:
             }
         }
 
-        if (tok_.kind == TokenKind::KwLet) {
+        if (tok_.kind == TokenKind::KwLet || tok_.kind == TokenKind::KwConst) {
+            bool isConst = (tok_.kind == TokenKind::KwConst);
             advance();
             if (!expect(TokenKind::Identifier, "expected variable name")) {
                 return std::nullopt;
@@ -1224,7 +1226,7 @@ private:
                 hasType = true;
             }
 
-            // Optional initialization
+            // Optional initialization (required for const)
             if (tok_.kind == TokenKind::Equal) {
                 advance();
                 auto init = parseExpr();
@@ -1237,6 +1239,7 @@ private:
                 auto s = std::make_unique<LetStmt>();
                 s->name = std::move(name);
                 s->init = std::move(init.value());
+                s->isConst = isConst;
                 if (hasType) {
                     s->type = std::move(varType);
                     s->hasType = true;
@@ -1244,12 +1247,17 @@ private:
                 return std::optional<std::unique_ptr<Stmt>>(std::move(s));
             } else {
                 // Declaration without initialization
+                if (isConst) {
+                    Diag::error(tok_.pos, "const declaration must have an initializer");
+                    return std::nullopt;
+                }
                 if (!consume(TokenKind::Semicolon, "expected ';'")) {
                     return std::nullopt;
                 }
                 auto s = std::make_unique<LetStmt>();
                 s->name = std::move(name);
                 s->init = nullptr;
+                s->isConst = false;
                 if (hasType) {
                     s->type = std::move(varType);
                     s->hasType = true;
@@ -1959,6 +1967,196 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
 
     if (const auto *call = dynamic_cast<const CallExpr *>(e)) {
         llvm::LLVMContext &ctx = m.getContext();
+        
+        // Handle builtin string functions - implement directly without C runtime
+        if (call->callee == "string_length") {
+            // string_length(str: ptr<i8>): i32
+            // Implement strlen inline
+            if (call->args.size() != 1) return nullptr;
+            llvm::Value *str = emitExpr(b, call->args[0].get(), m, prog);
+            if (!str) return nullptr;
+            
+            llvm::Type *i8Ty = llvm::Type::getInt8Ty(ctx);
+            llvm::Type *i32Ty = llvm::Type::getInt32Ty(ctx);
+            
+            // Create strlen implementation inline
+            llvm::Function *currentFn = b.GetInsertBlock()->getParent();
+            llvm::BasicBlock *loopBB = llvm::BasicBlock::Create(ctx, "strlen_loop", currentFn);
+            llvm::BasicBlock *doneBB = llvm::BasicBlock::Create(ctx, "strlen_done", currentFn);
+            
+            llvm::Value *lenVar = b.CreateAlloca(i32Ty, nullptr, "len");
+            b.CreateStore(llvm::ConstantInt::get(i32Ty, 0), lenVar);
+            b.CreateBr(loopBB);
+            
+            b.SetInsertPoint(loopBB);
+            llvm::Value *len = b.CreateLoad(i32Ty, lenVar, "len_val");
+            llvm::Value *ptr = b.CreateInBoundsGEP(i8Ty, str, len, "char_ptr");
+            llvm::Value *ch = b.CreateLoad(i8Ty, ptr, "char");
+            llvm::Value *isZero = b.CreateICmpEQ(ch, llvm::ConstantInt::get(i8Ty, 0), "is_zero");
+            
+            llvm::BasicBlock *incrBB = llvm::BasicBlock::Create(ctx, "strlen_incr", currentFn);
+            b.CreateCondBr(isZero, doneBB, incrBB);
+            
+            b.SetInsertPoint(incrBB);
+            llvm::Value *newLen = b.CreateAdd(len, llvm::ConstantInt::get(i32Ty, 1), "new_len");
+            b.CreateStore(newLen, lenVar);
+            b.CreateBr(loopBB);
+            
+            b.SetInsertPoint(doneBB);
+            return b.CreateLoad(i32Ty, lenVar, "final_len");
+        }
+        
+        if (call->callee == "string_char_at") {
+            // string_char_at(str: ptr<i8>, index: i32): i8
+            if (call->args.size() != 2) return nullptr;
+            llvm::Value *str = emitExpr(b, call->args[0].get(), m, prog);
+            llvm::Value *idx = emitExpr(b, call->args[1].get(), m, prog);
+            if (!str || !idx) return nullptr;
+            
+            llvm::Type *i8Ty = llvm::Type::getInt8Ty(ctx);
+            llvm::Value *ptr = b.CreateInBoundsGEP(i8Ty, str, idx, "charptr");
+            return b.CreateLoad(i8Ty, ptr, "char");
+        }
+        
+        if (call->callee == "string_equals") {
+            // string_equals(s1: ptr<i8>, s2: ptr<i8>): bool
+            // Implement strcmp inline - simplified version
+            if (call->args.size() != 2) return nullptr;
+            llvm::Value *s1 = emitExpr(b, call->args[0].get(), m, prog);
+            llvm::Value *s2 = emitExpr(b, call->args[1].get(), m, prog);
+            if (!s1 || !s2) return nullptr;
+            
+            llvm::Type *i8Ty = llvm::Type::getInt8Ty(ctx);
+            llvm::Type *i32Ty = llvm::Type::getInt32Ty(ctx);
+            llvm::Type *boolTy = llvm::Type::getInt1Ty(ctx);
+            
+            llvm::Function *currentFn = b.GetInsertBlock()->getParent();
+            llvm::BasicBlock *loopBB = llvm::BasicBlock::Create(ctx, "strcmp_loop", currentFn);
+            llvm::BasicBlock *notEqualBB = llvm::BasicBlock::Create(ctx, "strcmp_ne", currentFn);
+            llvm::BasicBlock *equalBB = llvm::BasicBlock::Create(ctx, "strcmp_eq", currentFn);
+            llvm::BasicBlock *doneBB = llvm::BasicBlock::Create(ctx, "strcmp_done", currentFn);
+            
+            llvm::Value *idxVar = b.CreateAlloca(i32Ty, nullptr, "idx");
+            b.CreateStore(llvm::ConstantInt::get(i32Ty, 0), idxVar);
+            b.CreateBr(loopBB);
+            
+            b.SetInsertPoint(loopBB);
+            llvm::Value *idx = b.CreateLoad(i32Ty, idxVar, "idx_val");
+            llvm::Value *ptr1 = b.CreateInBoundsGEP(i8Ty, s1, idx, "ptr1");
+            llvm::Value *ptr2 = b.CreateInBoundsGEP(i8Ty, s2, idx, "ptr2");
+            llvm::Value *ch1 = b.CreateLoad(i8Ty, ptr1, "ch1");
+            llvm::Value *ch2 = b.CreateLoad(i8Ty, ptr2, "ch2");
+            
+            llvm::Value *charsEqual = b.CreateICmpEQ(ch1, ch2, "chars_eq");
+            llvm::Value *ch1Zero = b.CreateICmpEQ(ch1, llvm::ConstantInt::get(i8Ty, 0), "ch1_zero");
+            
+            // If chars not equal, goto notEqualBB
+            llvm::BasicBlock *checkZeroBB = llvm::BasicBlock::Create(ctx, "check_zero", currentFn);
+            b.CreateCondBr(charsEqual, checkZeroBB, notEqualBB);
+            
+            // If ch1 is zero (end of string), strings are equal
+            b.SetInsertPoint(checkZeroBB);
+            llvm::BasicBlock *incrBB = llvm::BasicBlock::Create(ctx, "strcmp_incr", currentFn);
+            b.CreateCondBr(ch1Zero, equalBB, incrBB);
+            
+            // Increment and continue
+            b.SetInsertPoint(incrBB);
+            llvm::Value *newIdx = b.CreateAdd(idx, llvm::ConstantInt::get(i32Ty, 1), "new_idx");
+            b.CreateStore(newIdx, idxVar);
+            b.CreateBr(loopBB);
+            
+            // Not equal path
+            b.SetInsertPoint(notEqualBB);
+            b.CreateBr(doneBB);
+            
+            // Equal path
+            b.SetInsertPoint(equalBB);
+            b.CreateBr(doneBB);
+            
+            // Done - create PHI node
+            b.SetInsertPoint(doneBB);
+            llvm::PHINode *result = b.CreatePHI(boolTy, 2, "strcmp_result");
+            result->addIncoming(llvm::ConstantInt::getTrue(ctx), equalBB);
+            result->addIncoming(llvm::ConstantInt::getFalse(ctx), notEqualBB);
+            return result;
+        }
+        
+        if (call->callee == "string_concat") {
+            // string_concat(s1: ptr<i8>, s2: ptr<i8>): ptr<i8>
+            // Allocate buffer and copy strings inline
+            if (call->args.size() != 2) return nullptr;
+            llvm::Value *s1 = emitExpr(b, call->args[0].get(), m, prog);
+            llvm::Value *s2 = emitExpr(b, call->args[1].get(), m, prog);
+            if (!s1 || !s2) return nullptr;
+            
+            llvm::Type *i8Ty = llvm::Type::getInt8Ty(ctx);
+            llvm::Type *i32Ty = llvm::Type::getInt32Ty(ctx);
+            
+            // Allocate buffer: i8[1000]
+            llvm::Type *bufferTy = llvm::ArrayType::get(i8Ty, 1000);
+            llvm::Value *buffer = b.CreateAlloca(bufferTy, nullptr, "concat_buffer");
+            llvm::Value *zero = llvm::ConstantInt::get(i32Ty, 0);
+            llvm::Value *bufferPtr = b.CreateInBoundsGEP(bufferTy, buffer, {zero, zero}, "buffer_ptr");
+            
+            llvm::Function *currentFn = b.GetInsertBlock()->getParent();
+            
+            // Copy s1 to buffer
+            llvm::BasicBlock *copy1LoopBB = llvm::BasicBlock::Create(ctx, "copy1_loop", currentFn);
+            llvm::BasicBlock *copy1DoneBB = llvm::BasicBlock::Create(ctx, "copy1_done", currentFn);
+            
+            llvm::Value *idx1Var = b.CreateAlloca(i32Ty, nullptr, "idx1");
+            b.CreateStore(zero, idx1Var);
+            b.CreateBr(copy1LoopBB);
+            
+            b.SetInsertPoint(copy1LoopBB);
+            llvm::Value *idx1 = b.CreateLoad(i32Ty, idx1Var, "idx1_val");
+            llvm::Value *srcPtr1 = b.CreateInBoundsGEP(i8Ty, s1, idx1, "src1_ptr");
+            llvm::Value *ch1 = b.CreateLoad(i8Ty, srcPtr1, "ch1");
+            llvm::Value *dstPtr1 = b.CreateInBoundsGEP(i8Ty, bufferPtr, idx1, "dst1_ptr");
+            b.CreateStore(ch1, dstPtr1);
+            llvm::Value *isZero1 = b.CreateICmpEQ(ch1, llvm::ConstantInt::get(i8Ty, 0), "is_zero1");
+            
+            llvm::BasicBlock *incr1BB = llvm::BasicBlock::Create(ctx, "copy1_incr", currentFn);
+            b.CreateCondBr(isZero1, copy1DoneBB, incr1BB);
+            
+            b.SetInsertPoint(incr1BB);
+            llvm::Value *newIdx1 = b.CreateAdd(idx1, llvm::ConstantInt::get(i32Ty, 1), "new_idx1");
+            b.CreateStore(newIdx1, idx1Var);
+            b.CreateBr(copy1LoopBB);
+            
+            b.SetInsertPoint(copy1DoneBB);
+            llvm::Value *len1 = b.CreateLoad(i32Ty, idx1Var, "len1");
+            
+            // Copy s2 to buffer starting at len1
+            llvm::BasicBlock *copy2LoopBB = llvm::BasicBlock::Create(ctx, "copy2_loop", currentFn);
+            llvm::BasicBlock *copy2DoneBB = llvm::BasicBlock::Create(ctx, "copy2_done", currentFn);
+            
+            llvm::Value *idx2Var = b.CreateAlloca(i32Ty, nullptr, "idx2");
+            b.CreateStore(zero, idx2Var);
+            b.CreateBr(copy2LoopBB);
+            
+            b.SetInsertPoint(copy2LoopBB);
+            llvm::Value *idx2 = b.CreateLoad(i32Ty, idx2Var, "idx2_val");
+            llvm::Value *srcPtr2 = b.CreateInBoundsGEP(i8Ty, s2, idx2, "src2_ptr");
+            llvm::Value *ch2 = b.CreateLoad(i8Ty, srcPtr2, "ch2");
+            llvm::Value *dstIdx = b.CreateAdd(len1, idx2, "dst_idx");
+            llvm::Value *dstPtr2 = b.CreateInBoundsGEP(i8Ty, bufferPtr, dstIdx, "dst2_ptr");
+            b.CreateStore(ch2, dstPtr2);
+            llvm::Value *isZero2 = b.CreateICmpEQ(ch2, llvm::ConstantInt::get(i8Ty, 0), "is_zero2");
+            
+            llvm::BasicBlock *incr2BB = llvm::BasicBlock::Create(ctx, "copy2_incr", currentFn);
+            b.CreateCondBr(isZero2, copy2DoneBB, incr2BB);
+            
+            b.SetInsertPoint(incr2BB);
+            llvm::Value *newIdx2 = b.CreateAdd(idx2, llvm::ConstantInt::get(i32Ty, 1), "new_idx2");
+            b.CreateStore(newIdx2, idx2Var);
+            b.CreateBr(copy2LoopBB);
+            
+            b.SetInsertPoint(copy2DoneBB);
+            return bufferPtr;
+        }
+        
+        // Regular function call
         llvm::Function *callee = m.getFunction(call->callee);
         if (!callee) {
             return nullptr;
@@ -2386,9 +2584,10 @@ static std::vector<std::string> collectLinkLibs(const Program &prog) {
         add(fn.lib);
     }
     
-    // Always add kernel32 and msvcrt for basic runtime support on Windows
+    // Always add kernel32 and libcmt for basic runtime support on Windows
+    // libcmt.lib provides C standard library functions (strlen, strcmp, etc.)
     add("kernel32");
-    add("msvcrt");
+    add("libcmt");
     
     return libs;
 }
