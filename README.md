@@ -26,6 +26,8 @@
 - 🎯 **Self-Hosting**: Written in TSN itself (bootstrapped from C++)
 - 🔧 **Zero Runtime**: Generates tiny executables with no heavy runtime dependencies
 - 🌐 **Cross-Platform**: Targets Windows and Linux (macOS coming soon)
+- 📦 **NPM Compatible**: Designed to run TypeScript libraries with high compatibility
+- 🔄 **Node.js API Compatible**: `std:*` modules follow Node.js API design (e.g., `std:fs` ≈ `node:fs`)
 
 ---
 
@@ -206,6 +208,8 @@ declare function WriteFile(
 4. **Memory Safety**: ARC/ORC without garbage collection overhead
 5. **Small Binaries**: Generate tiny executables (< 100KB for simple programs)
 6. **Easy FFI**: Seamless integration with C libraries
+7. **NPM Ecosystem**: Run existing TypeScript libraries with minimal changes
+8. **Node.js API Compatibility**: `std:*` modules mirror Node.js APIs for easy migration
 
 ---
 
@@ -274,10 +278,18 @@ cmake --build .
 - [ ] Bootstrap complete
 
 ### Phase 4: Standard Library 📅
-- [ ] File I/O (`std:fs`)
-- [ ] Process management (`std:process`)
-- [ ] Networking (`std:net`)
+- [ ] File I/O (`std:fs` - Node.js `fs` API compatible)
+- [ ] Process management (`std:process` - Node.js `process` API compatible)
+- [ ] Networking (`std:net` - Node.js `net` API compatible)
 - [ ] Collections (`std:collections`)
+- [ ] Path utilities (`std:path` - Node.js `path` API compatible)
+
+### Phase 5: NPM Ecosystem Integration 🎯
+- [ ] Package manager integration
+- [ ] TypeScript library compatibility layer
+- [ ] Automatic `node:*` to `std:*` import rewriting
+- [ ] Popular library support (lodash, axios, etc.)
+- [ ] Module resolution compatible with Node.js
 
 ---
 
@@ -295,7 +307,62 @@ TSN generates native code with performance comparable to C/C++:
 
 ---
 
-## 🔧 Technical Details
+## � NPM Ecosystem Compatibility
+
+One of TSN's ambitious goals is to enable running existing TypeScript libraries with minimal modifications.
+
+### How It Works
+
+TSN's standard library (`std:*`) is designed to mirror Node.js APIs:
+
+```typescript
+// Node.js code
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+// TSN equivalent (automatic rewriting planned)
+import * as fs from 'std:fs';
+import * as path from 'std:path';
+```
+
+### Compatibility Strategy
+
+1. **API Compatibility**: `std:*` modules follow Node.js API signatures
+2. **Import Rewriting**: Automatic conversion of `node:*` → `std:*`
+3. **Type Compatibility**: TypeScript types work seamlessly
+4. **Subset Support**: Focus on most commonly used APIs first
+
+### Example: Using a TypeScript Library
+
+```typescript
+// Original TypeScript library
+import { readFile } from 'node:fs/promises';
+
+export async function loadConfig(path: string) {
+    const data = await readFile(path, 'utf-8');
+    return JSON.parse(data);
+}
+
+// Works in TSN with std:fs implementation
+import { readFile } from 'std:fs/promises';
+
+export async function loadConfig(path: string) {
+    const data = await readFile(path, 'utf-8');
+    return JSON.parse(data);
+}
+```
+
+### Roadmap for NPM Support
+
+- ✅ Phase 1: Core `std:fs` module (in progress)
+- 🚧 Phase 2: `std:path`, `std:process`
+- 📅 Phase 3: `std:net`, `std:http`
+- 📅 Phase 4: Package manager integration
+- 📅 Phase 5: Popular library compatibility testing
+
+---
+
+## �🔧 Technical Details
 
 ### Memory Management
 
