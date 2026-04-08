@@ -306,7 +306,7 @@ TSN generates native code with performance comparable to C/C++:
 
 ---
 
-## � NPM Ecosystem Compatibility
+## 📦 NPM Ecosystem Compatibility
 
 One of TSN's ambitious goals is to enable running existing TypeScript libraries with minimal modifications.
 
@@ -361,7 +361,7 @@ export async function loadConfig(path: string) {
 
 ---
 
-## �🔧 Technical Details
+## 🔧 Technical Details
 
 ### Memory Management
 
@@ -422,11 +422,11 @@ limitations under the License.
 
 TSN stands on the shoulders of giants. We acknowledge these pioneering projects that explored TypeScript-to-native compilation:
 
-- **[TypeScriptCompiler](https://github.com/ASDAlexander77/TypeScriptCompiler)** by ASDAlexander77 - Early TypeScript to LLVM compiler (inactive since 2017)
-- **[tsll](https://github.com/sbip-sg/tsll)** by SBIP-SG - TypeScript LLVM compiler research project
-- **[StaticScript](https://github.com/ovr/StaticScript)** by ovr - Statically typed TypeScript subset compiler
-- **[llts](https://github.com/bherbruck/llts)** by bherbruck - LLVM-based TypeScript compiler experiment
-- **[ts-llvm](https://github.com/emillaine/ts-llvm)** by emillaine - TypeScript to LLVM IR compiler
+- **[TypeScriptCompiler](https://github.com/ASDAlexander77/TypeScriptCompiler)** by ASDAlexander77 
+- **[tsll](https://github.com/sbip-sg/tsll)** by SBIP-SG
+- **[StaticScript](https://github.com/ovr/StaticScript)** by ovr 
+- **[llts](https://github.com/bherbruck/llts)** by bherbruck
+- **[ts-llvm](https://github.com/emillaine/ts-llvm)** by emillaine
 
 While these projects are no longer actively maintained (some dormant for months to 7+ years), they paved the way and proved that TypeScript-to-native compilation is possible. TSN aims to continue this vision with active development, modern LLVM support, and a focus on self-hosting capability.
 
