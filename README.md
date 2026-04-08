@@ -418,6 +418,20 @@ limitations under the License.
 - **Nim & Swift** - For ARC/ORC memory management concepts
 - **Rust** - For systems programming language design patterns
 
+## 🌟 Inspired By
+
+TSN stands on the shoulders of giants. We acknowledge these pioneering projects that explored TypeScript-to-native compilation:
+
+- **[TypeScriptCompiler](https://github.com/ASDAlexander77/TypeScriptCompiler)** by ASDAlexander77 - Early TypeScript to LLVM compiler (inactive since 2017)
+- **[tsll](https://github.com/sbip-sg/tsll)** by SBIP-SG - TypeScript LLVM compiler research project
+- **[StaticScript](https://github.com/ovr/StaticScript)** by ovr - Statically typed TypeScript subset compiler
+- **[llts](https://github.com/bherbruck/llts)** by bherbruck - LLVM-based TypeScript compiler experiment
+- **[ts-llvm](https://github.com/emillaine/ts-llvm)** by emillaine - TypeScript to LLVM IR compiler
+
+While these projects are no longer actively maintained (some dormant for months to 7+ years), they paved the way and proved that TypeScript-to-native compilation is possible. TSN aims to continue this vision with active development, modern LLVM support, and a focus on self-hosting capability.
+
+We're grateful for their pioneering work and hope TSN can carry the torch forward for the community. 🔥
+
 ---
 
 ## 📞 Contact & Community
