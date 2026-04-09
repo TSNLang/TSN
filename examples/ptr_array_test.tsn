@@ -1,0 +1,28 @@
+import * as console from "std:console";
+
+function test_array(arr: ptr<i32>, count: i32): i32 {
+    let sum = 0;
+    let i = 0;
+    while (i < count) {
+        sum = sum + arr[i];
+        i = i + 1;
+    }
+    return sum;
+}
+
+function main() {
+    let numbers: i32[5];
+    numbers[0] = 10;
+    numbers[1] = 20;
+    numbers[2] = 30;
+    numbers[3] = 40;
+    numbers[4] = 50;
+    
+    let result = test_array(numbers, 5);
+    
+    if (result == 150) {
+        console.log("Pointer array test PASSED!");
+    } else {
+        console.log("Pointer array test FAILED!");
+    }
+}

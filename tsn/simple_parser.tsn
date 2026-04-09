@@ -1,0 +1,403 @@
+// TSN Self-Hosting Compiler - Simple Parser
+// Parses tokens into AST (Abstract Syntax Tree)
+
+import * as console from "std:console";
+
+// Token kinds (must match lexer)
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_STRING: i32 = 2;
+const TK_NUMBER: i32 = 3;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_COMMA: i32 = 10;
+const TK_EQUAL: i32 = 16;
+const TK_PLUS: i32 = 17;
+const TK_MINUS: i32 = 18;
+const TK_STAR: i32 = 19;
+const TK_FUNCTION: i32 = 30;
+const TK_LET: i32 = 31;
+const TK_RETURN: i32 = 33;
+
+// AST Node Types
+const AST_FUNCTION: i32 = 100;
+const AST_LET_STMT: i32 = 101;
+const AST_RETURN_STMT: i32 = 102;
+const AST_BINARY_EXPR: i32 = 103;
+const AST_NUMBER_LITERAL: i32 = 104;
+const AST_IDENTIFIER: i32 = 105;
+
+// AST Node structure (simplified)
+// Each node has: kind, value1, value2, value3
+// For function: value1=nameStart, value2=nameLen, value3=bodyStart
+// For number: value1=start, value2=len
+// For binary: value1=op, value2=leftIdx, value3=rightIdx
+
+interface ASTNode {
+    kind: i32;
+    value1: i32;
+    value2: i32;
+    value3: i32;
+}
+
+// Parser state
+interface Parser {
+    tokens: ptr<i32>;
+    starts: ptr<i32>;
+    lens: ptr<i32>;
+    tokenCount: i32;
+    pos: i32;
+    src: ptr<i8>;
+}
+
+// Helper: Get current token kind
+function current_token(p: Parser): i32 {
+    if (p.pos >= p.tokenCount) {
+        return TK_END;
+    }
+    return p.tokens[p.pos];
+}
+
+// Helper: Advance to next token
+function advance(p: Parser): Parser {
+    if (p.pos < p.tokenCount) {
+        p.pos = p.pos + 1;
+    }
+    return p;
+}
+
+// Helper: Expect and consume token
+function expect(p: Parser, kind: i32): bool {
+    if (current_token(p) == kind) {
+        return true;
+    }
+    return false;
+}
+
+// Helper: Consume token if matches
+function consume(p: Parser, kind: i32): Parser {
+    if (current_token(p) == kind) {
+        p.pos = p.pos + 1;
+    }
+    return p;
+}
+
+// Parse primary expression (number or identifier)
+function parse_primary(p: Parser, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    let tok = current_token(p);
+    
+    if (tok == TK_NUMBER) {
+        let idx = nodeCount[0];
+        nodes[idx].kind = AST_NUMBER_LITERAL;
+        nodes[idx].value1 = p.starts[p.pos];
+        nodes[idx].value2 = p.lens[p.pos];
+        nodes[idx].value3 = 0;
+        nodeCount[0] = nodeCount[0] + 1;
+        p.pos = p.pos + 1;
+        return idx;
+    }
+    
+    if (tok == TK_IDENTIFIER) {
+        let idx = nodeCount[0];
+        nodes[idx].kind = AST_IDENTIFIER;
+        nodes[idx].value1 = p.starts[p.pos];
+        nodes[idx].value2 = p.lens[p.pos];
+        nodes[idx].value3 = 0;
+        nodeCount[0] = nodeCount[0] + 1;
+        p.pos = p.pos + 1;
+        return idx;
+    }
+    
+    if (tok == TK_LPAREN) {
+        p.pos = p.pos + 1;
+        let expr = parse_expr(p, nodes, nodeCount);
+        if (current_token(p) == TK_RPAREN) {
+            p.pos = p.pos + 1;
+        }
+        return expr;
+    }
+    
+    return 0;
+}
+
+// Parse binary expression (simplified - no precedence yet)
+function parse_expr(p: Parser, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    let left = parse_primary(p, nodes, nodeCount);
+    
+    let tok = current_token(p);
+    if (tok == TK_PLUS) {
+        p.pos = p.pos + 1;
+        let right = parse_primary(p, nodes, nodeCount);
+        
+        let idx = nodeCount[0];
+        nodes[idx].kind = AST_BINARY_EXPR;
+        nodes[idx].value1 = TK_PLUS;
+        nodes[idx].value2 = left;
+        nodes[idx].value3 = right;
+        nodeCount[0] = nodeCount[0] + 1;
+        return idx;
+    }
+    
+    if (tok == TK_MINUS) {
+        p.pos = p.pos + 1;
+        let right = parse_primary(p, nodes, nodeCount);
+        
+        let idx = nodeCount[0];
+        nodes[idx].kind = AST_BINARY_EXPR;
+        nodes[idx].value1 = TK_MINUS;
+        nodes[idx].value2 = left;
+        nodes[idx].value3 = right;
+        nodeCount[0] = nodeCount[0] + 1;
+        return idx;
+    }
+    
+    if (tok == TK_STAR) {
+        p.pos = p.pos + 1;
+        let right = parse_primary(p, nodes, nodeCount);
+        
+        let idx = nodeCount[0];
+        nodes[idx].kind = AST_BINARY_EXPR;
+        nodes[idx].value1 = TK_STAR;
+        nodes[idx].value2 = left;
+        nodes[idx].value3 = right;
+        nodeCount[0] = nodeCount[0] + 1;
+        return idx;
+    }
+    
+    return left;
+}
+
+// Parse return statement
+function parse_return(p: Parser, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    p.pos = p.pos + 1;  // consume 'return'
+    
+    let expr = parse_expr(p, nodes, nodeCount);
+    
+    if (current_token(p) == TK_SEMICOLON) {
+        p.pos = p.pos + 1;
+    }
+    
+    let idx = nodeCount[0];
+    nodes[idx].kind = AST_RETURN_STMT;
+    nodes[idx].value1 = expr;
+    nodes[idx].value2 = 0;
+    nodes[idx].value3 = 0;
+    nodeCount[0] = nodeCount[0] + 1;
+    return idx;
+}
+
+// Parse let statement
+function parse_let(p: Parser, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    p.pos = p.pos + 1;  // consume 'let'
+    
+    let nameStart = 0;
+    let nameLen = 0;
+    
+    if (current_token(p) == TK_IDENTIFIER) {
+        nameStart = p.starts[p.pos];
+        nameLen = p.lens[p.pos];
+        p.pos = p.pos + 1;
+    }
+    
+    // Skip type annotation for now
+    if (current_token(p) == TK_COLON) {
+        p.pos = p.pos + 1;
+        // Skip type
+        if (current_token(p) == TK_IDENTIFIER) {
+            p.pos = p.pos + 1;
+        }
+    }
+    
+    let initExpr = 0;
+    if (current_token(p) == TK_EQUAL) {
+        p.pos = p.pos + 1;
+        initExpr = parse_expr(p, nodes, nodeCount);
+    }
+    
+    if (current_token(p) == TK_SEMICOLON) {
+        p.pos = p.pos + 1;
+    }
+    
+    let idx = nodeCount[0];
+    nodes[idx].kind = AST_LET_STMT;
+    nodes[idx].value1 = nameStart;
+    nodes[idx].value2 = nameLen;
+    nodes[idx].value3 = initExpr;
+    nodeCount[0] = nodeCount[0] + 1;
+    return idx;
+}
+
+// Parse statement
+function parse_stmt(p: Parser, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    let tok = current_token(p);
+    
+    if (tok == TK_RETURN) {
+        return parse_return(p, nodes, nodeCount);
+    }
+    
+    if (tok == TK_LET) {
+        return parse_let(p, nodes, nodeCount);
+    }
+    
+    return 0;
+}
+
+// Parse function
+function parse_function(p: Parser, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    p.pos = p.pos + 1;  // consume 'function'
+    
+    let nameStart = 0;
+    let nameLen = 0;
+    
+    if (current_token(p) == TK_IDENTIFIER) {
+        nameStart = p.starts[p.pos];
+        nameLen = p.lens[p.pos];
+        p.pos = p.pos + 1;
+    }
+    
+    // Skip parameters for now
+    if (current_token(p) == TK_LPAREN) {
+        p.pos = p.pos + 1;
+        while (current_token(p) != TK_RPAREN) {
+            if (current_token(p) == TK_END) {
+                break;
+            }
+            p.pos = p.pos + 1;
+        }
+        if (current_token(p) == TK_RPAREN) {
+            p.pos = p.pos + 1;
+        }
+    }
+    
+    // Skip return type for now
+    if (current_token(p) == TK_COLON) {
+        p.pos = p.pos + 1;
+        if (current_token(p) == TK_IDENTIFIER) {
+            p.pos = p.pos + 1;
+        }
+    }
+    
+    let bodyStart = nodeCount[0];
+    
+    // Parse body
+    if (current_token(p) == TK_LBRACE) {
+        p.pos = p.pos + 1;
+        
+        while (current_token(p) != TK_RBRACE) {
+            if (current_token(p) == TK_END) {
+                break;
+            }
+            parse_stmt(p, nodes, nodeCount);
+        }
+        
+        if (current_token(p) == TK_RBRACE) {
+            p.pos = p.pos + 1;
+        }
+    }
+    
+    let idx = nodeCount[0];
+    nodes[idx].kind = AST_FUNCTION;
+    nodes[idx].value1 = nameStart;
+    nodes[idx].value2 = nameLen;
+    nodes[idx].value3 = bodyStart;
+    nodeCount[0] = nodeCount[0] + 1;
+    return idx;
+}
+
+// Main parse function
+function parse(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>, tokenCount: i32, src: ptr<i8>, nodes: ptr<ASTNode>, nodeCountPtr: ptr<i32>): i32 {
+    let p: Parser;
+    p.tokens = tokens;
+    p.starts = starts;
+    p.lens = lens;
+    p.tokenCount = tokenCount;
+    p.pos = 0;
+    p.src = src;
+    
+    nodeCountPtr[0] = 0;
+    
+    let functionCount = 0;
+    
+    while (p.pos < tokenCount) {
+        let tok = current_token(p);
+        
+        if (tok == TK_FUNCTION) {
+            parse_function(p, nodes, nodeCountPtr);
+            functionCount = functionCount + 1;
+        } else {
+            p.pos = p.pos + 1;
+        }
+    }
+    
+    return functionCount;
+}
+
+// Test function
+function test_parser() {
+    console.log("=== TSN Simple Parser Test ===");
+    
+    // Simple test: parse "function add() { return 42; }"
+    let tokens: i32[100];
+    let starts: i32[100];
+    let lens: i32[100];
+    
+    // Manually create tokens for testing
+    tokens[0] = TK_FUNCTION;  // function
+    starts[0] = 0;
+    lens[0] = 8;
+    
+    tokens[1] = TK_IDENTIFIER;  // add
+    starts[1] = 9;
+    lens[1] = 3;
+    
+    tokens[2] = TK_LPAREN;  // (
+    starts[2] = 12;
+    lens[2] = 1;
+    
+    tokens[3] = TK_RPAREN;  // )
+    starts[3] = 13;
+    lens[3] = 1;
+    
+    tokens[4] = TK_LBRACE;  // {
+    starts[4] = 15;
+    lens[4] = 1;
+    
+    tokens[5] = TK_RETURN;  // return
+    starts[5] = 17;
+    lens[5] = 6;
+    
+    tokens[6] = TK_NUMBER;  // 42
+    starts[6] = 24;
+    lens[6] = 2;
+    
+    tokens[7] = TK_SEMICOLON;  // ;
+    starts[7] = 26;
+    lens[7] = 1;
+    
+    tokens[8] = TK_RBRACE;  // }
+    starts[8] = 28;
+    lens[8] = 1;
+    
+    let tokenCount = 9;
+    let source = "function add() { return 42; }";
+    
+    let nodes: ASTNode[500];
+    let nodeCount: i32[1];
+    nodeCount[0] = 0;
+    
+    let functionCount = parse(tokens, starts, lens, tokenCount, source, nodes, nodeCount);
+    
+    if (functionCount == 1) {
+        console.log("Parser test PASSED!");
+    } else {
+        console.log("Parser test FAILED!");
+    }
+}
+
+function main() {
+    test_parser();
+}
