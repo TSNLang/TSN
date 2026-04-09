@@ -2163,8 +2163,33 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
         }
 
         std::vector<llvm::Value *> args;
-        for (const auto &argExpr : call->args) {
-            llvm::Value *argVal = emitExpr(b, argExpr.get(), m, prog);
+        for (size_t i = 0; i < call->args.size(); ++i) {
+            const auto *argExpr = call->args[i].get();
+            
+            // Special handling for arrays: pass pointer to first element instead of loading
+            if (const auto *ident = dynamic_cast<const Identifier *>(argExpr)) {
+                auto it = prog.symbolTable.find(ident->name);
+                if (it != prog.symbolTable.end()) {
+                    llvm::AllocaInst *alloca = it->second;
+                    llvm::Type *allocatedType = alloca->getAllocatedType();
+                    
+                    // If it's an array, pass pointer to first element
+                    if (allocatedType->isArrayTy()) {
+                        llvm::Value *zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m.getContext()), 0);
+                        llvm::Value *arrayPtr = b.CreateInBoundsGEP(
+                            allocatedType,
+                            alloca,
+                            {zero, zero},
+                            ident->name + "_ptr"
+                        );
+                        args.push_back(arrayPtr);
+                        continue;
+                    }
+                }
+            }
+            
+            // Normal case: emit expression and get value
+            llvm::Value *argVal = emitExpr(b, argExpr, m, prog);
             if (!argVal) {
                 return nullptr;
             }
