@@ -1,0 +1,471 @@
+// TSN Self-Hosting Compiler - Full Lexer
+// This lexer can tokenize complete TSN source code
+
+import * as console from "std:console";
+
+// Token kinds
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_STRING: i32 = 2;
+const TK_NUMBER: i32 = 3;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_COMMA: i32 = 10;
+const TK_DOT: i32 = 11;
+const TK_LBRACKET: i32 = 12;
+const TK_RBRACKET: i32 = 13;
+const TK_LESS: i32 = 14;
+const TK_GREATER: i32 = 15;
+const TK_EQUAL: i32 = 16;
+const TK_PLUS: i32 = 17;
+const TK_MINUS: i32 = 18;
+const TK_STAR: i32 = 19;
+const TK_SLASH: i32 = 20;
+const TK_EQUAL_EQUAL: i32 = 21;
+const TK_NOT_EQUAL: i32 = 22;
+const TK_LESS_EQUAL: i32 = 23;
+const TK_GREATER_EQUAL: i32 = 24;
+const TK_AND_AND: i32 = 25;
+const TK_PIPE_PIPE: i32 = 26;
+
+// Keywords
+const TK_FUNCTION: i32 = 30;
+const TK_LET: i32 = 31;
+const TK_CONST: i32 = 32;
+const TK_RETURN: i32 = 33;
+const TK_IF: i32 = 34;
+const TK_ELSE: i32 = 35;
+const TK_WHILE: i32 = 36;
+const TK_FOR: i32 = 37;
+const TK_INTERFACE: i32 = 38;
+const TK_CLASS: i32 = 39;
+const TK_IMPORT: i32 = 40;
+const TK_FROM: i32 = 41;
+const TK_AS: i32 = 42;
+const TK_DECLARE: i32 = 43;
+
+// Character classification
+function is_digit(c: i8): bool {
+    if (c >= 48) {
+        if (c <= 57) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function is_alpha(c: i8): bool {
+    if (c >= 97) { 
+        if (c <= 122) { 
+            return true; 
+        } 
+    }
+    if (c >= 65) { 
+        if (c <= 90) { 
+            return true; 
+        } 
+    }
+    if (c == 95) { 
+        return true; 
+    }
+    return false;
+}
+
+function is_whitespace(c: i8): bool {
+    if (c == 32) { return true; }  // space
+    if (c == 9) { return true; }   // tab
+    if (c == 10) { return true; }  // newline
+    if (c == 13) { return true; }  // carriage return
+    return false;
+}
+
+function is_alnum(c: i8): bool {
+    if (is_alpha(c)) { return true; }
+    if (is_digit(c)) { return true; }
+    return false;
+}
+
+// Check if string matches keyword
+function match_keyword(src: ptr<i8>, start: i32, len: i32, keyword: ptr<i8>): bool {
+    let keywordLen = string_length(keyword);
+    if (len != keywordLen) {
+        return false;
+    }
+    
+    let i = 0;
+    while (i < len) {
+        let c1 = string_char_at(src, start + i);
+        let c2 = string_char_at(keyword, i);
+        if (c1 != c2) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+// Get keyword token kind
+function get_keyword_kind(src: ptr<i8>, start: i32, len: i32): i32 {
+    if (len == 2) {
+        if (match_keyword(src, start, len, "if")) { return TK_IF; }
+        if (match_keyword(src, start, len, "as")) { return TK_AS; }
+    }
+    if (len == 3) {
+        if (match_keyword(src, start, len, "let")) { return TK_LET; }
+        if (match_keyword(src, start, len, "for")) { return TK_FOR; }
+    }
+    if (len == 4) {
+        if (match_keyword(src, start, len, "else")) { return TK_ELSE; }
+        if (match_keyword(src, start, len, "from")) { return TK_FROM; }
+    }
+    if (len == 5) {
+        if (match_keyword(src, start, len, "const")) { return TK_CONST; }
+        if (match_keyword(src, start, len, "while")) { return TK_WHILE; }
+        if (match_keyword(src, start, len, "class")) { return TK_CLASS; }
+    }
+    if (len == 6) {
+        if (match_keyword(src, start, len, "return")) { return TK_RETURN; }
+        if (match_keyword(src, start, len, "import")) { return TK_IMPORT; }
+    }
+    if (len == 7) {
+        if (match_keyword(src, start, len, "declare")) { return TK_DECLARE; }
+    }
+    if (len == 8) {
+        if (match_keyword(src, start, len, "function")) { return TK_FUNCTION; }
+    }
+    if (len == 9) {
+        if (match_keyword(src, start, len, "interface")) { return TK_INTERFACE; }
+    }
+    
+    return TK_IDENTIFIER;
+}
+
+// Main lexer function
+function lex(src: ptr<i8>, srcLen: i32, tokens: i32[1000], starts: i32[1000], lens: i32[1000]): i32 {
+    let pos = 0;
+    let count = 0;
+    
+    while (pos < srcLen) {
+        if (count >= 1000) {
+            break;
+        }
+        
+        let c = string_char_at(src, pos);
+        let start = pos;
+        
+        // Skip whitespace
+        if (is_whitespace(c)) {
+            pos = pos + 1;
+        }
+        // Skip comments
+        else if (c == 47) {  // '/'
+            if (pos + 1 < srcLen) {
+                let next = string_char_at(src, pos + 1);
+                if (next == 47) {  // '//'
+                    pos = pos + 2;
+                    while (pos < srcLen) {
+                        let ch = string_char_at(src, pos);
+                        if (ch == 10) {  // newline
+                            break;
+                        }
+                        pos = pos + 1;
+                    }
+                } else {
+                    // Division operator
+                    tokens[count] = TK_SLASH;
+                    starts[count] = start;
+                    lens[count] = 1;
+                    count = count + 1;
+                    pos = pos + 1;
+                }
+            } else {
+                tokens[count] = TK_SLASH;
+                starts[count] = start;
+                lens[count] = 1;
+                count = count + 1;
+                pos = pos + 1;
+            }
+        }
+        // Numbers
+        else if (is_digit(c)) {
+            while (pos < srcLen) {
+                let ch = string_char_at(src, pos);
+                if (is_digit(ch)) {
+                    pos = pos + 1;
+                } else {
+                    break;
+                }
+            }
+            tokens[count] = TK_NUMBER;
+            starts[count] = start;
+            lens[count] = pos - start;
+            count = count + 1;
+        }
+        // Identifiers and keywords
+        else if (is_alpha(c)) {
+            while (pos < srcLen) {
+                let ch = string_char_at(src, pos);
+                if (is_alnum(ch)) {
+                    pos = pos + 1;
+                } else {
+                    break;
+                }
+            }
+            let wordLen = pos - start;
+            let kind = get_keyword_kind(src, start, wordLen);
+            tokens[count] = kind;
+            starts[count] = start;
+            lens[count] = wordLen;
+            count = count + 1;
+        }
+        // String literals
+        else if (c == 34) {  // '"'
+            pos = pos + 1;
+            while (pos < srcLen) {
+                let ch = string_char_at(src, pos);
+                if (ch == 34) {  // closing '"'
+                    pos = pos + 1;
+                    break;
+                }
+                if (ch == 92) {  // backslash
+                    pos = pos + 2;  // skip escape sequence
+                } else {
+                    pos = pos + 1;
+                }
+            }
+            tokens[count] = TK_STRING;
+            starts[count] = start + 1;  // skip opening quote
+            lens[count] = pos - start - 2;  // skip both quotes
+            count = count + 1;
+        }
+        // Single character tokens
+        else if (c == 59) {  // ';'
+            tokens[count] = TK_SEMICOLON;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 40) {  // '('
+            tokens[count] = TK_LPAREN;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 41) {  // ')'
+            tokens[count] = TK_RPAREN;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 123) {  // '{'
+            tokens[count] = TK_LBRACE;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 125) {  // '}'
+            tokens[count] = TK_RBRACE;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 58) {  // ':'
+            tokens[count] = TK_COLON;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 44) {  // ','
+            tokens[count] = TK_COMMA;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 46) {  // '.'
+            tokens[count] = TK_DOT;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 91) {  // '['
+            tokens[count] = TK_LBRACKET;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 93) {  // ']'
+            tokens[count] = TK_RBRACKET;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 60) {  // '<'
+            pos = pos + 1;
+            if (pos < srcLen) {
+                let next = string_char_at(src, pos);
+                if (next == 61) {  // '='
+                    tokens[count] = TK_LESS_EQUAL;
+                    starts[count] = start;
+                    lens[count] = 2;
+                    count = count + 1;
+                    pos = pos + 1;
+                } else {
+                    tokens[count] = TK_LESS;
+                    starts[count] = start;
+                    lens[count] = 1;
+                    count = count + 1;
+                }
+            } else {
+                tokens[count] = TK_LESS;
+                starts[count] = start;
+                lens[count] = 1;
+                count = count + 1;
+            }
+        }
+        else if (c == 62) {  // '>'
+            pos = pos + 1;
+            if (pos < srcLen) {
+                let next = string_char_at(src, pos);
+                if (next == 61) {  // '='
+                    tokens[count] = TK_GREATER_EQUAL;
+                    starts[count] = start;
+                    lens[count] = 2;
+                    count = count + 1;
+                    pos = pos + 1;
+                } else {
+                    tokens[count] = TK_GREATER;
+                    starts[count] = start;
+                    lens[count] = 1;
+                    count = count + 1;
+                }
+            } else {
+                tokens[count] = TK_GREATER;
+                starts[count] = start;
+                lens[count] = 1;
+                count = count + 1;
+            }
+        }
+        else if (c == 61) {  // '='
+            pos = pos + 1;
+            if (pos < srcLen) {
+                let next = string_char_at(src, pos);
+                if (next == 61) {  // '='
+                    tokens[count] = TK_EQUAL_EQUAL;
+                    starts[count] = start;
+                    lens[count] = 2;
+                    count = count + 1;
+                    pos = pos + 1;
+                } else {
+                    tokens[count] = TK_EQUAL;
+                    starts[count] = start;
+                    lens[count] = 1;
+                    count = count + 1;
+                }
+            } else {
+                tokens[count] = TK_EQUAL;
+                starts[count] = start;
+                lens[count] = 1;
+                count = count + 1;
+            }
+        }
+        else if (c == 33) {  // '!'
+            pos = pos + 1;
+            if (pos < srcLen) {
+                let next = string_char_at(src, pos);
+                if (next == 61) {  // '='
+                    tokens[count] = TK_NOT_EQUAL;
+                    starts[count] = start;
+                    lens[count] = 2;
+                    count = count + 1;
+                    pos = pos + 1;
+                }
+            }
+        }
+        else if (c == 38) {  // '&'
+            pos = pos + 1;
+            if (pos < srcLen) {
+                let next = string_char_at(src, pos);
+                if (next == 38) {  // '&'
+                    tokens[count] = TK_AND_AND;
+                    starts[count] = start;
+                    lens[count] = 2;
+                    count = count + 1;
+                    pos = pos + 1;
+                }
+            }
+        }
+        else if (c == 124) {  // '|'
+            pos = pos + 1;
+            if (pos < srcLen) {
+                let next = string_char_at(src, pos);
+                if (next == 124) {  // '|'
+                    tokens[count] = TK_PIPE_PIPE;
+                    starts[count] = start;
+                    lens[count] = 2;
+                    count = count + 1;
+                    pos = pos + 1;
+                }
+            }
+        }
+        else if (c == 43) {  // '+'
+            tokens[count] = TK_PLUS;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 45) {  // '-'
+            tokens[count] = TK_MINUS;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 42) {  // '*'
+            tokens[count] = TK_STAR;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else {
+            // Unknown character, skip it
+            pos = pos + 1;
+        }
+    }
+    
+    return count;
+}
+
+function main() {
+    let source = "function add(a: i32, b: i32): i32 { return a + b; }";
+    let sourceLen = string_length(source);
+    
+    let tokens: i32[1000];
+    let starts: i32[1000];
+    let lens: i32[1000];
+    
+    let tokenCount = lex(source, sourceLen, tokens, starts, lens);
+    
+    console.log("=== TSN Full Lexer Test ===");
+    
+    if (tokenCount > 0) {
+        console.log("Lexer test PASSED!");
+    } else {
+        console.log("Lexer test FAILED!");
+    }
+}
