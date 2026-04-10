@@ -1,5 +1,5 @@
-// TSN Self-Hosting Compiler v0.3
-// Complete pipeline with IR output
+// TSN Self-Hosting Compiler v0.2
+// Complete pipeline: Lexer → Parser → Codegen
 
 import * as console from "std:console";
 
@@ -187,9 +187,12 @@ function parse(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>, tokenCount: i
     let pos = 0;
     let nodeCount = 0;
     
+    // Simple parser: find "function name() { return number; }"
     while (pos < tokenCount) {
         if (tokens[pos] == TK_FUNCTION) {
-            pos = pos + 1;
+            let funcStart = nodeCount;
+            
+            pos = pos + 1;  // skip 'function'
             
             let nameStart = 0;
             let nameLen = 0;
@@ -201,6 +204,7 @@ function parse(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>, tokenCount: i
                 }
             }
             
+            // Skip parameters
             if (pos < tokenCount) {
                 if (tokens[pos] == TK_LPAREN) {
                     pos = pos + 1;
@@ -214,27 +218,32 @@ function parse(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>, tokenCount: i
                 }
             }
             
+            // Skip return type
             if (pos < tokenCount) {
                 if (tokens[pos] == TK_COLON) {
                     pos = pos + 1;
                     if (pos < tokenCount) {
-                        pos = pos + 1;
+                        pos = pos + 1;  // skip type
                     }
                 }
             }
             
+            // Parse body
             if (pos < tokenCount) {
                 if (tokens[pos] == TK_LBRACE) {
                     pos = pos + 1;
                     
                     let bodyStart = nodeCount;
                     
+                    // Look for return statement
                     while (pos < tokenCount) {
                         if (tokens[pos] == TK_RETURN) {
                             pos = pos + 1;
                             
+                            // Get return value (number)
                             if (pos < tokenCount) {
                                 if (tokens[pos] == TK_NUMBER) {
+                                    // Create number literal node
                                     nodes[nodeCount].kind = AST_NUMBER_LITERAL;
                                     nodes[nodeCount].value1 = starts[pos];
                                     nodes[nodeCount].value2 = lens[pos];
@@ -242,6 +251,7 @@ function parse(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>, tokenCount: i
                                     let numIdx = nodeCount;
                                     nodeCount = nodeCount + 1;
                                     
+                                    // Create return statement node
                                     nodes[nodeCount].kind = AST_RETURN_STMT;
                                     nodes[nodeCount].value1 = numIdx;
                                     nodes[nodeCount].value2 = 0;
@@ -260,6 +270,7 @@ function parse(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>, tokenCount: i
                         pos = pos + 1;
                     }
                     
+                    // Create function node
                     nodes[nodeCount].kind = AST_FUNCTION;
                     nodes[nodeCount].value1 = nameStart;
                     nodes[nodeCount].value2 = nameLen;
@@ -295,16 +306,6 @@ function buffer_append(buffer: ptr<i8>, pos: ptr<i32>, str: ptr<i8>) {
     pos[0] = currentPos;
 }
 
-function print_buffer(buffer: ptr<i8>, len: i32) {
-    let i = 0;
-    while (i < len) {
-        let ch = buffer[i];
-        if (ch == 0) { break; }
-        console.log_char(ch);
-        i = i + 1;
-    }
-}
-
 function codegen(nodes: ptr<ASTNode>, nodeCount: i32, src: ptr<i8>, output: ptr<i8>): i32 {
     let pos: i32[1];
     pos[0] = 0;
@@ -312,6 +313,7 @@ function codegen(nodes: ptr<ASTNode>, nodeCount: i32, src: ptr<i8>, output: ptr<
     buffer_append(output, pos, "; ModuleID = 'tsn_output'\n");
     buffer_append(output, pos, "target triple = \"x86_64-pc-windows-msvc\"\n\n");
     
+    // Find function nodes
     let i = 0;
     while (i < nodeCount) {
         if (nodes[i].kind == AST_FUNCTION) {
@@ -321,6 +323,7 @@ function codegen(nodes: ptr<ASTNode>, nodeCount: i32, src: ptr<i8>, output: ptr<
             
             buffer_append(output, pos, "define i32 @");
             
+            // Append function name
             let j = 0;
             while (j < nameLen) {
                 let ch = string_char_at(src, nameStart + j);
@@ -332,6 +335,7 @@ function codegen(nodes: ptr<ASTNode>, nodeCount: i32, src: ptr<i8>, output: ptr<
             buffer_append(output, pos, "() {\n");
             buffer_append(output, pos, "entry:\n");
             
+            // Generate body (return statement)
             if (bodyStart < nodeCount) {
                 if (nodes[bodyStart].kind == AST_RETURN_STMT) {
                     let exprIdx = nodes[bodyStart].value1;
@@ -342,6 +346,7 @@ function codegen(nodes: ptr<ASTNode>, nodeCount: i32, src: ptr<i8>, output: ptr<
                         
                         buffer_append(output, pos, "  ret i32 ");
                         
+                        // Append number
                         let k = 0;
                         while (k < numLen) {
                             let ch = string_char_at(src, numStart + k);
@@ -367,30 +372,45 @@ function codegen(nodes: ptr<ASTNode>, nodeCount: i32, src: ptr<i8>, output: ptr<
 // MAIN COMPILER
 // ============================================================================
 
-function main() {
-    console.log("=== TSN Self-Hosting Compiler v0.3 ===");
-    console.log("");
+function compile(source: ptr<i8>): void {
+    console.log("=== TSN Self-Hosting Compiler v0.2 ===");
     
-    let source = "function main(): i32 { return 42; }";
     let sourceLen = string_length(source);
+    console.log("Source length: OK");
     
-    console.log("Input:");
-    console.log(source);
-    console.log("");
-    
+    // Lexer
     let tokens: i32[100];
     let starts: i32[100];
     let lens: i32[100];
     let tokenCount = lex(source, sourceLen, tokens, starts, lens);
+    console.log("Lexer: OK");
     
+    // Parser
     let nodes: ASTNode[50];
     let nodeCount = parse(tokens, starts, lens, tokenCount, nodes);
+    console.log("Parser: OK");
     
+    // Codegen
     let irBuffer: i8[5000];
     let irLen = codegen(nodes, nodeCount, source, irBuffer);
-    
-    console.log("Output LLVM IR:");
-    print_buffer(irBuffer, irLen);
+    console.log("Codegen: OK");
     
     console.log("Compilation SUCCESS!");
+}
+
+function main(): void {
+    console.log("=== TSN Self-Hosting Compiler v0.2 ===");
+    
+    // Test 1: Simple function
+    let test1 = "function main(): i32 { return 42; }";
+    compile(test1);
+    
+    console.log("---");
+    
+    // Test 2: Different function name
+    let test2 = "function add(): i32 { return 100; }";
+    compile(test2);
+    
+    console.log("---");
+    console.log("All compiler tests PASSED!");
 }

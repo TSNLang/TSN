@@ -63,7 +63,7 @@ Create `hello.tsn`:
 ```typescript
 import * as console from "std:console";
 
-function main() {
+function main(): void {
     console.log("Hello from TSN!");
 }
 ```
@@ -77,6 +77,8 @@ Compile and run:
 # Run
 ./hello.exe
 ```
+
+**Note**: Like Zig, Rust, and Go, TSN's `main()` function can return `void` - no need to return a number!
 
 ---
 

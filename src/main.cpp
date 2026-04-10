@@ -2570,8 +2570,14 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
             emitStmt(fBuilder, stmtPtr.get(), m, prog, llvmFn, strIndex);
         }
         if (!fBuilder.GetInsertBlock()->getTerminator()) {
-            if (fnDef->result.kind == TypeName::Kind::Void) fBuilder.CreateRetVoid();
-            else fBuilder.CreateRet(llvm::Constant::getNullValue(retTy));
+            if (fnDef->result.kind == TypeName::Kind::Void) {
+                fBuilder.CreateRetVoid();
+            } else if (fnDef->name == "main" && fnDef->result.kind == TypeName::Kind::Void) {
+                // For main(): void, auto return 0 (like Zig, Rust, Go)
+                fBuilder.CreateRetVoid();
+            } else {
+                fBuilder.CreateRet(llvm::Constant::getNullValue(retTy));
+            }
         }
     }
 
@@ -2580,8 +2586,24 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
         emitStmt(b, stmtPtr.get(), m, prog, mainFn, strIndex);
     }
 
+    // Check if user defined a main() function
+    bool hasUserMain = false;
+    bool userMainReturnsVoid = false;
+    for (const auto &fnDef : prog.functions) {
+        if (fnDef->name == "main") {
+            hasUserMain = true;
+            userMainReturnsVoid = (fnDef->result.kind == TypeName::Kind::Void);
+            break;
+        }
+    }
+
     if (!b.GetInsertBlock()->getTerminator()) {
-        b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
+        if (hasUserMain && userMainReturnsVoid) {
+            // User's main() returns void, so wrapper main returns 0
+            b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
+        } else {
+            b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
+        }
     }
 
     return true;

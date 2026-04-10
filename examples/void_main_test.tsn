@@ -1,0 +1,7 @@
+// Test main(): void like Zig, Rust, Go
+import * as console from "std:console";
+
+function main(): void {
+    console.log("Hello from void main!");
+    console.log("No need to return a number!");
+}
