@@ -2157,8 +2157,11 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
         }
         
         // Regular function call
+        // Use getFunction to get already-declared functions (including extern functions)
         llvm::Function *callee = m.getFunction(call->callee);
         if (!callee) {
+            // Function not found - this could be an error or missing declaration
+            Diag::error(0, "function '" + call->callee + "' not found");
             return nullptr;
         }
 
