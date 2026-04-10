@@ -1,70 +1,211 @@
 # TSN Self-Hosting Compiler
 
-Đây là TSN compiler được viết bằng chính TSN, nhằm mục tiêu self-hosting.
+> **This is the PRIMARY compiler** - Written in TSN, compiling TSN
 
-## Cấu trúc
+## 🎯 Goal
 
-- `ast.tsn` - AST node definitions và constants
-- `lexer.tsn` - Tokenizer (đang phát triển)
-- `lexer_simple.tsn` - Lexer đơn giản (hoạt động ✓)
-- `parser_v2.tsn` - Parser v2 (đang phát triển)
-- `parser_debug.tsn` - Parser debug version (hoạt động ✓)
-- `mini_compiler.tsn` - Mini compiler (hoạt động ✓)
-- `token_buffer.tsn` - Token storage (TODO: cần arrays)
-- `bootstrap_plan.md` - Kế hoạch chi tiết
+Replace the C++ bootstrap compiler (`src/main.cpp`) with a compiler written entirely in TSN.
 
-## Trạng thái hiện tại
+## 📊 Status: ~60% Complete
 
-✅ **Lexer hoạt động**
-- Character classification
-- Token recognition
-- Keyword detection
+```
+✅ Week 1: Lexer (Complete)
+🚧 Week 2: Parser (60% - In Progress)
+⏳ Week 3: Codegen + Bootstrap
+```
 
-✅ **Parser cơ bản hoạt động**
-- Function counting
-- Keyword matching
-- Simple parsing logic
+## 📁 Files
 
-✅ **Mini compiler hoạt động**
-- Parse TSN code
-- Count functions
-- Basic compilation flow
+### Core Components (Priority Order)
 
-🔄 **Đang cần từ C++ compiler:**
-- Fixed-size arrays: `let arr: i32[100];`
-- Struct member access: `token.kind` (đã có parsing, cần codegen)
-- Array element assignment: `arr[i] = value;`
+1. **lexer.tsn** ✅
+   - Full tokenization
+   - Keyword recognition
+   - String/number parsing
+   - Status: COMPLETE
 
-## Milestone đạt được
+2. **expr_parser.tsn** ✅
+   - Primary expressions (numbers, identifiers)
+   - Binary operators (+, -, *, /)
+   - Status: COMPLETE
 
-🎉 **TSN compiler đầu tiên viết bằng TSN đã chạy được!**
+3. **stmt_parser.tsn** 🚧
+   - Variable declarations (let, const)
+   - Assignments
+   - Return statements
+   - Control flow (if, while, for)
+   - Status: NEXT (2-3 days)
 
-Đây là bước quan trọng trong hành trình self-hosting. Mặc dù còn đơn giản, nhưng đã chứng minh:
-1. TSN có thể compile code TSN
-2. Lexer và parser cơ bản hoạt động
-3. Có thể phát triển tiếp bằng TSN
+4. **func_parser.tsn** ⏳
+   - Function signatures
+   - Parameter lists
+   - Return types
+   - Function bodies
+   - Status: AFTER stmt_parser
 
-## Chạy
+5. **codegen.tsn** ⏳
+   - LLVM IR generation
+   - Function definitions
+   - Variable declarations
+   - Expressions
+   - Control flow
+   - Status: Week 3
 
+6. **compiler.tsn** ⏳
+   - Main integration
+   - File I/O
+   - Error handling
+   - Status: Week 3
+
+### Prototypes (Learning/Testing)
+
+- **mini_compiler_v2.tsn** - Lexer + simple parser + codegen (working)
+- **mini_compiler_v3.tsn** - Added file I/O (FFI issues)
+- **lexer_simple.tsn** - Simplified lexer for learning
+- **simple_parser.tsn** - Basic parser experiments
+- **minimal_parser.tsn** - Minimal parser prototype
+
+## 🚀 Quick Start
+
+### Compile a component
 ```bash
-# Compile mini compiler
-build\Release\tsnc.exe tsn\mini_compiler.tsn --emit=exe -o build\mini_compiler.exe
-
-# Run
-build\mini_compiler.exe
+# From project root
+./build/Release/tsnc.exe tsn/expr_parser.tsn --emit=exe -o test.exe
+./test.exe
 ```
 
-Output:
-```
-TSN Mini Compiler v0.1
-Compilation successful
-Compiler test PASSED
+### Test the current compiler
+```bash
+# Compile mini_compiler_v2
+./build/Release/tsnc.exe tsn/mini_compiler_v2.tsn --emit=exe -o compiler.exe
+
+# Run it
+./compiler.exe
 ```
 
-## Bước tiếp theo
+## 📝 Development Guidelines
 
-1. Thêm fixed-size arrays vào C++ compiler
-2. Hoàn thiện struct member access codegen
-3. Implement full parser với AST
-4. Implement LLVM IR codegen
-5. Bootstrap: compile TSN compiler bằng chính nó
+### Adding a New Component
+
+1. **Create file**: `tsn/new_component.tsn`
+2. **Import console**: `import * as console from "std:console";`
+3. **Define constants**: Token kinds, AST node types
+4. **Implement logic**: Parsing/generation functions
+5. **Add tests**: `main()` function with test cases
+6. **Compile & test**: Use C++ bootstrap compiler
+7. **Integrate**: Add to main compiler when ready
+
+### Code Style
+
+```tsn
+// Use descriptive names
+function parse_statement(tokens: ptr<i32>, pos: ptr<i32>): i32 {
+    // Implementation
+}
+
+// Test in main()
+function main(): void {
+    console.log("=== Component Test ===");
+    // Test cases
+    console.log("All tests PASSED!");
+}
+```
+
+### Testing Pattern
+
+```tsn
+// Setup test data
+let tokens: i32[10];
+tokens[0] = TK_NUMBER;
+
+// Call function
+let result = parse_something(tokens, ...);
+
+// Verify result
+console.log("Test: OK");
+```
+
+## 🎓 Architecture
+
+```
+Source Code (.tsn)
+    ↓
+[lexer.tsn] → Tokens
+    ↓
+[expr_parser.tsn] → Expression AST
+[stmt_parser.tsn] → Statement AST  
+[func_parser.tsn] → Function AST
+    ↓
+[codegen.tsn] → LLVM IR
+    ↓
+[compiler.tsn] → File I/O + Integration
+    ↓
+LLVM IR (.ll) → Native Executable
+```
+
+## 📋 Current Focus
+
+**Week 2, Day 2: Statement Parser**
+
+File: `stmt_parser.tsn`
+
+Parse:
+- `let x: i32 = 42;` - Variable declaration
+- `x = 100;` - Assignment
+- `return x;` - Return statement
+- `if (x > 0) { ... }` - If statement
+- `while (x < 10) { ... }` - While loop
+
+**Estimated time**: 2-3 days
+
+## 🏆 Success Criteria
+
+### Self-Hosting Achieved
+```bash
+# Step 1: C++ compiler compiles TSN compiler
+./build/Release/tsnc.exe tsn/compiler.tsn -o tsnc_v1.exe
+
+# Step 2: TSN compiler compiles itself
+./tsnc_v1.exe tsn/compiler.tsn -o tsnc_v2.exe
+
+# Step 3: Verify outputs match
+# tsnc_v1 and tsnc_v2 should produce identical results
+```
+
+### C++ Compiler Retirement
+- Move `src/main.cpp` to `archive/`
+- All development in TSN
+- Community contributes in TSN, not C++
+
+## 📚 Resources
+
+- **AI_PROJECT_OVERVIEW.md** - Comprehensive guide for AI assistants
+- **SELF_HOSTING_PLAN.md** - 3-week roadmap
+- **NEXT_STEPS.md** - Current development plan
+- **../examples/** - Example TSN programs
+
+## 🤝 Contributing
+
+1. Read `AI_PROJECT_OVERVIEW.md` first
+2. Focus on current priority (check NEXT_STEPS.md)
+3. Follow existing patterns (see expr_parser.tsn)
+4. Test thoroughly
+5. Commit with clear messages
+
+## ⚠️ Important Notes
+
+- **This is the PRIMARY compiler** - Not the C++ one
+- **C++ compiler is temporary** - Only for bootstrapping
+- **Self-hosting is priority #1** - Everything else is secondary
+- **Test each component** - Don't skip testing
+- **Keep it simple** - Complexity comes after self-hosting
+
+---
+
+**Current Status**: Week 2, Day 2 - Parser phase
+
+**Next Milestone**: Statement parser complete (2-3 days)
+
+**Final Goal**: Self-hosting achieved (1-2 weeks)
+
+🚀 **Let's make TSN self-hosting!** 🚀
