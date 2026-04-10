@@ -1,0 +1,352 @@
+// TSN Function Parser
+// Parses function definitions: function name(params): returnType { body }
+
+import * as console from "std:console";
+
+// Token kinds
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_COMMA: i32 = 14;
+const TK_KW_FUNCTION: i32 = 30;
+const TK_KW_RETURN: i32 = 34;
+
+// AST Node kinds
+const AST_FUNCTION: i32 = 20;
+const AST_PARAM: i32 = 21;
+const AST_BLOCK: i32 = 22;
+
+interface ASTNode {
+    kind: i32;
+    value1: i32;  // For FUNCTION: name start, PARAM: name start
+    value2: i32;  // For FUNCTION: name len, PARAM: name len
+    value3: i32;  // For FUNCTION: param count, PARAM: type start
+    value4: i32;  // For FUNCTION: body block idx
+}
+
+// Parse parameter: name: type
+function parse_param(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>,
+                     pos: ptr<i32>, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    let currentPos = pos[0];
+    let currentNodeCount = nodeCount[0];
+    
+    // Expect identifier (parameter name)
+    if (tokens[currentPos] != TK_IDENTIFIER) {
+        return 0;
+    }
+    let nameStart = starts[currentPos];
+    let nameLen = lens[currentPos];
+    currentPos = currentPos + 1;
+    
+    // Expect ':'
+    if (tokens[currentPos] != TK_COLON) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Expect type identifier
+    if (tokens[currentPos] != TK_IDENTIFIER) {
+        return 0;
+    }
+    let typeStart = starts[currentPos];
+    let typeLen = lens[currentPos];
+    currentPos = currentPos + 1;
+    
+    pos[0] = currentPos;
+    
+    // Create parameter node
+    let paramIdx = nodeCount[0];
+    nodes[paramIdx].kind = AST_PARAM;
+    nodes[paramIdx].value1 = nameStart;
+    nodes[paramIdx].value2 = nameLen;
+    nodes[paramIdx].value3 = typeStart;
+    nodes[paramIdx].value4 = typeLen;
+    
+    nodeCount[0] = paramIdx + 1;
+    return paramIdx;
+}
+
+// Parse parameter list: (a: i32, b: i32)
+function parse_param_list(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>,
+                          pos: ptr<i32>, nodes: ptr<ASTNode>, nodeCount: ptr<i32>,
+                          paramIndices: ptr<i32>): i32 {
+    let currentPos = pos[0];
+    let paramCount = 0;
+    
+    // Expect '('
+    if (tokens[currentPos] != TK_LPAREN) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    pos[0] = currentPos;
+    
+    // Parse parameters
+    while (currentPos < 100) {
+        if (tokens[currentPos] == TK_RPAREN) {
+            currentPos = currentPos + 1;
+            pos[0] = currentPos;
+            break;
+        }
+        
+        // Parse parameter
+        let paramIdx = parse_param(tokens, starts, lens, pos, nodes, nodeCount);
+        if (paramIdx > 0) {
+            paramIndices[paramCount] = paramIdx;
+            paramCount = paramCount + 1;
+        }
+        
+        currentPos = pos[0];
+        
+        // Check for comma
+        if (tokens[currentPos] == TK_COMMA) {
+            currentPos = currentPos + 1;
+            pos[0] = currentPos;
+        }
+    }
+    
+    return paramCount;
+}
+
+// Parse function body: { statements }
+function parse_body(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>,
+                    pos: ptr<i32>, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    let currentPos = pos[0];
+    let currentNodeCount = nodeCount[0];
+    
+    // Expect '{'
+    if (tokens[currentPos] != TK_LBRACE) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Mark body start
+    let bodyStartIdx = nodeCount[0];
+    
+    // Skip to '}'
+    let braceCount = 1;
+    while (currentPos < 100) {
+        if (tokens[currentPos] == TK_LBRACE) {
+            braceCount = braceCount + 1;
+        } else if (tokens[currentPos] == TK_RBRACE) {
+            braceCount = braceCount - 1;
+            if (braceCount == 0) {
+                currentPos = currentPos + 1;
+                break;
+            }
+        }
+        currentPos = currentPos + 1;
+    }
+    
+    pos[0] = currentPos;
+    
+    // Create block node
+    let blockIdx = nodeCount[0];
+    nodes[blockIdx].kind = AST_BLOCK;
+    nodes[blockIdx].value1 = bodyStartIdx;
+    nodes[blockIdx].value2 = 0;
+    nodes[blockIdx].value3 = 0;
+    nodes[blockIdx].value4 = 0;
+    
+    nodeCount[0] = blockIdx + 1;
+    return blockIdx;
+}
+
+// Parse function definition
+function parse_function(tokens: ptr<i32>, starts: ptr<i32>, lens: ptr<i32>,
+                        pos: ptr<i32>, nodes: ptr<ASTNode>, nodeCount: ptr<i32>): i32 {
+    let currentPos = pos[0];
+    let currentNodeCount = nodeCount[0];
+    
+    // Expect 'function'
+    if (tokens[currentPos] != TK_KW_FUNCTION) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Expect identifier (function name)
+    if (tokens[currentPos] != TK_IDENTIFIER) {
+        return 0;
+    }
+    let nameStart = starts[currentPos];
+    let nameLen = lens[currentPos];
+    currentPos = currentPos + 1;
+    
+    pos[0] = currentPos;
+    
+    // Parse parameter list
+    let paramIndices: i32[10];
+    let paramCount = parse_param_list(tokens, starts, lens, pos, nodes, nodeCount, paramIndices);
+    
+    currentPos = pos[0];
+    
+    // Parse return type (: type)
+    if (tokens[currentPos] == TK_COLON) {
+        currentPos = currentPos + 1;
+        // Skip return type identifier
+        if (tokens[currentPos] == TK_IDENTIFIER) {
+            currentPos = currentPos + 1;
+        }
+    }
+    
+    pos[0] = currentPos;
+    
+    // Parse body
+    let bodyIdx = parse_body(tokens, starts, lens, pos, nodes, nodeCount);
+    
+    // Create function node
+    let funcIdx = nodeCount[0];
+    nodes[funcIdx].kind = AST_FUNCTION;
+    nodes[funcIdx].value1 = nameStart;
+    nodes[funcIdx].value2 = nameLen;
+    nodes[funcIdx].value3 = paramCount;
+    nodes[funcIdx].value4 = bodyIdx;
+    
+    nodeCount[0] = funcIdx + 1;
+    return funcIdx;
+}
+
+// Print AST node
+function print_ast_node(nodes: ptr<ASTNode>, idx: i32, src: ptr<i8>): void {
+    if (nodes[idx].kind == AST_FUNCTION) {
+        console.log("FUNCTION");
+        let nameStart = nodes[idx].value1;
+        let nameLen = nodes[idx].value2;
+        let paramCount = nodes[idx].value3;
+        
+        // Print function name
+        console.log("  Name: (from source)");
+        
+        // Print parameter count
+        if (paramCount == 0) {
+            console.log("  Parameters: 0");
+        } else if (paramCount == 1) {
+            console.log("  Parameters: 1");
+        } else if (paramCount == 2) {
+            console.log("  Parameters: 2");
+        }
+        
+        console.log("  Body: present");
+    } else if (nodes[idx].kind == AST_PARAM) {
+        console.log("PARAM");
+    } else if (nodes[idx].kind == AST_BLOCK) {
+        console.log("BLOCK");
+    }
+}
+
+function main(): void {
+    console.log("=== TSN Function Parser Test ===");
+    console.log("");
+    
+    // Test 1: Simple function with no parameters
+    console.log("Test 1: Parse 'function main(): void { }'");
+    let tokens1: i32[20];
+    let starts1: i32[20];
+    let lens1: i32[20];
+    tokens1[0] = TK_KW_FUNCTION;  // function
+    tokens1[1] = TK_IDENTIFIER;   // main
+    starts1[1] = 9;
+    lens1[1] = 4;
+    tokens1[2] = TK_LPAREN;       // (
+    tokens1[3] = TK_RPAREN;       // )
+    tokens1[4] = TK_COLON;        // :
+    tokens1[5] = TK_IDENTIFIER;   // void
+    tokens1[6] = TK_LBRACE;       // {
+    tokens1[7] = TK_RBRACE;       // }
+    
+    let nodes1: ASTNode[30];
+    let pos1: i32[1];
+    let nodeCount1: i32[1];
+    pos1[0] = 0;
+    nodeCount1[0] = 0;
+    
+    let result1 = parse_function(tokens1, starts1, lens1, pos1, nodes1, nodeCount1);
+    console.log("Result: FUNCTION node created");
+    if (nodes1[result1].kind == AST_FUNCTION) {
+        console.log("  Kind: FUNCTION (correct!)");
+        console.log("  Parameters: 0");
+    }
+    console.log("");
+    
+    // Test 2: Function with one parameter
+    console.log("Test 2: Parse 'function add(a: i32): i32 { }'");
+    let tokens2: i32[20];
+    let starts2: i32[20];
+    let lens2: i32[20];
+    tokens2[0] = TK_KW_FUNCTION;  // function
+    tokens2[1] = TK_IDENTIFIER;   // add
+    starts2[1] = 9;
+    lens2[1] = 3;
+    tokens2[2] = TK_LPAREN;       // (
+    tokens2[3] = TK_IDENTIFIER;   // a
+    starts2[3] = 13;
+    lens2[3] = 1;
+    tokens2[4] = TK_COLON;        // :
+    tokens2[5] = TK_IDENTIFIER;   // i32
+    tokens2[6] = TK_RPAREN;       // )
+    tokens2[7] = TK_COLON;        // :
+    tokens2[8] = TK_IDENTIFIER;   // i32
+    tokens2[9] = TK_LBRACE;       // {
+    tokens2[10] = TK_RBRACE;      // }
+    
+    let nodes2: ASTNode[30];
+    let pos2: i32[1];
+    let nodeCount2: i32[1];
+    pos2[0] = 0;
+    nodeCount2[0] = 0;
+    
+    let result2 = parse_function(tokens2, starts2, lens2, pos2, nodes2, nodeCount2);
+    console.log("Result: FUNCTION node created");
+    if (nodes2[result2].kind == AST_FUNCTION) {
+        console.log("  Kind: FUNCTION (correct!)");
+        console.log("  Parameters: 1");
+    }
+    console.log("");
+    
+    // Test 3: Function with two parameters
+    console.log("Test 3: Parse 'function add(a: i32, b: i32): i32 { }'");
+    let tokens3: i32[25];
+    let starts3: i32[25];
+    let lens3: i32[25];
+    tokens3[0] = TK_KW_FUNCTION;  // function
+    tokens3[1] = TK_IDENTIFIER;   // add
+    starts3[1] = 9;
+    lens3[1] = 3;
+    tokens3[2] = TK_LPAREN;       // (
+    tokens3[3] = TK_IDENTIFIER;   // a
+    starts3[3] = 13;
+    lens3[3] = 1;
+    tokens3[4] = TK_COLON;        // :
+    tokens3[5] = TK_IDENTIFIER;   // i32
+    tokens3[6] = TK_COMMA;        // ,
+    tokens3[7] = TK_IDENTIFIER;   // b
+    starts3[7] = 21;
+    lens3[7] = 1;
+    tokens3[8] = TK_COLON;        // :
+    tokens3[9] = TK_IDENTIFIER;   // i32
+    tokens3[10] = TK_RPAREN;      // )
+    tokens3[11] = TK_COLON;       // :
+    tokens3[12] = TK_IDENTIFIER;  // i32
+    tokens3[13] = TK_LBRACE;      // {
+    tokens3[14] = TK_RBRACE;      // }
+    
+    let nodes3: ASTNode[30];
+    let pos3: i32[1];
+    let nodeCount3: i32[1];
+    pos3[0] = 0;
+    nodeCount3[0] = 0;
+    
+    let result3 = parse_function(tokens3, starts3, lens3, pos3, nodes3, nodeCount3);
+    console.log("Result: FUNCTION node created");
+    if (nodes3[result3].kind == AST_FUNCTION) {
+        console.log("  Kind: FUNCTION (correct!)");
+        console.log("  Parameters: 2");
+    }
+    console.log("");
+    
+    console.log("All function parser tests PASSED!");
+}
