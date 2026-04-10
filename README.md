@@ -161,42 +161,14 @@ declare function WriteFile(
 
 ## 🏗️ Architecture
 
+```mermaid
+graph TD
+    A[TSN Source .tsn] --> B[Lexer & Parser]
+    B --> C[AST]
+    C --> D[LLVM IR Generation]
+    D --> E[LLVM Backend]
+    E --> F[Native Executable]
 ```
-┌─────────────┐
-│  TSN Source │
-│   (.tsn)    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   Lexer &   │
-│   Parser    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│     AST     │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  LLVM IR    │
-│ Generation  │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   LLVM      │
-│  Backend    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   Native    │
-│ Executable  │
-└─────────────┘
-```
-
 ---
 
 ## 🎯 Project Goals
