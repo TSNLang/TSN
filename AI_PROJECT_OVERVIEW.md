@@ -83,7 +83,7 @@ TSN/
 
 ### 2. Self-Hosting Timeline
 
-**Current: Week 2 of 3**
+**Current: Week 3 of 3**
 
 ```
 Week 1: ✅ Lexer
@@ -91,17 +91,16 @@ Week 1: ✅ Lexer
   - Keyword recognition
   - String/number parsing
 
-Week 2: 🚧 Parser (60% done)
+Week 2: ✅ Parser (COMPLETE!)
   - ✅ Expression parser
-  - ⏳ Statement parser (next)
-  - ⏳ Function parser
-  - ⏳ Integration
+  - ✅ Statement parser
+  - ✅ Function parser
+  - ✅ Integration (mini_compiler_v5)
 
-Week 3: ⏳ Bootstrap
-  - LLVM IR generation
-  - File I/O
-  - Self-compilation test
-  - C++ compiler retirement 🎉
+Week 3: 🚧 Bootstrap (In Progress)
+  - 🚧 File I/O (next)
+  - ⏳ Self-compilation test
+  - ⏳ C++ compiler retirement 🎉
 ```
 
 ### 3. Development Philosophy
@@ -369,19 +368,17 @@ function main(): void {
 - [x] Operator tokenization
 - [x] Comment skipping
 
-**Week 2: Parser** 🚧 60%
+**Week 2: Parser** ✅ 100%
 - [x] Expression parser (primary, binary)
-- [ ] Statement parser (let, return, if, while)
-- [ ] Function parser (signatures, bodies)
-- [ ] Type parser (i32, ptr<T>, arrays)
-- [ ] Integration test
+- [x] Statement parser (let, return, if, while)
+- [x] Function parser (signatures, bodies)
+- [x] Type parser (i32, ptr<T>, arrays)
+- [x] Integration test (mini_compiler_v5)
 
-**Week 3: Codegen + Bootstrap** ⏳ 0%
-- [ ] LLVM IR generation
-- [ ] Function definitions
-- [ ] Variable declarations
-- [ ] Control flow (if, while, for)
+**Week 3: Codegen + Bootstrap** 🚧 20%
+- [x] LLVM IR generation (basic - from v2)
 - [ ] File I/O (read source, write IR)
+- [ ] Expanded codegen (all statements)
 - [ ] Self-compilation test
 - [ ] Bootstrap verification
 
@@ -448,40 +445,43 @@ Self-hosting progress: ~65%
 
 ---
 
-## 🎯 Current Focus (Week 2, Day 2)
+## 🎯 Current Focus (Week 3, Day 1)
 
-**IMMEDIATE PRIORITY: Statement Parser**
+**IMMEDIATE PRIORITY: File I/O for Compiler**
 
-File: `tsn/stmt_parser.tsn`
+File: `tsn/mini_compiler_v6.tsn`
 
-Parse these statements:
+Add file I/O to mini_compiler_v5:
 ```tsn
-let x: i32 = 42;          // Variable declaration
-x = 100;                  // Assignment
-return x + y;             // Return statement
-if (x > 0) { ... }        // If statement
-while (x < 10) { ... }    // While loop
+// Read source from file
+let source = readFileSync("input.tsn");
+
+// Compile
+let ir = compile(source);
+
+// Write IR to file
+writeFileSync("output.ll", ir);
 ```
 
-**Estimated time:** 2-3 days
-**Blockers:** None
-**Dependencies:** Expression parser (complete)
+**Estimated time:** 1-2 days
+**Blockers:** FFI complexity (use simplified approach)
+**Dependencies:** mini_compiler_v5 (complete)
 
 ---
 
 ## 🏆 Success Metrics
 
 ### Technical Metrics
-- Lines of TSN code: ~2000 (target: 3000-4000)
+- Lines of TSN code: ~3500 (target: 4000-5000)
 - Test coverage: All components have test functions
 - Compilation time: < 5 seconds for self-compilation
 - Binary size: < 1MB for compiler executable
 
 ### Project Health
-- Self-hosting: ~60% complete (target: 100% by Week 3)
+- Self-hosting: ~80% complete (target: 100% by Week 3 end)
 - C++ dependency: Decreasing (goal: 0%)
 - Community readiness: Improving (goal: TSN-only contributions)
-- Documentation: Good (this file + others)
+- Documentation: Excellent (comprehensive AI guides)
 
 ---
 
