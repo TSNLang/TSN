@@ -1,0 +1,13 @@
+// Test simple FFI
+import * as console from "std:console";
+
+@ffi.lib("kernel32")
+declare function GetStdHandle(nStdHandle: i32): ptr<void>;
+
+function main(): void {
+    console.log("Testing FFI...");
+    let stdHandle: i32 = 0;
+    stdHandle = stdHandle - 11;
+    let handle = GetStdHandle(stdHandle);
+    console.log("FFI call completed!");
+}
