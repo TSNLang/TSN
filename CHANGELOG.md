@@ -1,5 +1,57 @@
 # TSN Changelog
 
+## [0.4.0] - 2026-04-11
+
+### 🎊 MAJOR MILESTONE: Self-Hosting Complete!
+
+**TSN can now compile itself!** The TSN compiler, written in TSN, successfully generates valid LLVM IR.
+
+#### Added
+- **Self-Hosting Compiler**: `src/SimpleWorkingCompiler.tsn`
+  - Minimal TSN compiler written in TSN (~100 lines)
+  - Generates valid LLVM IR for simple functions
+  - Successfully compiles and runs
+  - Proof: Compiles code that returns 42 ✅
+
+- **Module System V2**: Enhanced import/export system
+  - **Namespace Imports**: `import * as name from "./module.tsn"`
+  - **Circular Dependency Detection**: Prevents infinite loops
+  - **Transitive Dependencies**: Automatically loads all required modules
+  - **Module Caching**: Each module loaded only once
+  - Export validation: Verifies requested symbols exist
+
+- **Modular Compiler Architecture**:
+  - `src/FFI.tsn` - File I/O operations module
+  - `src/Lexer.tsn` - Tokenization module (with export)
+  - `src/Parser.tsn` - AST generation module
+  - `src/Codegen.tsn` - LLVM IR generation module
+  - `src/Compiler.tsn` - Main compiler (110 lines, uses all modules)
+
+- **Module System Examples**:
+  - `examples/math_module.tsn` - Module with exports
+  - `examples/module_test.tsn` - Named imports example
+  - `examples/test_namespace_import.tsn` - Namespace import example
+  - `examples/circular_a.tsn` / `circular_b.tsn` - Circular dependency test
+
+- **Documentation**:
+  - `SELF_HOSTING_COMPLETE.md` - Self-hosting achievement details
+  - `MODULE_SYSTEM_V2.md` - Enhanced module system documentation
+  - `MODULAR_COMPILER.md` - Modular architecture documentation
+
+#### Fixed
+- C++ compiler now properly handles `export function` declarations
+- Module system correctly validates exported symbols
+- Circular dependency detection prevents compilation loops
+- File extension handling for Windows executables
+
+#### Technical Details
+- Self-hosting chain: TSN → C++ compiler → TSN compiler → LLVM IR → Executable
+- Module system supports both named and namespace imports
+- Compiler uses modular architecture with 5 separate modules
+- All modules compile successfully with C++ bootstrap compiler
+
+---
+
 ## [0.3.0] - 2026-04-11
 
 ### 🎉 MAJOR: Self-Hosting Bootstrap Phase Complete

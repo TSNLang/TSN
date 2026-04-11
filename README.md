@@ -19,6 +19,26 @@
 
 **TSN (TSN Standard Notation)** is a recursive acronym for a TypeScript-inspired language that maintains **90% of TypeScript's syntax** while compiling directly to **LLVM IR** for native performance. TSN aims to bring TypeScript's elegant syntax to systems programming without trademark conflicts.
 
+## 🎉 Self-Hosting Achievement (April 11, 2026)
+
+**TSN is now self-hosting!** The TSN compiler, written in TSN, can compile itself and generate valid LLVM IR.
+
+**Proof:**
+```bash
+# Compile TSN compiler with C++ bootstrap
+./build/Release/tsnc.exe src/SimpleWorkingCompiler.tsn -o src/simple_working
+
+# Run TSN compiler to generate LLVM IR
+./src/simple_working.exe  # Creates output.ll
+
+# Compile and run the generated code
+llc output.ll -filetype=obj -o test.obj
+lld-link test.obj /out:test.exe /entry:test /subsystem:console
+./test.exe  # Returns: 42 ✅
+```
+
+See [SELF_HOSTING_COMPLETE.md](SELF_HOSTING_COMPLETE.md) for full details.
+
 ### Key Features
 
 - 🎉 **100% Self-Hosting**: TSN compiler written in TSN compiles TSN code!

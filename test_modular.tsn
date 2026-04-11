@@ -1,6 +1,0 @@
-import { add } from "./examples/math_module.tsn";
-
-function main(): i32 {
-    let result = add(10, 20);
-    return result;
-}

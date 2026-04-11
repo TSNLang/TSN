@@ -38,15 +38,15 @@ declare function WriteFile(
 declare function CloseHandle(hObject: ptr<void>): bool;
 
 // ============================================================================
-// CONSTANTS
+// CONSTANTS (not exported - used internally)
 // ============================================================================
 
-export const GENERIC_READ: u32 = 2147483648;
-export const GENERIC_WRITE: u32 = 1073741824;
-export const FILE_SHARE_READ: u32 = 1;
-export const OPEN_EXISTING: u32 = 3;
-export const CREATE_ALWAYS: u32 = 2;
-export const FILE_ATTRIBUTE_NORMAL: u32 = 128;
+const GENERIC_READ: u32 = 2147483648;
+const GENERIC_WRITE: u32 = 1073741824;
+const FILE_SHARE_READ: u32 = 1;
+const OPEN_EXISTING: u32 = 3;
+const CREATE_ALWAYS: u32 = 2;
+const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 
 // ============================================================================
 // HELPER FUNCTIONS

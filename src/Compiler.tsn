@@ -23,10 +23,10 @@ declare function WriteConsoleA(
     lpReserved: ptr<void>
 ): bool;
 
-const STD_OUTPUT_HANDLE: i32 = -11;
-
 function console_log(message: ptr<i8>): void {
-    let hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    let stdHandle: i32 = 0;
+    stdHandle = stdHandle - 11;
+    let hConsole = GetStdHandle(stdHandle);
     let len = string_length(message);
     let written: u32;
     let writtenPtr = addressof(written);
