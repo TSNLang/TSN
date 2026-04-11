@@ -9,7 +9,8 @@
 const AST_NUMBER: i32 = 1;
 const AST_IDENTIFIER: i32 = 2;
 const AST_BINARY_OP: i32 = 3;
-const AST_CALL: i32 = 4;
+const AST_UNARY_OP: i32 = 4;
+const AST_CALL: i32 = 5;
 const AST_VAR_DECL: i32 = 10;
 const AST_ASSIGNMENT: i32 = 11;
 const AST_RETURN_STMT: i32 = 12;
@@ -38,6 +39,8 @@ const TK_PLUS: i32 = 19;
 const TK_MINUS: i32 = 20;
 const TK_STAR: i32 = 21;
 const TK_SLASH: i32 = 22;
+const TK_EXCLAIM: i32 = 23;
+const TK_AMPERSAND: i32 = 24;
 const TK_KW_FUNCTION: i32 = 30;
 const TK_KW_LET: i32 = 32;
 const TK_KW_RETURN: i32 = 34;
@@ -78,6 +81,40 @@ function expect(tokens: ptr<i32>, pos: ptr<i32>, expected: i32): bool {
 // ============================================================================
 // EXPRESSION PARSER
 // ============================================================================
+
+function parse_unary_expr(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>
+): i32 {
+    let currentPos = pos[0];
+    let op = tokens[currentPos];
+    
+    // Check if it's a unary operator
+    if (op == TK_MINUS || op == TK_EXCLAIM || op == TK_AMPERSAND) {
+        // Consume operator
+        pos[0] = currentPos + 1;
+        
+        // Parse operand (recursive - can be another unary or primary)
+        let operand = parse_unary_expr(tokens, starts, lens, pos, nodes, nodeCount);
+        
+        // Create unary operation node
+        let unaryIdx = nodeCount[0];
+        nodes[unaryIdx].kind = AST_UNARY_OP;
+        nodes[unaryIdx].value1 = operand;
+        nodes[unaryIdx].value2 = op;
+        nodes[unaryIdx].value3 = 0;
+        nodeCount[0] = unaryIdx + 1;
+        
+        return unaryIdx;
+    }
+    
+    // Not a unary operator, parse primary expression
+    return parse_primary_expr(tokens, starts, lens, pos, nodes, nodeCount);
+}
 
 function parse_primary_expr(
     tokens: ptr<i32>,
@@ -123,8 +160,8 @@ function parse_expr(
     nodes: ptr<ASTNode>,
     nodeCount: ptr<i32>
 ): i32 {
-    // Parse left operand (primary expression)
-    let left = parse_primary_expr(tokens, starts, lens, pos, nodes, nodeCount);
+    // Parse left operand (can be unary or primary expression)
+    let left = parse_unary_expr(tokens, starts, lens, pos, nodes, nodeCount);
     
     // Check for binary operator
     let currentPos = pos[0];
@@ -137,8 +174,8 @@ function parse_expr(
         // Consume operator
         pos[0] = currentPos + 1;
         
-        // Parse right operand
-        let right = parse_primary_expr(tokens, starts, lens, pos, nodes, nodeCount);
+        // Parse right operand (can be unary or primary expression)
+        let right = parse_unary_expr(tokens, starts, lens, pos, nodes, nodeCount);
         
         // Create binary operation node
         let binOpIdx = nodeCount[0];

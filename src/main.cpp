@@ -62,6 +62,7 @@ enum class TokenKind {
     Slash,
     Plus,
     Minus,
+    Exclaim,
     Ampersand,
     AndAnd,
     Pipe,
@@ -300,8 +301,7 @@ public:
                 advance();
                 return Token{TokenKind::NotEqual, "!=", start};
             }
-            Diag::error(start, "expected '=' after '!'");
-            return next();
+            return Token{TokenKind::Exclaim, "!", start};
         case '=':
             advance();
             if (i_ < src_.size() && src_[i_] == '=') {
@@ -473,6 +473,15 @@ struct Identifier final : Expr {
 };
 
 struct AddressOfExpr final : Expr {
+    std::unique_ptr<Expr> operand;
+};
+
+struct UnaryExpr final : Expr {
+    enum class Op {
+        Neg,   // -x
+        Not    // !x
+    };
+    Op op;
     std::unique_ptr<Expr> operand;
 };
 
@@ -1438,7 +1447,7 @@ private:
     }
 
     std::optional<std::unique_ptr<Expr>> parseBinaryExpr(int minPrecedence) {
-        auto lhs = parsePrimaryExpr();
+        auto lhs = parseUnaryExpr();
         if (!lhs) return std::nullopt;
 
         while (true) {
@@ -1459,6 +1468,30 @@ private:
             lhs = std::move(bin);
         }
         return lhs;
+    }
+
+    std::optional<std::unique_ptr<Expr>> parseUnaryExpr() {
+        // Check for unary operators
+        if (tok_.kind == TokenKind::Minus) {
+            advance();
+            auto operand = parseUnaryExpr();  // Recursive for multiple unary ops
+            if (!operand) return std::nullopt;
+            auto unary = std::make_unique<UnaryExpr>();
+            unary->op = UnaryExpr::Op::Neg;
+            unary->operand = std::move(*operand);
+            return std::optional<std::unique_ptr<Expr>>(std::move(unary));
+        }
+        if (tok_.kind == TokenKind::Exclaim) {
+            advance();
+            auto operand = parseUnaryExpr();  // Recursive for multiple unary ops
+            if (!operand) return std::nullopt;
+            auto unary = std::make_unique<UnaryExpr>();
+            unary->op = UnaryExpr::Op::Not;
+            unary->operand = std::move(*operand);
+            return std::optional<std::unique_ptr<Expr>>(std::move(unary));
+        }
+        // Not a unary operator, parse primary expression
+        return parsePrimaryExpr();
     }
 
     int getPrecedence(TokenKind kind) {
@@ -1940,6 +1973,33 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
             }
         }
         return nullptr;
+    }
+
+    if (const auto *unary = dynamic_cast<const UnaryExpr *>(e)) {
+        llvm::Value *operand = emitExpr(b, unary->operand.get(), m, prog);
+        if (!operand) return nullptr;
+
+        switch (unary->op) {
+            case UnaryExpr::Op::Neg: {
+                // Negation: 0 - operand
+                if (operand->getType()->isFloatingPointTy()) {
+                    return b.CreateFNeg(operand, "fnegtmp");
+                } else {
+                    llvm::Value *zero = llvm::ConstantInt::get(operand->getType(), 0);
+                    return b.CreateSub(zero, operand, "negtmp");
+                }
+            }
+            case UnaryExpr::Op::Not: {
+                // Logical NOT
+                if (!operand->getType()->isIntegerTy(1)) {
+                    // Convert to boolean first
+                    operand = b.CreateICmpNE(operand, llvm::Constant::getNullValue(operand->getType()), "tobool");
+                }
+                return b.CreateXor(operand, llvm::ConstantInt::get(operand->getType(), 1), "nottmp");
+            }
+            default:
+                return nullptr;
+        }
     }
 
     if (const auto *bin = dynamic_cast<const BinaryExpr *>(e)) {

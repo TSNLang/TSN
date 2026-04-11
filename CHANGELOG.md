@@ -1,5 +1,59 @@
 # TSN Changelog
 
+## [0.6.0] - 2026-04-11
+
+### 🚀 Unary Expressions Complete - Phase 1 Done!
+
+**All expression types now supported! Phase 1 of self-hosting plan complete!**
+
+#### Added
+- **Unary Expression Support**:
+  - Negation operator: `-x`
+  - Logical NOT operator: `!x`
+  - Recursive unary operators: `--x`, `!!!x`
+  - Works with complex expressions: `-(3 + 2)`, `-5 * 2`
+
+- **C++ Bootstrap Compiler Enhancements**:
+  - Added `UnaryExpr` AST node with `Op` enum
+  - Added `Exclaim` token kind for `!` operator
+  - Implemented `parseUnaryExpr()` with recursive parsing
+  - Codegen: `CreateSub(0, operand)` for negation
+  - Codegen: `CreateXor(operand, 1)` for logical NOT
+  - Lexer now accepts standalone `!` (not just `!=`)
+
+- **TSN Self-Hosting Compiler Enhancements**:
+  - Parser: Added `AST_UNARY_OP` node type
+  - Parser: Implemented `parse_unary_expr()` function
+  - Codegen: LLVM `sub i32 0, operand` for negation
+  - Codegen: LLVM `xor i1 operand, true` for logical NOT
+  - Token constants: `TK_EXCLAIM`, `TK_AMPERSAND`
+
+- **Test Files**:
+  - `examples/unary_expr_test.tsn` - Comprehensive unary operator tests
+
+- **Documentation**:
+  - `UNARY_EXPR_COMPLETE.md` - Implementation details and test results
+  - Updated `SELF_HOSTING_PLAN.md` - Phase 1.2 marked complete
+
+#### Test Results
+- ✅ `-5` → Returns -5
+- ✅ `--10` → Returns 10 (double negation)
+- ✅ `-(3 + 2)` → Returns -5
+- ✅ `-5 * 2` → Returns -10
+- ✅ `!0` → Returns true
+- ✅ `!1` → Returns false
+
+#### Technical Notes
+- Unary operators have higher precedence than binary operators
+- Multiple unary operators are right-associative
+- Recursive parsing allows unlimited unary operator chaining
+- Constant folding optimization in C++ compiler
+
+#### Progress
+- **Self-Hosting Progress: 50% → 55%**
+- **Phase 1 (Expression Support): COMPLETE! ✅**
+- Next Phase: Variable declarations and control flow
+
 ## [0.5.0] - 2026-04-11
 
 ### 🚀 Binary Expressions Complete!

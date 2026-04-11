@@ -2,7 +2,7 @@
 
 **Goal:** Expand Parser and Codegen to compile the full TSN compiler
 
-**Current Status:** 50% - Binary expressions complete! Functions, returns, and all arithmetic/comparison operators working
+**Current Status:** 55% - Binary and unary expressions complete! All operators working perfectly
 
 ## Phase 1: Expression Support (Priority: HIGH)
 
@@ -24,9 +24,20 @@
 - Generates LLVM `icmp eq/ne/slt/sgt` for comparisons
 - Temporary variable generation working
 
-### 1.2 Unary Expressions
-- [ ] Negation: `-x`
-- [ ] Logical NOT: `!x`
+### 1.2 Unary Expressions ✅ COMPLETE
+- [x] Negation: `-x`
+- [x] Logical NOT: `!x`
+- [x] Recursive unary: `--x`, `!!!x`
+- [ ] Addressof: `&x` (already exists, not tested)
+
+**Parser Changes:** ✅ DONE
+- Implemented `parse_unary_expr()` with recursive support
+- Handles multiple unary operators correctly
+
+**Codegen Changes:** ✅ DONE
+- Generates LLVM `sub i32 0, operand` for negation
+- Generates LLVM `xor i1 operand, true` for logical NOT
+- Temporary variable generation working
 
 ### 1.3 Array Access
 - [ ] Index expression: `arr[i]`

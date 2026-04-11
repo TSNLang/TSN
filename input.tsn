@@ -1,3 +1,7 @@
-function test(): i32 {
-    return 2 + 3;
+function neg_expr(): i32 {
+    return -(3 + 2);
+}
+
+function complex(): i32 {
+    return -5 * 2;
 }

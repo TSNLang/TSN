@@ -9,7 +9,8 @@
 const AST_NUMBER: i32 = 1;
 const AST_IDENTIFIER: i32 = 2;
 const AST_BINARY_OP: i32 = 3;
-const AST_CALL: i32 = 4;
+const AST_UNARY_OP: i32 = 4;
+const AST_CALL: i32 = 5;
 const AST_VAR_DECL: i32 = 10;
 const AST_ASSIGNMENT: i32 = 11;
 const AST_RETURN_STMT: i32 = 12;
@@ -24,6 +25,8 @@ const TK_PLUS: i32 = 19;
 const TK_MINUS: i32 = 20;
 const TK_STAR: i32 = 21;
 const TK_SLASH: i32 = 22;
+const TK_EXCLAIM: i32 = 23;
+const TK_AMPERSAND: i32 = 24;
 const TK_EQEQ: i32 = 17;
 const TK_NE: i32 = 18;
 const TK_LT: i32 = 14;
@@ -102,6 +105,41 @@ function codegen_expr(
         let idStart = nodes[nodeIdx].value1;
         let idLen = nodes[nodeIdx].value2;
         buffer_append_substring(output, pos, src, idStart, idLen);
+    }
+    else if (nodes[nodeIdx].kind == AST_UNARY_OP) {
+        // Generate temp variable for result
+        buffer_append(output, pos, "%tmp");
+        
+        // Convert temp counter to string
+        let tempNum: i8[10];
+        let counter = tempCounter[0];
+        tempNum[0] = 48 + counter;  // ASCII '0' + counter
+        tempNum[1] = 0;
+        tempCounter[0] = counter + 1;
+        buffer_append(output, pos, tempNum);
+        
+        buffer_append(output, pos, " = ");
+        
+        // Get operator and operand
+        let operandIdx = nodes[nodeIdx].value1;
+        let op = nodes[nodeIdx].value2;
+        
+        // Generate operation
+        if (op == TK_MINUS) {
+            buffer_append(output, pos, "sub i32 0, ");
+        } else if (op == TK_EXCLAIM) {
+            buffer_append(output, pos, "xor i1 ");
+        }
+        
+        // Generate operand
+        codegen_expr(nodes, operandIdx, src, output, pos, tempCounter);
+        
+        // For logical NOT, add ", true" to xor with true
+        if (op == TK_EXCLAIM) {
+            buffer_append(output, pos, ", true");
+        }
+        
+        buffer_append(output, pos, "\n");
     }
     else if (nodes[nodeIdx].kind == AST_BINARY_OP) {
         // Generate temp variable for result
