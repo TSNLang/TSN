@@ -104,7 +104,21 @@ function codegen_expr(
     else if (nodes[nodeIdx].kind == AST_IDENTIFIER) {
         let idStart = nodes[nodeIdx].value1;
         let idLen = nodes[nodeIdx].value2;
+        
+        // Generate load from variable
+        buffer_append(output, pos, "%tmp");
+        
+        // Convert temp counter to string
+        let tempNum: i8[10];
+        let counter = tempCounter[0];
+        tempNum[0] = 48 + counter;  // ASCII '0' + counter
+        tempNum[1] = 0;
+        tempCounter[0] = counter + 1;
+        buffer_append(output, pos, tempNum);
+        
+        buffer_append(output, pos, " = load i32, ptr %");
         buffer_append_substring(output, pos, src, idStart, idLen);
+        buffer_append(output, pos, ", align 4\n");
     }
     else if (nodes[nodeIdx].kind == AST_UNARY_OP) {
         // Generate temp variable for result
@@ -208,6 +222,38 @@ function codegen_statement(
         codegen_expr(nodes, exprIdx, src, output, pos, tempCounter);
         buffer_append(output, pos, "\n");
     }
+    else if (nodes[nodeIdx].kind == AST_VAR_DECL) {
+        // Variable declaration: let x: i32 = 42;
+        let nameStart = nodes[nodeIdx].value1;
+        let nameLen = nodes[nodeIdx].value2;
+        let initExpr = nodes[nodeIdx].value3;
+        
+        // Generate alloca for variable
+        buffer_append(output, pos, "  %");
+        buffer_append_substring(output, pos, src, nameStart, nameLen);
+        buffer_append(output, pos, " = alloca i32, align 4\n");
+        
+        // If there's initialization, generate store
+        if (initExpr > 0) {
+            buffer_append(output, pos, "  store i32 ");
+            codegen_expr(nodes, initExpr, src, output, pos, tempCounter);
+            buffer_append(output, pos, ", ptr %");
+            buffer_append_substring(output, pos, src, nameStart, nameLen);
+            buffer_append(output, pos, ", align 4\n");
+        }
+    }
+    else if (nodes[nodeIdx].kind == AST_ASSIGNMENT) {
+        // Assignment: x = 42;
+        let nameStart = nodes[nodeIdx].value1;
+        let nameLen = nodes[nodeIdx].value2;
+        let exprIdx = nodes[nodeIdx].value3;
+        
+        buffer_append(output, pos, "  store i32 ");
+        codegen_expr(nodes, exprIdx, src, output, pos, tempCounter);
+        buffer_append(output, pos, ", ptr %");
+        buffer_append_substring(output, pos, src, nameStart, nameLen);
+        buffer_append(output, pos, ", align 4\n");
+    }
 }
 
 // ============================================================================
@@ -231,9 +277,16 @@ function codegen_function(
     buffer_append(output, pos, "() {\n");
     buffer_append(output, pos, "entry:\n");
     
-    if (bodyStart < 100) {
-        if (nodes[bodyStart].kind == AST_RETURN_STMT) {
-            codegen_statement(nodes, bodyStart, src, output, pos, tempCounter);
+    // Process all statements in function body
+    let i = bodyStart;
+    while (i < 100) {
+        if (nodes[i].kind == AST_RETURN_STMT || 
+            nodes[i].kind == AST_VAR_DECL || 
+            nodes[i].kind == AST_ASSIGNMENT) {
+            codegen_statement(nodes, i, src, output, pos, tempCounter);
+            i = i + 1;
+        } else {
+            break;
         }
     }
     

@@ -1,7 +1,5 @@
-function neg_expr(): i32 {
-    return -(3 + 2);
-}
-
-function complex(): i32 {
-    return -5 * 2;
+function test(): i32 {
+    let x: i32 = 5;
+    let y: i32 = 10;
+    return x + y;
 }
