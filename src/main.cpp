@@ -78,7 +78,10 @@ enum class TokenKind {
     KwWhile,
     KwFor,
     KwInterface,
-    KwClass
+    KwClass,
+    KwImport,
+    KwExport,
+    KwFrom
 };
 
 struct Token {
@@ -153,6 +156,15 @@ public:
             }
             if (text == "class") {
                 return Token{TokenKind::KwClass, std::move(text), start};
+            }
+            if (text == "import") {
+                return Token{TokenKind::KwImport, std::move(text), start};
+            }
+            if (text == "export") {
+                return Token{TokenKind::KwExport, std::move(text), start};
+            }
+            if (text == "from") {
+                return Token{TokenKind::KwFrom, std::move(text), start};
             }
             return Token{TokenKind::Identifier, std::move(text), start};
         }
@@ -580,13 +592,20 @@ struct StructDef {
     std::vector<StructField> fields;
 };
 
+struct ImportDecl {
+    std::vector<std::string> names;  // Imported names: { foo, bar }
+    std::string modulePath;          // Module path: "./module.tsn"
+};
+
 struct Program {
     std::vector<std::unique_ptr<Stmt>> stmts;
     std::vector<ExternFunctionDecl> externFns;
     std::vector<std::unique_ptr<struct FunctionDef>> functions;
     std::vector<StructDef> structs;
+    std::vector<ImportDecl> imports;
     std::map<std::string, llvm::AllocaInst*> symbolTable;
     std::map<std::string, llvm::StructType*> structTypes;
+    std::map<std::string, bool> exportedFunctions;  // Track exported functions
 };
 
 class Parser {
@@ -616,11 +635,29 @@ public:
                 }
                 continue;
             }
-            if (tok_.kind == TokenKind::Identifier && tok_.text == "import") {
-                if (!skipImport()) {
+            if (tok_.kind == TokenKind::KwImport) {
+                if (!parseImport(prog)) {
                     return std::nullopt;
                 }
                 continue;
+            }
+            if (tok_.kind == TokenKind::KwExport) {
+                advance(); // consume 'export'
+                // After export, we expect function, interface, or const
+                if (tok_.kind == TokenKind::KwFunction) {
+                    size_t fnCountBefore = prog.functions.size();
+                    if (!parseFunction(prog)) {
+                        return std::nullopt;
+                    }
+                    // Mark the last added function as exported
+                    if (prog.functions.size() > fnCountBefore) {
+                        prog.exportedFunctions[prog.functions.back()->name] = true;
+                    }
+                    continue;
+                }
+                // For now, skip other export types
+                Diag::error(tok_.pos, "only 'export function' is supported");
+                return std::nullopt;
             }
             if (tok_.kind == TokenKind::KwType) {
                 if (!parseTypeAlias()) {
@@ -933,6 +970,53 @@ private:
             out = std::move(arrayType);
         }
 
+        return true;
+    }
+
+    bool parseImport(Program &prog) {
+        advance(); // consume 'import'
+        
+        ImportDecl import;
+        
+        // Parse: import { name1, name2 } from "path"
+        if (!consume(TokenKind::LBrace, "expected '{'")) {
+            return false;
+        }
+        
+        // Parse imported names
+        while (tok_.kind != TokenKind::RBrace && tok_.kind != TokenKind::End) {
+            if (!expect(TokenKind::Identifier, "expected import name")) {
+                return false;
+            }
+            import.names.push_back(tok_.text);
+            advance();
+            
+            if (tok_.kind == TokenKind::Comma) {
+                advance();
+            }
+        }
+        
+        if (!consume(TokenKind::RBrace, "expected '}'")) {
+            return false;
+        }
+        
+        // Parse 'from'
+        if (!consume(TokenKind::KwFrom, "expected 'from'")) {
+            return false;
+        }
+        
+        // Parse module path
+        if (!expect(TokenKind::String, "expected module path")) {
+            return false;
+        }
+        import.modulePath = tok_.text;
+        advance();
+        
+        if (!consume(TokenKind::Semicolon, "expected ';'")) {
+            return false;
+        }
+        
+        prog.imports.push_back(std::move(import));
         return true;
     }
 
@@ -2696,6 +2780,315 @@ static std::optional<std::string> readWholeFile(const std::string &path) {
     return ss.str();
 }
 
+// Resolve module path relative to current file
+static std::string resolveModulePath(const std::string &currentPath, const std::string &modulePath) {
+    // For now, simple resolution: if starts with ./ or ../, resolve relative to current file
+    if (modulePath.size() >= 2 && modulePath[0] == '.' && modulePath[1] == '/') {
+        // Get directory of current file
+        size_t lastSlash = currentPath.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            std::string dir = currentPath.substr(0, lastSlash + 1);
+            return dir + modulePath.substr(2);
+        }
+        return modulePath.substr(2);
+    }
+    // Absolute or simple path
+    return modulePath;
+}
+
+// Load and parse a module
+static std::optional<std::unique_ptr<Program>> loadModule(const std::string &path, std::map<std::string, std::unique_ptr<Program>> &loadedModules) {
+    // Check if already loaded
+    if (loadedModules.find(path) != loadedModules.end()) {
+        return std::nullopt; // Already loaded, return null to indicate success but no new module
+    }
+    
+    auto srcOpt = readWholeFile(path);
+    if (!srcOpt.has_value()) {
+        std::cerr << "error: failed to read module file: " << path << "\n";
+        return std::nullopt;
+    }
+    
+    Parser p(*srcOpt);
+    auto progOpt = p.parse();
+    if (!progOpt.has_value()) {
+        std::cerr << "error: failed to parse module: " << path << "\n";
+        return std::nullopt;
+    }
+    
+    auto progPtr = std::make_unique<Program>(std::move(*progOpt));
+    loadedModules[path] = std::move(progPtr);
+    return std::nullopt; // Success
+}
+
+// Merge imported functions into main program
+static bool mergeImports(Program &mainProg, const std::string &mainPath, std::map<std::string, std::unique_ptr<Program>> &loadedModules) {
+    for (const auto &import : mainProg.imports) {
+        std::string modulePath = resolveModulePath(mainPath, import.modulePath);
+        
+        // Load module if not already loaded
+        if (loadedModules.find(modulePath) == loadedModules.end()) {
+            auto result = loadModule(modulePath, loadedModules);
+            if (!result.has_value() && loadedModules.find(modulePath) == loadedModules.end()) {
+                return false; // Failed to load
+            }
+        }
+        
+        const Program &module = *loadedModules[modulePath];
+        
+        // Verify that requested symbols are exported
+        for (const std::string &name : import.names) {
+            bool found = false;
+            
+            // Look for exported function
+            for (const auto &fn : module.functions) {
+                if (fn->name == name) {
+                    // Check if it's exported
+                    auto it = module.exportedFunctions.find(name);
+                    if (it == module.exportedFunctions.end() || !it->second) {
+                        std::cerr << "error: function '" << name << "' is not exported from module '" << modulePath << "'\n";
+                        return false;
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            
+            // Look for exported struct
+            if (!found) {
+                for (const auto &structDef : module.structs) {
+                    if (structDef.name == name) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!found) {
+                std::cerr << "error: '" << name << "' not found in module '" << modulePath << "'\n";
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+
+// Build LLVM module from main program and all imported modules
+static bool buildModuleWithImports(const Program &mainProg, const std::string &moduleName, llvm::Module &m, const std::map<std::string, std::unique_ptr<Program>> &loadedModules) {
+    std::cerr << "DEBUG: buildModuleWithImports started\n";
+    llvm::LLVMContext &ctx = m.getContext();
+    llvm::IRBuilder<> b(ctx);
+
+    llvm::Type *i32Ty = llvm::Type::getInt32Ty(ctx);
+    
+    // Collect all struct types from all modules
+    Program &mutableMainProg = const_cast<Program&>(mainProg);
+    
+    // Create struct types from main program
+    for (const auto &structDef : mainProg.structs) {
+        llvm::StructType *structTy = llvm::StructType::create(ctx, structDef.name);
+        mutableMainProg.structTypes[structDef.name] = structTy;
+    }
+    
+    // Create struct types from imported modules
+    for (const auto &[path, module] : loadedModules) {
+        Program &mutableModule = const_cast<Program&>(*module);
+        for (const auto &structDef : module->structs) {
+            if (mutableMainProg.structTypes.find(structDef.name) == mutableMainProg.structTypes.end()) {
+                llvm::StructType *structTy = llvm::StructType::create(ctx, structDef.name);
+                mutableMainProg.structTypes[structDef.name] = structTy;
+                mutableModule.structTypes[structDef.name] = structTy;
+            }
+        }
+    }
+    
+    // Define struct bodies from main program
+    for (const auto &structDef : mainProg.structs) {
+        std::vector<llvm::Type*> fieldTypes;
+        for (const auto &field : structDef.fields) {
+            fieldTypes.push_back(lowerType(ctx, field.type, mutableMainProg.structTypes));
+        }
+        mutableMainProg.structTypes[structDef.name]->setBody(fieldTypes);
+    }
+    
+    // Define struct bodies from imported modules
+    for (const auto &[path, module] : loadedModules) {
+        for (const auto &structDef : module->structs) {
+            if (!mutableMainProg.structTypes[structDef.name]->isOpaque()) {
+                continue; // Already defined
+            }
+            std::vector<llvm::Type*> fieldTypes;
+            for (const auto &field : structDef.fields) {
+                fieldTypes.push_back(lowerType(ctx, field.type, mutableMainProg.structTypes));
+            }
+            mutableMainProg.structTypes[structDef.name]->setBody(fieldTypes);
+        }
+    }
+    
+    // Declare extern functions from main program
+    for (const auto &fn : mainProg.externFns) {
+        std::vector<llvm::Type *> params;
+        for (const auto &p : fn.params) {
+            params.push_back(lowerType(ctx, p, mutableMainProg.structTypes));
+        }
+        llvm::Type *retTy = lowerType(ctx, fn.result, mutableMainProg.structTypes);
+        auto *fnTy = llvm::FunctionType::get(retTy, params, false);
+        m.getOrInsertFunction(fn.name, fnTy);
+    }
+    
+    // Declare extern functions from imported modules
+    for (const auto &[path, module] : loadedModules) {
+        for (const auto &fn : module->externFns) {
+            std::vector<llvm::Type *> params;
+            for (const auto &p : fn.params) {
+                params.push_back(lowerType(ctx, p, mutableMainProg.structTypes));
+            }
+            llvm::Type *retTy = lowerType(ctx, fn.result, mutableMainProg.structTypes);
+            auto *fnTy = llvm::FunctionType::get(retTy, params, false);
+            m.getOrInsertFunction(fn.name, fnTy);
+        }
+    }
+    
+    // Create main function wrapper
+    auto *mainTy = llvm::FunctionType::get(i32Ty, {}, false);
+    llvm::Function *mainFn = llvm::Function::Create(mainTy, llvm::Function::ExternalLinkage, "main", m);
+    llvm::BasicBlock *entry = llvm::BasicBlock::Create(ctx, "entry", mainFn);
+    b.SetInsertPoint(entry);
+
+    if (needsConsole(mainProg)) {
+        emitWindowsConsoleRuntime(m, mainFn);
+    } else {
+        llvm::Type *voidTy = llvm::Type::getVoidTy(ctx);
+        llvm::FunctionType *startTy = llvm::FunctionType::get(voidTy, {}, false);
+        llvm::Function *startFn = llvm::Function::Create(startTy, llvm::Function::ExternalLinkage, "tsn_start", m);
+        llvm::BasicBlock *startBB = llvm::BasicBlock::Create(ctx, "entry", startFn);
+        llvm::IRBuilder<> startB(startBB);
+        
+        llvm::Value *rc = startB.CreateCall(mainFn);
+        llvm::FunctionCallee exitFn = m.getOrInsertFunction("ExitProcess", llvm::FunctionType::get(voidTy, {i32Ty}, false));
+        startB.CreateCall(exitFn, {rc});
+        startB.CreateUnreachable();
+    }
+    
+    int strIndex = 0;
+    
+    // Compile functions from imported modules FIRST
+    for (const auto &[path, module] : loadedModules) {
+        std::cerr << "DEBUG: Compiling module: " << path << "\n";
+        Program &mutableModule = const_cast<Program&>(*module);
+        
+        for (const auto &fnDef : module->functions) {
+            std::cerr << "DEBUG: Compiling function: " << fnDef->name << " from " << path << "\n";
+            std::vector<llvm::Type *> paramTypes;
+            for (const auto &p : fnDef->params) {
+                paramTypes.push_back(lowerType(ctx, p.type, mutableMainProg.structTypes));
+            }
+            llvm::Type *retTy = lowerType(ctx, fnDef->result, mutableMainProg.structTypes);
+            llvm::FunctionType *fnTy = llvm::FunctionType::get(retTy, paramTypes, false);
+            
+            llvm::Function *llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, fnDef->name, m);
+
+            llvm::BasicBlock *bb = llvm::BasicBlock::Create(ctx, "entry", llvmFn);
+            llvm::IRBuilder<> fBuilder(bb);
+
+            for (size_t i = 0; i < fnDef->params.size(); ++i) {
+                llvm::Argument *arg = llvmFn->getArg(static_cast<uint32_t>(i));
+                llvm::AllocaInst *alloca = fBuilder.CreateAlloca(arg->getType(), nullptr, fnDef->params[i].name);
+                fBuilder.CreateStore(arg, alloca);
+                mutableModule.symbolTable[fnDef->params[i].name] = alloca;
+            }
+
+            for (const auto &stmtPtr : fnDef->body) {
+                emitStmt(fBuilder, stmtPtr.get(), m, *module, llvmFn, strIndex);
+            }
+            
+            if (!fBuilder.GetInsertBlock()->getTerminator()) {
+                if (fnDef->result.kind == TypeName::Kind::Void) {
+                    fBuilder.CreateRetVoid();
+                } else {
+                    fBuilder.CreateRet(llvm::Constant::getNullValue(retTy));
+                }
+            }
+        }
+    }
+    
+    // Then compile functions from main program
+    std::cerr << "DEBUG: Compiling main program functions\n";
+    for (const auto &fnDef : mainProg.functions) {
+        std::cerr << "DEBUG: Compiling function: " << fnDef->name << "\n";
+        std::vector<llvm::Type *> paramTypes;
+        for (const auto &p : fnDef->params) {
+            paramTypes.push_back(lowerType(ctx, p.type, mutableMainProg.structTypes));
+        }
+        llvm::Type *retTy = lowerType(ctx, fnDef->result, mutableMainProg.structTypes);
+        llvm::FunctionType *fnTy = llvm::FunctionType::get(retTy, paramTypes, false);
+        
+        std::string llvmFnName = (fnDef->name == "main") ? "__tsn_user_main" : fnDef->name;
+        llvm::Function *llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, llvmFnName, m);
+
+        llvm::BasicBlock *bb = llvm::BasicBlock::Create(ctx, "entry", llvmFn);
+        llvm::IRBuilder<> fBuilder(bb);
+
+        for (size_t i = 0; i < fnDef->params.size(); ++i) {
+            llvm::Argument *arg = llvmFn->getArg(static_cast<uint32_t>(i));
+            llvm::AllocaInst *alloca = fBuilder.CreateAlloca(arg->getType(), nullptr, fnDef->params[i].name);
+            fBuilder.CreateStore(arg, alloca);
+            mutableMainProg.symbolTable[fnDef->params[i].name] = alloca;
+        }
+
+        for (const auto &stmtPtr : fnDef->body) {
+            emitStmt(fBuilder, stmtPtr.get(), m, mainProg, llvmFn, strIndex);
+        }
+        
+        if (!fBuilder.GetInsertBlock()->getTerminator()) {
+            if (fnDef->result.kind == TypeName::Kind::Void) {
+                fBuilder.CreateRetVoid();
+            } else if (fnDef->name == "main" && fnDef->result.kind == TypeName::Kind::Void) {
+                fBuilder.CreateRetVoid();
+            } else {
+                fBuilder.CreateRet(llvm::Constant::getNullValue(retTy));
+            }
+        }
+    }
+    
+    // Check if user defined a main() function
+    bool hasUserMain = false;
+    bool userMainReturnsVoid = false;
+    for (const auto &fnDef : mainProg.functions) {
+        if (fnDef->name == "main") {
+            hasUserMain = true;
+            userMainReturnsVoid = (fnDef->result.kind == TypeName::Kind::Void);
+            break;
+        }
+    }
+    
+    // If user defined main(), call it from wrapper main
+    if (hasUserMain) {
+        llvm::Function *userMain = m.getFunction("__tsn_user_main");
+        if (userMain) {
+            if (userMainReturnsVoid) {
+                b.CreateCall(userMain);
+                b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
+            } else {
+                llvm::Value *rc = b.CreateCall(userMain);
+                b.CreateRet(rc);
+            }
+        }
+    } else {
+        // No user main, emit top-level statements
+        for (const auto &stmtPtr : mainProg.stmts) {
+            emitStmt(b, stmtPtr.get(), m, mainProg, mainFn, strIndex);
+        }
+        
+        if (!b.GetInsertBlock()->getTerminator()) {
+            b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
+        }
+    }
+
+    return true;
+}
+
 struct Args {
     std::string inputPath;
     std::string outputPath;
@@ -2831,11 +3224,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    const tsn::Program &prog = *progOpt;
+    tsn::Program prog = std::move(*progOpt);
+    
+    // Load and merge imported modules
+    std::map<std::string, std::unique_ptr<tsn::Program>> loadedModules;
+    if (!tsn::mergeImports(prog, args.inputPath, loadedModules)) {
+        std::cerr << "error: failed to load imports\n";
+        return 1;
+    }
 
     llvm::LLVMContext ctx;
     llvm::Module m(args.inputPath, ctx);
-    if (!tsn::buildModule(prog, args.inputPath, m)) {
+    if (!tsn::buildModuleWithImports(prog, args.inputPath, m, loadedModules)) {
         return 1;
     }
 

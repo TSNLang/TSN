@@ -106,6 +106,7 @@ Compile and run:
 - **Structs**: `interface` definitions with full member access
 - **Object Literals**: TypeScript-style initialization
 - **FFI**: Foreign Function Interface for calling C libraries
+- **Module System**: `import`/`export` for multi-file projects ✨ NEW!
 
 ### 🚧 In Development
 
@@ -118,6 +119,35 @@ Compile and run:
 ---
 
 ## 💡 Code Examples
+
+### Module System (NEW!)
+
+**math.tsn**:
+```typescript
+export function add(a: i32, b: i32): i32 {
+    return a + b;
+}
+
+export function multiply(a: i32, b: i32): i32 {
+    return a * b;
+}
+```
+
+**main.tsn**:
+```typescript
+import { add, multiply } from "./math.tsn";
+
+function main(): i32 {
+    let x = add(5, 3);        // 8
+    let y = multiply(4, 7);   // 28
+    return add(x, y);         // 36
+}
+```
+
+Compile multi-file projects:
+```bash
+./tsnc main.tsn -o app.exe  # Automatically compiles imported modules!
+```
 
 ### Structs and Object Literals
 
