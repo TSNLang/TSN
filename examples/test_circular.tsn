@@ -1,0 +1,6 @@
+// Test circular dependency detection
+import { funcA } from "./circular_a.tsn";
+
+function main(): i32 {
+    return funcA();
+}

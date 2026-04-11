@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -593,7 +594,15 @@ struct StructDef {
 };
 
 struct ImportDecl {
+    enum class Kind {
+        Named,      // import { foo, bar } from "..."
+        Namespace,  // import * as name from "..."
+        Default     // import name from "..." (future)
+    };
+    
+    Kind kind = Kind::Named;
     std::vector<std::string> names;  // Imported names: { foo, bar }
+    std::string namespaceName;       // For import * as name
     std::string modulePath;          // Module path: "./module.tsn"
 };
 
@@ -978,10 +987,54 @@ private:
         
         ImportDecl import;
         
+        // Check for import * as name from "..."
+        if (tok_.kind == TokenKind::Star) {
+            advance(); // consume '*'
+            
+            // Expect 'as'
+            if (!expect(TokenKind::Identifier, "expected 'as'")) {
+                return false;
+            }
+            if (tok_.text != "as") {
+                Diag::error(tok_.pos, "expected 'as' keyword");
+                return false;
+            }
+            advance();
+            
+            // Get namespace name
+            if (!expect(TokenKind::Identifier, "expected namespace name")) {
+                return false;
+            }
+            import.kind = ImportDecl::Kind::Namespace;
+            import.namespaceName = tok_.text;
+            advance();
+            
+            // Parse 'from'
+            if (!consume(TokenKind::KwFrom, "expected 'from'")) {
+                return false;
+            }
+            
+            // Parse module path
+            if (!expect(TokenKind::String, "expected module path")) {
+                return false;
+            }
+            import.modulePath = tok_.text;
+            advance();
+            
+            if (!consume(TokenKind::Semicolon, "expected ';'")) {
+                return false;
+            }
+            
+            prog.imports.push_back(std::move(import));
+            return true;
+        }
+        
         // Parse: import { name1, name2 } from "path"
         if (!consume(TokenKind::LBrace, "expected '{'")) {
             return false;
         }
+        
+        import.kind = ImportDecl::Kind::Named;
         
         // Parse imported names
         while (tok_.kind != TokenKind::RBrace && tok_.kind != TokenKind::End) {
@@ -2797,15 +2850,30 @@ static std::string resolveModulePath(const std::string &currentPath, const std::
 }
 
 // Load and parse a module
-static std::optional<std::unique_ptr<Program>> loadModule(const std::string &path, std::map<std::string, std::unique_ptr<Program>> &loadedModules) {
+static std::optional<std::unique_ptr<Program>> loadModule(
+    const std::string &path, 
+    std::map<std::string, std::unique_ptr<Program>> &loadedModules,
+    std::set<std::string> &loadingModules  // Track modules currently being loaded
+) {
     // Check if already loaded
     if (loadedModules.find(path) != loadedModules.end()) {
         return std::nullopt; // Already loaded, return null to indicate success but no new module
     }
     
+    // Check for circular dependency
+    if (loadingModules.find(path) != loadingModules.end()) {
+        std::cerr << "error: circular dependency detected: " << path << "\n";
+        std::cerr << "  Module is already being loaded in the dependency chain\n";
+        return std::nullopt;
+    }
+    
+    // Mark as currently loading
+    loadingModules.insert(path);
+    
     auto srcOpt = readWholeFile(path);
     if (!srcOpt.has_value()) {
         std::cerr << "error: failed to read module file: " << path << "\n";
+        loadingModules.erase(path);
         return std::nullopt;
     }
     
@@ -2813,22 +2881,42 @@ static std::optional<std::unique_ptr<Program>> loadModule(const std::string &pat
     auto progOpt = p.parse();
     if (!progOpt.has_value()) {
         std::cerr << "error: failed to parse module: " << path << "\n";
+        loadingModules.erase(path);
         return std::nullopt;
     }
     
     auto progPtr = std::make_unique<Program>(std::move(*progOpt));
+    
+    // Recursively load dependencies of this module
+    for (const auto &import : progPtr->imports) {
+        std::string depPath = resolveModulePath(path, import.modulePath);
+        if (loadedModules.find(depPath) == loadedModules.end()) {
+            auto depResult = loadModule(depPath, loadedModules, loadingModules);
+            if (!depResult.has_value() && loadedModules.find(depPath) == loadedModules.end()) {
+                loadingModules.erase(path);
+                return std::nullopt; // Failed to load dependency
+            }
+        }
+    }
+    
     loadedModules[path] = std::move(progPtr);
+    
+    // Remove from loading set
+    loadingModules.erase(path);
+    
     return std::nullopt; // Success
 }
 
 // Merge imported functions into main program
 static bool mergeImports(Program &mainProg, const std::string &mainPath, std::map<std::string, std::unique_ptr<Program>> &loadedModules) {
+    std::set<std::string> loadingModules; // Track circular dependencies
+    
     for (const auto &import : mainProg.imports) {
         std::string modulePath = resolveModulePath(mainPath, import.modulePath);
         
         // Load module if not already loaded
         if (loadedModules.find(modulePath) == loadedModules.end()) {
-            auto result = loadModule(modulePath, loadedModules);
+            auto result = loadModule(modulePath, loadedModules, loadingModules);
             if (!result.has_value() && loadedModules.find(modulePath) == loadedModules.end()) {
                 return false; // Failed to load
             }
@@ -2836,7 +2924,15 @@ static bool mergeImports(Program &mainProg, const std::string &mainPath, std::ma
         
         const Program &module = *loadedModules[modulePath];
         
-        // Verify that requested symbols are exported
+        // For namespace imports (import * as name), we import everything
+        if (import.kind == ImportDecl::Kind::Namespace) {
+            // No validation needed - all exported symbols will be available
+            // They will be compiled into the same LLVM module
+            std::cerr << "DEBUG: Namespace import '" << import.namespaceName << "' from '" << modulePath << "'\n";
+            continue;
+        }
+        
+        // For named imports, verify that requested symbols are exported
         for (const std::string &name : import.names) {
             bool found = false;
             
