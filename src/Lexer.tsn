@@ -155,7 +155,7 @@ function get_keyword_kind(src: ptr<i8>, start: i32, len: i32): i32 {
 // LEXER - Main Function
 // ============================================================================
 
-function lex(
+export function lex(
     src: ptr<i8>, 
     srcLen: i32, 
     tokens: ptr<i32>, 

@@ -6,18 +6,18 @@
 // AST NODE KINDS
 // ============================================================================
 
-const AST_NUMBER: i32 = 1;
-const AST_IDENTIFIER: i32 = 2;
-const AST_BINARY_OP: i32 = 3;
-const AST_CALL: i32 = 4;
-const AST_VAR_DECL: i32 = 10;
-const AST_ASSIGNMENT: i32 = 11;
-const AST_RETURN_STMT: i32 = 12;
-const AST_IF_STMT: i32 = 13;
-const AST_WHILE_STMT: i32 = 14;
-const AST_BLOCK: i32 = 15;
-const AST_FUNCTION: i32 = 20;
-const AST_PARAM: i32 = 21;
+export const AST_NUMBER: i32 = 1;
+export const AST_IDENTIFIER: i32 = 2;
+export const AST_BINARY_OP: i32 = 3;
+export const AST_CALL: i32 = 4;
+export const AST_VAR_DECL: i32 = 10;
+export const AST_ASSIGNMENT: i32 = 11;
+export const AST_RETURN_STMT: i32 = 12;
+export const AST_IF_STMT: i32 = 13;
+export const AST_WHILE_STMT: i32 = 14;
+export const AST_BLOCK: i32 = 15;
+export const AST_FUNCTION: i32 = 20;
+export const AST_PARAM: i32 = 21;
 
 // Token kinds (from Lexer)
 const TK_END: i32 = 0;
@@ -38,7 +38,7 @@ const TK_KW_RETURN: i32 = 34;
 // AST NODE STRUCTURE
 // ============================================================================
 
-interface ASTNode {
+export interface ASTNode {
     kind: i32;
     value1: i32;
     value2: i32;
@@ -176,7 +176,7 @@ function parse_statement(
 // FUNCTION PARSER
 // ============================================================================
 
-function parse_function(
+export function parse_function(
     tokens: ptr<i32>,
     starts: ptr<i32>,
     lens: ptr<i32>,
@@ -260,7 +260,7 @@ function parse_function(
 // PROGRAM PARSER
 // ============================================================================
 
-function parse_program(
+export function parse_program(
     tokens: ptr<i32>,
     starts: ptr<i32>,
     lens: ptr<i32>,

@@ -147,7 +147,7 @@ function codegen_function(
 // PROGRAM CODEGEN
 // ============================================================================
 
-function codegen_program(
+export function codegen_program(
     nodes: ptr<ASTNode>,
     nodeCount: i32,
     src: ptr<i8>,
