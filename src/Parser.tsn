@@ -1,0 +1,293 @@
+// TSN Parser - Self-Hosting
+// Parses tokens into Abstract Syntax Tree (AST)
+// Part of the TSN self-hosting compiler
+
+// ============================================================================
+// AST NODE KINDS
+// ============================================================================
+
+const AST_NUMBER: i32 = 1;
+const AST_IDENTIFIER: i32 = 2;
+const AST_BINARY_OP: i32 = 3;
+const AST_CALL: i32 = 4;
+const AST_VAR_DECL: i32 = 10;
+const AST_ASSIGNMENT: i32 = 11;
+const AST_RETURN_STMT: i32 = 12;
+const AST_IF_STMT: i32 = 13;
+const AST_WHILE_STMT: i32 = 14;
+const AST_BLOCK: i32 = 15;
+const AST_FUNCTION: i32 = 20;
+const AST_PARAM: i32 = 21;
+
+// Token kinds (from Lexer)
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_NUMBER: i32 = 3;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_COMMA: i32 = 10;
+const TK_KW_FUNCTION: i32 = 30;
+const TK_KW_LET: i32 = 32;
+const TK_KW_RETURN: i32 = 34;
+
+// ============================================================================
+// AST NODE STRUCTURE
+// ============================================================================
+
+interface ASTNode {
+    kind: i32;
+    value1: i32;
+    value2: i32;
+    value3: i32;
+}
+
+// ============================================================================
+// PARSER HELPER FUNCTIONS
+// ============================================================================
+
+function current_token(tokens: ptr<i32>, pos: i32): i32 {
+    return tokens[pos];
+}
+
+function advance(pos: ptr<i32>): void {
+    let current = pos[0];
+    pos[0] = current + 1;
+}
+
+function expect(tokens: ptr<i32>, pos: ptr<i32>, expected: i32): bool {
+    let current = pos[0];
+    if (tokens[current] == expected) {
+        pos[0] = current + 1;
+        return true;
+    }
+    return false;
+}
+
+// ============================================================================
+// EXPRESSION PARSER
+// ============================================================================
+
+function parse_primary_expr(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>
+): i32 {
+    let currentPos = pos[0];
+    let currentNodeCount = nodeCount[0];
+    
+    if (tokens[currentPos] == TK_NUMBER) {
+        nodes[currentNodeCount].kind = AST_NUMBER;
+        nodes[currentNodeCount].value1 = starts[currentPos];
+        nodes[currentNodeCount].value2 = lens[currentPos];
+        nodes[currentNodeCount].value3 = 0;
+        
+        pos[0] = currentPos + 1;
+        nodeCount[0] = currentNodeCount + 1;
+        return currentNodeCount;
+    }
+    
+    if (tokens[currentPos] == TK_IDENTIFIER) {
+        nodes[currentNodeCount].kind = AST_IDENTIFIER;
+        nodes[currentNodeCount].value1 = starts[currentPos];
+        nodes[currentNodeCount].value2 = lens[currentPos];
+        nodes[currentNodeCount].value3 = 0;
+        
+        pos[0] = currentPos + 1;
+        nodeCount[0] = currentNodeCount + 1;
+        return currentNodeCount;
+    }
+    
+    return 0;
+}
+
+function parse_expr(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>
+): i32 {
+    return parse_primary_expr(tokens, starts, lens, pos, nodes, nodeCount);
+}
+
+// ============================================================================
+// STATEMENT PARSER
+// ============================================================================
+
+function parse_return_stmt(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>
+): i32 {
+    let currentPos = pos[0];
+    
+    if (tokens[currentPos] != TK_KW_RETURN) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    pos[0] = currentPos;
+    
+    let exprIdx = parse_expr(tokens, starts, lens, pos, nodes, nodeCount);
+    
+    currentPos = pos[0];
+    if (tokens[currentPos] == TK_SEMICOLON) {
+        pos[0] = currentPos + 1;
+    }
+    
+    let returnIdx = nodeCount[0];
+    nodes[returnIdx].kind = AST_RETURN_STMT;
+    nodes[returnIdx].value1 = exprIdx;
+    nodes[returnIdx].value2 = 0;
+    nodes[returnIdx].value3 = 0;
+    nodeCount[0] = returnIdx + 1;
+    
+    return returnIdx;
+}
+
+function parse_statement(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>
+): i32 {
+    let currentPos = pos[0];
+    
+    if (tokens[currentPos] == TK_KW_RETURN) {
+        return parse_return_stmt(tokens, starts, lens, pos, nodes, nodeCount);
+    }
+    
+    return 0;
+}
+
+// ============================================================================
+// FUNCTION PARSER
+// ============================================================================
+
+function parse_function(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>
+): i32 {
+    let currentPos = pos[0];
+    
+    if (tokens[currentPos] != TK_KW_FUNCTION) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    if (tokens[currentPos] != TK_IDENTIFIER) {
+        return 0;
+    }
+    let nameStart = starts[currentPos];
+    let nameLen = lens[currentPos];
+    currentPos = currentPos + 1;
+    
+    if (tokens[currentPos] == TK_LPAREN) {
+        currentPos = currentPos + 1;
+        while (currentPos < 1000) {
+            if (tokens[currentPos] == TK_RPAREN) {
+                currentPos = currentPos + 1;
+                break;
+            }
+            currentPos = currentPos + 1;
+        }
+    }
+    
+    if (tokens[currentPos] == TK_COLON) {
+        currentPos = currentPos + 1;
+        if (tokens[currentPos] == TK_IDENTIFIER) {
+            currentPos = currentPos + 1;
+        }
+    }
+    
+    if (tokens[currentPos] != TK_LBRACE) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    pos[0] = currentPos;
+    
+    let bodyStartIdx = nodeCount[0];
+    
+    while (currentPos < 1000) {
+        if (tokens[currentPos] == TK_RBRACE) {
+            currentPos = currentPos + 1;
+            break;
+        }
+        
+        pos[0] = currentPos;
+        let stmtIdx = parse_statement(tokens, starts, lens, pos, nodes, nodeCount);
+        currentPos = pos[0];
+        
+        if (stmtIdx == 0) {
+            if (tokens[currentPos] == TK_RBRACE) {
+                currentPos = currentPos + 1;
+                break;
+            }
+            currentPos = currentPos + 1;
+        }
+    }
+    
+    pos[0] = currentPos;
+    
+    let funcIdx = nodeCount[0];
+    nodes[funcIdx].kind = AST_FUNCTION;
+    nodes[funcIdx].value1 = nameStart;
+    nodes[funcIdx].value2 = nameLen;
+    nodes[funcIdx].value3 = bodyStartIdx;
+    
+    nodeCount[0] = funcIdx + 1;
+    return funcIdx;
+}
+
+// ============================================================================
+// PROGRAM PARSER
+// ============================================================================
+
+function parse_program(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    tokenCount: i32,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>
+): i32 {
+    let pos: i32[1];
+    pos[0] = 0;
+    nodeCount[0] = 0;
+    
+    let functionCount = 0;
+    
+    while (pos[0] < tokenCount) {
+        if (tokens[pos[0]] == TK_END) {
+            break;
+        }
+        
+        if (tokens[pos[0]] == TK_KW_FUNCTION) {
+            let funcIdx = parse_function(tokens, starts, lens, pos, nodes, nodeCount);
+            if (funcIdx > 0) {
+                functionCount = functionCount + 1;
+            }
+        } else {
+            pos[0] = pos[0] + 1;
+        }
+    }
+    
+    return functionCount;
+}

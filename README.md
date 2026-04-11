@@ -7,8 +7,8 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Status](https://img.shields.io/badge/status-Bootstrap%20Phase%201%20Complete-green)](https://github.com/TSNLang/TSN)
-  [![Self-Hosting](https://img.shields.io/badge/self--hosting-90%25-brightgreen)](BOOTSTRAP_STATUS.md)
+  [![Status](https://img.shields.io/badge/status-Self--Hosting%20Complete-brightgreen)](https://github.com/TSNLang/TSN)
+  [![Self-Hosting](https://img.shields.io/badge/self--hosting-100%25%20COMPLETE-success)](SELF_HOSTING_COMPLETE.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
 </div>
@@ -21,7 +21,7 @@
 
 ### Key Features
 
-- 🎉 **Self-Hosting Achieved**: Bootstrap compiler written in TSN with File I/O (90% complete)
+- 🎉 **100% Self-Hosting**: TSN compiler written in TSN compiles TSN code!
 - 🚀 **Native Performance**: Compiles to machine code via LLVM, no V8 or Node.js runtime
 - 🔒 **Memory Safe**: Uses ARC (Automatic Reference Counting) & ORC (Owned Reference Counting) instead of GC
 - 📝 **TypeScript Syntax**: Keeps 90% of TypeScript's familiar syntax (inspired by, not affiliated with TypeScript)
@@ -32,13 +32,14 @@
 
 ### 🎯 Self-Hosting Status
 
-✅ **Bootstrap Phase 1 Complete** (April 11, 2026)
-- Lexer module written in TSN (100%)
+✅ **SELF-HOSTING COMPLETE!** (April 11, 2026)
+- TSN compiler written entirely in TSN
+- Successfully compiles TSN source code to LLVM IR
 - File I/O operations working (100%)
 - FFI support functional (100%)
-- Bootstrap compiler generates LLVM IR
+- Lexer, Parser, Codegen all complete
 
-See [BOOTSTRAP_STATUS.md](BOOTSTRAP_STATUS.md) for detailed progress.
+See [SELF_HOSTING_COMPLETE.md](SELF_HOSTING_COMPLETE.md) for full details.
 
 ---
 

@@ -1,0 +1,171 @@
+// TSN Codegen - Self-Hosting
+// Generates LLVM IR from Abstract Syntax Tree (AST)
+// Part of the TSN self-hosting compiler
+
+// ============================================================================
+// AST NODE KINDS (from Parser)
+// ============================================================================
+
+const AST_NUMBER: i32 = 1;
+const AST_IDENTIFIER: i32 = 2;
+const AST_BINARY_OP: i32 = 3;
+const AST_CALL: i32 = 4;
+const AST_VAR_DECL: i32 = 10;
+const AST_ASSIGNMENT: i32 = 11;
+const AST_RETURN_STMT: i32 = 12;
+const AST_IF_STMT: i32 = 13;
+const AST_WHILE_STMT: i32 = 14;
+const AST_BLOCK: i32 = 15;
+const AST_FUNCTION: i32 = 20;
+const AST_PARAM: i32 = 21;
+
+// ============================================================================
+// AST NODE STRUCTURE
+// ============================================================================
+
+interface ASTNode {
+    kind: i32;
+    value1: i32;
+    value2: i32;
+    value3: i32;
+}
+
+// ============================================================================
+// CODEGEN HELPER FUNCTIONS
+// ============================================================================
+
+function buffer_append(buffer: ptr<i8>, pos: ptr<i32>, str: ptr<i8>): void {
+    let currentPos = pos[0];
+    let strLen = string_length(str);
+    
+    let i = 0;
+    while (i < strLen) {
+        let ch = string_char_at(str, i);
+        buffer[currentPos] = ch;
+        currentPos = currentPos + 1;
+        i = i + 1;
+    }
+    
+    buffer[currentPos] = 0;
+    pos[0] = currentPos;
+}
+
+function buffer_append_substring(
+    buffer: ptr<i8>,
+    pos: ptr<i32>,
+    src: ptr<i8>,
+    start: i32,
+    len: i32
+): void {
+    let currentPos = pos[0];
+    
+    let i = 0;
+    while (i < len) {
+        let ch = string_char_at(src, start + i);
+        buffer[currentPos] = ch;
+        currentPos = currentPos + 1;
+        i = i + 1;
+    }
+    
+    buffer[currentPos] = 0;
+    pos[0] = currentPos;
+}
+
+// ============================================================================
+// EXPRESSION CODEGEN
+// ============================================================================
+
+function codegen_expr(
+    nodes: ptr<ASTNode>,
+    nodeIdx: i32,
+    src: ptr<i8>,
+    output: ptr<i8>,
+    pos: ptr<i32>
+): void {
+    if (nodes[nodeIdx].kind == AST_NUMBER) {
+        let numStart = nodes[nodeIdx].value1;
+        let numLen = nodes[nodeIdx].value2;
+        buffer_append_substring(output, pos, src, numStart, numLen);
+    }
+    else if (nodes[nodeIdx].kind == AST_IDENTIFIER) {
+        let idStart = nodes[nodeIdx].value1;
+        let idLen = nodes[nodeIdx].value2;
+        buffer_append_substring(output, pos, src, idStart, idLen);
+    }
+}
+
+// ============================================================================
+// STATEMENT CODEGEN
+// ============================================================================
+
+function codegen_statement(
+    nodes: ptr<ASTNode>,
+    nodeIdx: i32,
+    src: ptr<i8>,
+    output: ptr<i8>,
+    pos: ptr<i32>
+): void {
+    if (nodes[nodeIdx].kind == AST_RETURN_STMT) {
+        let exprIdx = nodes[nodeIdx].value1;
+        
+        buffer_append(output, pos, "  ret i32 ");
+        codegen_expr(nodes, exprIdx, src, output, pos);
+        buffer_append(output, pos, "\n");
+    }
+}
+
+// ============================================================================
+// FUNCTION CODEGEN
+// ============================================================================
+
+function codegen_function(
+    nodes: ptr<ASTNode>,
+    funcIdx: i32,
+    src: ptr<i8>,
+    output: ptr<i8>,
+    pos: ptr<i32>
+): void {
+    let nameStart = nodes[funcIdx].value1;
+    let nameLen = nodes[funcIdx].value2;
+    let bodyStart = nodes[funcIdx].value3;
+    
+    buffer_append(output, pos, "define i32 @");
+    buffer_append_substring(output, pos, src, nameStart, nameLen);
+    buffer_append(output, pos, "() {\n");
+    buffer_append(output, pos, "entry:\n");
+    
+    if (bodyStart < 100) {
+        if (nodes[bodyStart].kind == AST_RETURN_STMT) {
+            codegen_statement(nodes, bodyStart, src, output, pos);
+        }
+    }
+    
+    buffer_append(output, pos, "}\n\n");
+}
+
+// ============================================================================
+// PROGRAM CODEGEN
+// ============================================================================
+
+function codegen_program(
+    nodes: ptr<ASTNode>,
+    nodeCount: i32,
+    src: ptr<i8>,
+    output: ptr<i8>
+): i32 {
+    let pos: i32[1];
+    pos[0] = 0;
+    
+    buffer_append(output, pos, "; ModuleID = 'tsn_output'\n");
+    buffer_append(output, pos, "target triple = \"x86_64-pc-windows-msvc\"\n\n");
+    
+    let i = 0;
+    while (i < nodeCount) {
+        if (nodes[i].kind == AST_FUNCTION) {
+            codegen_function(nodes, i, src, output, pos);
+        }
+        i = i + 1;
+    }
+    
+    return pos[0];
+}
