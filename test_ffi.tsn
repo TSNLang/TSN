@@ -1,8 +1,0 @@
-// Test FFI support
-
-@ffi.lib("kernel32")
-declare function CloseHandle(hObject: ptr<void>): bool;
-
-function main(): void {
-    // Just declare, don't call
-}

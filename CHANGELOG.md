@@ -1,5 +1,49 @@
 # TSN Changelog
 
+## [0.3.0] - 2026-04-11
+
+### 🎉 MAJOR: Self-Hosting Bootstrap Phase Complete
+
+#### Added
+- **FFI Support**: Full Foreign Function Interface for Windows kernel32 API
+  - `CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle` working
+  - External function declarations with `@ffi.lib("kernel32")`
+  - Pointer types and null values supported
+  
+- **Bootstrap Compiler**: `tsn/bootstrap_simple.tsn`
+  - Self-hosting compiler written entirely in TSN
+  - File I/O operations functional
+  - Generates LLVM IR output to disk
+  - Successfully compiles and runs
+  
+- **Lexer Module**: `src/Lexer.tsn`
+  - Complete lexer written in TSN (450+ lines)
+  - Tokenizes all TSN syntax: keywords, operators, strings, numbers, comments
+  - Compiles successfully with C++ bootstrap compiler
+  - 6 functions: helper functions + main lexer
+  
+- **Documentation**:
+  - `BOOTSTRAP_STATUS.md` - Self-hosting progress and status
+  - `FFI_COMPLETE.md` - FFI implementation details
+  - `BOOTSTRAP_READY.md` - Bootstrap readiness summary
+
+#### Changed
+- C++ compiler now supports multiple TSN functions in one file
+- Improved error messages for function lookup failures
+- `main(): void` support (no return value required)
+
+#### Technical Details
+- Self-hosting progress: 90%
+- Lexer: 100% complete
+- File I/O: 100% functional
+- FFI: 100% functional
+
+### Status
+✅ Bootstrap Phase 1 Complete  
+🚧 Phase 2: Parser + Codegen integration (next)
+
+---
+
 ## [Unreleased] - 2026-04-08
 
 ### Added

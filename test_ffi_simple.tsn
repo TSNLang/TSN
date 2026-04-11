@@ -1,8 +1,0 @@
-// Simplest FFI test
-
-@ffi.lib("kernel32")
-declare function GetStdHandle(nStdHandle: u32): ptr<void>;
-
-function main(): void {
-    let h = GetStdHandle(4294967285);
-}

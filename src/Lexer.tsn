@@ -1,0 +1,409 @@
+// TSN Lexer - Self-Hosting
+// Tokenizes TSN source code
+// Part of the TSN self-hosting compiler
+
+// ============================================================================
+// TOKEN KINDS
+// ============================================================================
+
+const TK_END: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_STRING: i32 = 2;
+const TK_NUMBER: i32 = 3;
+const TK_SEMICOLON: i32 = 4;
+const TK_LPAREN: i32 = 5;
+const TK_RPAREN: i32 = 6;
+const TK_LBRACE: i32 = 7;
+const TK_RBRACE: i32 = 8;
+const TK_COLON: i32 = 9;
+const TK_COMMA: i32 = 10;
+const TK_DOT: i32 = 11;
+const TK_LBRACKET: i32 = 12;
+const TK_RBRACKET: i32 = 13;
+const TK_LT: i32 = 14;
+const TK_GT: i32 = 15;
+const TK_EQ: i32 = 16;
+const TK_EQEQ: i32 = 17;
+const TK_NE: i32 = 18;
+const TK_PLUS: i32 = 19;
+const TK_MINUS: i32 = 20;
+const TK_STAR: i32 = 21;
+const TK_SLASH: i32 = 22;
+const TK_AMPERSAND: i32 = 23;
+const TK_PIPE: i32 = 24;
+
+// Keywords
+const TK_KW_FUNCTION: i32 = 30;
+const TK_KW_DECLARE: i32 = 31;
+const TK_KW_LET: i32 = 32;
+const TK_KW_CONST: i32 = 33;
+const TK_KW_RETURN: i32 = 34;
+const TK_KW_NULL: i32 = 35;
+const TK_KW_TRUE: i32 = 36;
+const TK_KW_FALSE: i32 = 37;
+const TK_KW_IF: i32 = 38;
+const TK_KW_ELSE: i32 = 39;
+const TK_KW_WHILE: i32 = 40;
+const TK_KW_FOR: i32 = 41;
+const TK_KW_BREAK: i32 = 42;
+const TK_KW_CONTINUE: i32 = 43;
+const TK_KW_IMPORT: i32 = 44;
+const TK_KW_EXPORT: i32 = 45;
+const TK_KW_FROM: i32 = 46;
+const TK_KW_AS: i32 = 47;
+const TK_KW_INTERFACE: i32 = 48;
+const TK_KW_TYPE: i32 = 49;
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function is_digit(c: i8): bool {
+    if (c >= 48) { 
+        if (c <= 57) { 
+            return true; 
+        } 
+    }
+    return false;
+}
+
+function is_alpha(c: i8): bool {
+    if (c >= 97) { 
+        if (c <= 122) { 
+            return true; 
+        } 
+    }
+    if (c >= 65) { 
+        if (c <= 90) { 
+            return true; 
+        } 
+    }
+    if (c == 95) { 
+        return true; 
+    }
+    return false;
+}
+
+function is_whitespace(c: i8): bool {
+    if (c == 32) { return true; }
+    if (c == 9) { return true; }
+    if (c == 10) { return true; }
+    if (c == 13) { return true; }
+    return false;
+}
+
+function match_keyword(src: ptr<i8>, start: i32, len: i32, keyword: ptr<i8>): bool {
+    let keywordLen = string_length(keyword);
+    if (len != keywordLen) { 
+        return false; 
+    }
+    
+    let i = 0;
+    while (i < len) {
+        let c1 = string_char_at(src, start + i);
+        let c2 = string_char_at(keyword, i);
+        if (c1 != c2) { 
+            return false; 
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+function get_keyword_kind(src: ptr<i8>, start: i32, len: i32): i32 {
+    if (len == 2) {
+        if (match_keyword(src, start, len, "if")) { return TK_KW_IF; }
+        if (match_keyword(src, start, len, "as")) { return TK_KW_AS; }
+    }
+    if (len == 3) {
+        if (match_keyword(src, start, len, "let")) { return TK_KW_LET; }
+        if (match_keyword(src, start, len, "for")) { return TK_KW_FOR; }
+    }
+    if (len == 4) {
+        if (match_keyword(src, start, len, "null")) { return TK_KW_NULL; }
+        if (match_keyword(src, start, len, "true")) { return TK_KW_TRUE; }
+        if (match_keyword(src, start, len, "else")) { return TK_KW_ELSE; }
+        if (match_keyword(src, start, len, "from")) { return TK_KW_FROM; }
+        if (match_keyword(src, start, len, "type")) { return TK_KW_TYPE; }
+    }
+    if (len == 5) {
+        if (match_keyword(src, start, len, "const")) { return TK_KW_CONST; }
+        if (match_keyword(src, start, len, "false")) { return TK_KW_FALSE; }
+        if (match_keyword(src, start, len, "while")) { return TK_KW_WHILE; }
+        if (match_keyword(src, start, len, "break")) { return TK_KW_BREAK; }
+    }
+    if (len == 6) {
+        if (match_keyword(src, start, len, "return")) { return TK_KW_RETURN; }
+        if (match_keyword(src, start, len, "import")) { return TK_KW_IMPORT; }
+        if (match_keyword(src, start, len, "export")) { return TK_KW_EXPORT; }
+    }
+    if (len == 7) {
+        if (match_keyword(src, start, len, "declare")) { return TK_KW_DECLARE; }
+    }
+    if (len == 8) {
+        if (match_keyword(src, start, len, "function")) { return TK_KW_FUNCTION; }
+        if (match_keyword(src, start, len, "continue")) { return TK_KW_CONTINUE; }
+    }
+    if (len == 9) {
+        if (match_keyword(src, start, len, "interface")) { return TK_KW_INTERFACE; }
+    }
+    
+    return TK_IDENTIFIER;
+}
+
+// ============================================================================
+// LEXER - Main Function
+// ============================================================================
+
+function lex(
+    src: ptr<i8>, 
+    srcLen: i32, 
+    tokens: ptr<i32>, 
+    starts: ptr<i32>, 
+    lens: ptr<i32>
+): i32 {
+    let pos = 0;
+    let count = 0;
+    let maxTokens = 1000;
+    
+    while (pos < srcLen) {
+        if (count >= maxTokens) { 
+            return count; 
+        }
+        
+        let c = string_char_at(src, pos);
+        let start = pos;
+        
+        // Skip whitespace
+        if (is_whitespace(c)) {
+            pos = pos + 1;
+        }
+        // Skip line comments
+        else if (c == 47) {
+            let next = string_char_at(src, pos + 1);
+            if (next == 47) {
+                pos = pos + 2;
+                while (pos < srcLen) {
+                    let ch = string_char_at(src, pos);
+                    if (ch == 10) {
+                        pos = pos + 1;
+                        break;
+                    }
+                    pos = pos + 1;
+                }
+            } else {
+                tokens[count] = TK_SLASH;
+                starts[count] = start;
+                lens[count] = 1;
+                count = count + 1;
+                pos = pos + 1;
+            }
+        }
+        // Numbers
+        else if (is_digit(c)) {
+            while (pos < srcLen) {
+                if (is_digit(string_char_at(src, pos))) {
+                    pos = pos + 1;
+                } else {
+                    break;
+                }
+            }
+            tokens[count] = TK_NUMBER;
+            starts[count] = start;
+            lens[count] = pos - start;
+            count = count + 1;
+        }
+        // Strings
+        else if (c == 34) {
+            pos = pos + 1;
+            while (pos < srcLen) {
+                let ch = string_char_at(src, pos);
+                if (ch == 34) {
+                    pos = pos + 1;
+                    break;
+                }
+                if (ch == 92) {
+                    pos = pos + 2;
+                } else {
+                    pos = pos + 1;
+                }
+            }
+            tokens[count] = TK_STRING;
+            starts[count] = start;
+            lens[count] = pos - start;
+            count = count + 1;
+        }
+        // Identifiers and keywords
+        else if (is_alpha(c)) {
+            while (pos < srcLen) {
+                let ch = string_char_at(src, pos);
+                if (is_alpha(ch) || is_digit(ch)) {
+                    pos = pos + 1;
+                } else {
+                    break;
+                }
+            }
+            
+            let wordLen = pos - start;
+            let kind = get_keyword_kind(src, start, wordLen);
+            
+            tokens[count] = kind;
+            starts[count] = start;
+            lens[count] = wordLen;
+            count = count + 1;
+        }
+        // Operators and punctuation
+        else if (c == 59) {
+            tokens[count] = TK_SEMICOLON;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 40) {
+            tokens[count] = TK_LPAREN;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 41) {
+            tokens[count] = TK_RPAREN;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 123) {
+            tokens[count] = TK_LBRACE;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 125) {
+            tokens[count] = TK_RBRACE;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 58) {
+            tokens[count] = TK_COLON;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 44) {
+            tokens[count] = TK_COMMA;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 46) {
+            tokens[count] = TK_DOT;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 91) {
+            tokens[count] = TK_LBRACKET;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 93) {
+            tokens[count] = TK_RBRACKET;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 60) {
+            tokens[count] = TK_LT;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 62) {
+            tokens[count] = TK_GT;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 61) {
+            let next = string_char_at(src, pos + 1);
+            if (next == 61) {
+                tokens[count] = TK_EQEQ;
+                starts[count] = start;
+                lens[count] = 2;
+                count = count + 1;
+                pos = pos + 2;
+            } else {
+                tokens[count] = TK_EQ;
+                starts[count] = start;
+                lens[count] = 1;
+                count = count + 1;
+                pos = pos + 1;
+            }
+        }
+        else if (c == 33) {
+            let next = string_char_at(src, pos + 1);
+            if (next == 61) {
+                tokens[count] = TK_NE;
+                starts[count] = start;
+                lens[count] = 2;
+                count = count + 1;
+                pos = pos + 2;
+            } else {
+                pos = pos + 1;
+            }
+        }
+        else if (c == 43) {
+            tokens[count] = TK_PLUS;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 45) {
+            tokens[count] = TK_MINUS;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 42) {
+            tokens[count] = TK_STAR;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 38) {
+            tokens[count] = TK_AMPERSAND;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else if (c == 124) {
+            tokens[count] = TK_PIPE;
+            starts[count] = start;
+            lens[count] = 1;
+            count = count + 1;
+            pos = pos + 1;
+        }
+        else {
+            pos = pos + 1;
+        }
+    }
+    
+    return count;
+}

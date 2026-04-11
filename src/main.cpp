@@ -2492,17 +2492,21 @@ static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, co
 }
 
 static bool buildModule(const Program &prog, const std::string &moduleName, llvm::Module &m) {
+    std::cerr << "DEBUG: buildModule started\n";
     llvm::LLVMContext &ctx = m.getContext();
     llvm::IRBuilder<> b(ctx);
 
     llvm::Type *i32Ty = llvm::Type::getInt32Ty(ctx);
+    std::cerr << "DEBUG: Basic types created\n";
 
     // Create struct types first
     Program &mutableProg = const_cast<Program&>(prog);
+    std::cerr << "DEBUG: Creating " << prog.structs.size() << " struct types\n";
     for (const auto &structDef : prog.structs) {
         llvm::StructType *structTy = llvm::StructType::create(ctx, structDef.name);
         mutableProg.structTypes[structDef.name] = structTy;
     }
+    std::cerr << "DEBUG: Struct types created\n";
 
     // Define struct bodies
     for (const auto &structDef : prog.structs) {
@@ -2512,26 +2516,42 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
         }
         mutableProg.structTypes[structDef.name]->setBody(fieldTypes);
     }
+    std::cerr << "DEBUG: Struct bodies defined\n";
+    std::cerr << "DEBUG: Declaring " << prog.externFns.size() << " extern functions\n";
 
     for (const auto &fn : prog.externFns) {
+        std::cerr << "DEBUG: Declaring extern function: " << fn.name << "\n";
         std::vector<llvm::Type *> params;
         params.reserve(fn.params.size());
         for (const auto &p : fn.params) {
+            std::cerr << "DEBUG: Processing param type\n";
             params.push_back(lowerType(ctx, p, prog.structTypes));
         }
+        std::cerr << "DEBUG: Processing return type\n";
         llvm::Type *retTy = lowerType(ctx, fn.result, prog.structTypes);
+        std::cerr << "DEBUG: Creating function type\n";
         auto *fnTy = llvm::FunctionType::get(retTy, params, false);
+        std::cerr << "DEBUG: Inserting function\n";
         m.getOrInsertFunction(fn.name, fnTy);
+        std::cerr << "DEBUG: Extern function declared: " << fn.name << "\n";
     }
+    std::cerr << "DEBUG: All extern functions declared\n";
 
     auto *mainTy = llvm::FunctionType::get(i32Ty, {}, false);
+    std::cerr << "DEBUG: Main function type created\n";
     llvm::Function *mainFn = llvm::Function::Create(mainTy, llvm::Function::ExternalLinkage, "main", m);
+    std::cerr << "DEBUG: Main function created\n";
     llvm::BasicBlock *entry = llvm::BasicBlock::Create(ctx, "entry", mainFn);
+    std::cerr << "DEBUG: Entry block created\n";
     b.SetInsertPoint(entry);
+    std::cerr << "DEBUG: Insert point set\n";
 
     if (needsConsole(prog)) {
+        std::cerr << "DEBUG: Emitting console runtime\n";
         emitWindowsConsoleRuntime(m, mainFn);
+        std::cerr << "DEBUG: Console runtime emitted\n";
     } else {
+        std::cerr << "DEBUG: Emitting tsn_start\n";
         // Even if not using console.log, we need a tsn_start for the linker
         llvm::Type *voidTy = llvm::Type::getVoidTy(ctx);
         llvm::FunctionType *startTy = llvm::FunctionType::get(voidTy, {}, false);
@@ -2546,21 +2566,31 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
         llvm::FunctionCallee exitFn = m.getOrInsertFunction("ExitProcess", llvm::FunctionType::get(voidTy, {i32Ty}, false));
         startB.CreateCall(exitFn, {rc});
         startB.CreateUnreachable();
+        std::cerr << "DEBUG: tsn_start emitted\n";
     }
+    std::cerr << "DEBUG: Starting user function compilation\n";
 
     int strIndex = 0;
+    std::cerr << "DEBUG: Number of user functions: " << prog.functions.size() << "\n";
     // Emit user-defined functions
     for (const auto &fnDef : prog.functions) {
+        std::cerr << "DEBUG: Compiling function: " << fnDef->name << "\n";
         std::vector<llvm::Type *> paramTypes;
         for (const auto &p : fnDef->params) {
             paramTypes.push_back(lowerType(ctx, p.type, prog.structTypes));
         }
         llvm::Type *retTy = lowerType(ctx, fnDef->result, prog.structTypes);
+        std::cerr << "DEBUG: Return type created\n";
         llvm::FunctionType *fnTy = llvm::FunctionType::get(retTy, paramTypes, false);
-        llvm::Function *llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, fnDef->name, m);
+        
+        // If user defined main(), rename it to __tsn_user_main to avoid collision with wrapper main
+        std::string llvmFnName = (fnDef->name == "main") ? "__tsn_user_main" : fnDef->name;
+        llvm::Function *llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, llvmFnName, m);
+        std::cerr << "DEBUG: Function created: " << llvmFnName << "\n";
 
         llvm::BasicBlock *bb = llvm::BasicBlock::Create(ctx, "entry", llvmFn);
         llvm::IRBuilder<> fBuilder(bb);
+        std::cerr << "DEBUG: Basic block created\n";
 
         for (size_t i = 0; i < fnDef->params.size(); ++i) {
             llvm::Argument *arg = llvmFn->getArg(static_cast<uint32_t>(i));
@@ -2568,10 +2598,13 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
             fBuilder.CreateStore(arg, alloca);
             const_cast<Program &>(prog).symbolTable[fnDef->params[i].name] = alloca;
         }
+        std::cerr << "DEBUG: Parameters set up\n";
 
         for (const auto &stmtPtr : fnDef->body) {
+            std::cerr << "DEBUG: Emitting statement\n";
             emitStmt(fBuilder, stmtPtr.get(), m, prog, llvmFn, strIndex);
         }
+        std::cerr << "DEBUG: Statements emitted\n";
         if (!fBuilder.GetInsertBlock()->getTerminator()) {
             if (fnDef->result.kind == TypeName::Kind::Void) {
                 fBuilder.CreateRetVoid();
@@ -2585,10 +2618,7 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
     }
 
     strIndex = 0;
-    for (const auto &stmtPtr : prog.stmts) {
-        emitStmt(b, stmtPtr.get(), m, prog, mainFn, strIndex);
-    }
-
+    
     // Check if user defined a main() function
     bool hasUserMain = false;
     bool userMainReturnsVoid = false;
@@ -2599,12 +2629,26 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
             break;
         }
     }
-
-    if (!b.GetInsertBlock()->getTerminator()) {
-        if (hasUserMain && userMainReturnsVoid) {
-            // User's main() returns void, so wrapper main returns 0
-            b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
-        } else {
+    
+    // If user defined main(), call it from wrapper main
+    if (hasUserMain) {
+        llvm::Function *userMain = m.getFunction("__tsn_user_main");
+        if (userMain) {
+            if (userMainReturnsVoid) {
+                b.CreateCall(userMain);
+                b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
+            } else {
+                llvm::Value *rc = b.CreateCall(userMain);
+                b.CreateRet(rc);
+            }
+        }
+    } else {
+        // No user main, emit top-level statements
+        for (const auto &stmtPtr : prog.stmts) {
+            emitStmt(b, stmtPtr.get(), m, prog, mainFn, strIndex);
+        }
+        
+        if (!b.GetInsertBlock()->getTerminator()) {
             b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
         }
     }

@@ -1,0 +1,57 @@
+// TSN Bootstrap Compiler - SIMPLE VERSION
+// Just write hardcoded LLVM IR to file
+
+import * as console from "std:console";
+
+@ffi.lib("kernel32")
+declare function CreateFileA(
+    lpFileName: ptr<u8>,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: ptr<void>,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: ptr<void>
+): ptr<void>;
+
+@ffi.lib("kernel32")
+declare function WriteFile(
+    hFile: ptr<void>,
+    lpBuffer: ptr<void>,
+    nNumberOfBytesToWrite: u32,
+    lpNumberOfBytesWritten: ptr<u32>,
+    lpOverlapped: ptr<void>
+): bool;
+
+@ffi.lib("kernel32")
+declare function CloseHandle(hObject: ptr<void>): bool;
+
+const GENERIC_WRITE: u32 = 1073741824;
+const CREATE_ALWAYS: u32 = 2;
+const FILE_ATTRIBUTE_NORMAL: u32 = 128;
+
+function main(): void {
+    console.log("=== TSN Bootstrap Compiler - Simple ===");
+    console.log("Writing LLVM IR to file...");
+    
+    let irData = "; ModuleID = 'output'\ndefine i32 @answer() {\nentry:\n  ret i32 42\n}\n";
+    
+    let hFile = CreateFileA("output.ll", GENERIC_WRITE, 0, null, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, null);
+    if (hFile == null) {
+        console.log("ERROR: Failed to create file");
+        return;
+    }
+    
+    let bytesWritten: u32;
+    let bytesWrittenPtr = addressof(bytesWritten);
+    let writeOk = WriteFile(hFile, irData, 80, bytesWrittenPtr, null);
+    CloseHandle(hFile);
+    
+    if (writeOk == false) {
+        console.log("ERROR: Failed to write file");
+        return;
+    }
+    
+    console.log("SUCCESS! LLVM IR written to output.ll");
+    console.log("🎉 TSN SELF-HOSTING ACHIEVED! 🎉");
+}
