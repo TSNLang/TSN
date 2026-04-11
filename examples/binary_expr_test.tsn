@@ -1,0 +1,20 @@
+// Test binary expressions
+function add_test(): i32 {
+    return 2 + 3;
+}
+
+function sub_test(): i32 {
+    return 10 - 4;
+}
+
+function mul_test(): i32 {
+    return 5 * 6;
+}
+
+function div_test(): i32 {
+    return 20 / 4;
+}
+
+function complex_test(): i32 {
+    return 2 + 3 * 4;
+}

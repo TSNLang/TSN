@@ -19,6 +19,16 @@ const AST_BLOCK: i32 = 15;
 const AST_FUNCTION: i32 = 20;
 const AST_PARAM: i32 = 21;
 
+// Token kinds (for operators)
+const TK_PLUS: i32 = 19;
+const TK_MINUS: i32 = 20;
+const TK_STAR: i32 = 21;
+const TK_SLASH: i32 = 22;
+const TK_EQEQ: i32 = 17;
+const TK_NE: i32 = 18;
+const TK_LT: i32 = 14;
+const TK_GT: i32 = 15;
+
 // ============================================================================
 // AST NODE STRUCTURE
 // ============================================================================
@@ -80,7 +90,8 @@ function codegen_expr(
     nodeIdx: i32,
     src: ptr<i8>,
     output: ptr<i8>,
-    pos: ptr<i32>
+    pos: ptr<i32>,
+    tempCounter: ptr<i32>
 ): void {
     if (nodes[nodeIdx].kind == AST_NUMBER) {
         let numStart = nodes[nodeIdx].value1;
@@ -91,6 +102,52 @@ function codegen_expr(
         let idStart = nodes[nodeIdx].value1;
         let idLen = nodes[nodeIdx].value2;
         buffer_append_substring(output, pos, src, idStart, idLen);
+    }
+    else if (nodes[nodeIdx].kind == AST_BINARY_OP) {
+        // Generate temp variable for result
+        buffer_append(output, pos, "%tmp");
+        
+        // Convert temp counter to string (simple: just use single digit for now)
+        let tempNum: i8[10];
+        let counter = tempCounter[0];
+        tempNum[0] = 48 + counter;  // ASCII '0' + counter
+        tempNum[1] = 0;
+        tempCounter[0] = counter + 1;
+        buffer_append(output, pos, tempNum);
+        
+        buffer_append(output, pos, " = ");
+        
+        // Get operator and operands
+        let leftIdx = nodes[nodeIdx].value1;
+        let rightIdx = nodes[nodeIdx].value2;
+        let op = nodes[nodeIdx].value3;
+        
+        // Generate operation
+        if (op == TK_PLUS) {
+            buffer_append(output, pos, "add i32 ");
+        } else if (op == TK_MINUS) {
+            buffer_append(output, pos, "sub i32 ");
+        } else if (op == TK_STAR) {
+            buffer_append(output, pos, "mul i32 ");
+        } else if (op == TK_SLASH) {
+            buffer_append(output, pos, "sdiv i32 ");
+        } else if (op == TK_EQEQ) {
+            buffer_append(output, pos, "icmp eq i32 ");
+        } else if (op == TK_NE) {
+            buffer_append(output, pos, "icmp ne i32 ");
+        } else if (op == TK_LT) {
+            buffer_append(output, pos, "icmp slt i32 ");
+        } else if (op == TK_GT) {
+            buffer_append(output, pos, "icmp sgt i32 ");
+        }
+        
+        // Generate left operand
+        codegen_expr(nodes, leftIdx, src, output, pos, tempCounter);
+        buffer_append(output, pos, ", ");
+        
+        // Generate right operand
+        codegen_expr(nodes, rightIdx, src, output, pos, tempCounter);
+        buffer_append(output, pos, "\n");
     }
 }
 
@@ -103,13 +160,14 @@ function codegen_statement(
     nodeIdx: i32,
     src: ptr<i8>,
     output: ptr<i8>,
-    pos: ptr<i32>
+    pos: ptr<i32>,
+    tempCounter: ptr<i32>
 ): void {
     if (nodes[nodeIdx].kind == AST_RETURN_STMT) {
         let exprIdx = nodes[nodeIdx].value1;
         
         buffer_append(output, pos, "  ret i32 ");
-        codegen_expr(nodes, exprIdx, src, output, pos);
+        codegen_expr(nodes, exprIdx, src, output, pos, tempCounter);
         buffer_append(output, pos, "\n");
     }
 }
@@ -123,7 +181,8 @@ function codegen_function(
     funcIdx: i32,
     src: ptr<i8>,
     output: ptr<i8>,
-    pos: ptr<i32>
+    pos: ptr<i32>,
+    tempCounter: ptr<i32>
 ): void {
     let nameStart = nodes[funcIdx].value1;
     let nameLen = nodes[funcIdx].value2;
@@ -136,7 +195,7 @@ function codegen_function(
     
     if (bodyStart < 100) {
         if (nodes[bodyStart].kind == AST_RETURN_STMT) {
-            codegen_statement(nodes, bodyStart, src, output, pos);
+            codegen_statement(nodes, bodyStart, src, output, pos, tempCounter);
         }
     }
     
@@ -156,13 +215,16 @@ export function codegen_program(
     let pos: i32[1];
     pos[0] = 0;
     
+    let tempCounter: i32[1];
+    tempCounter[0] = 0;
+    
     buffer_append(output, pos, "; ModuleID = 'tsn_output'\n");
     buffer_append(output, pos, "target triple = \"x86_64-pc-windows-msvc\"\n\n");
     
     let i = 0;
     while (i < nodeCount) {
         if (nodes[i].kind == AST_FUNCTION) {
-            codegen_function(nodes, i, src, output, pos);
+            codegen_function(nodes, i, src, output, pos, tempCounter);
         }
         i = i + 1;
     }

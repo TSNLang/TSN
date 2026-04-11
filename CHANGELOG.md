@@ -1,5 +1,59 @@
 # TSN Changelog
 
+## [0.5.0] - 2026-04-11
+
+### 🚀 Binary Expressions Complete!
+
+**TSN compiler now supports all basic arithmetic and comparison operators!**
+
+#### Added
+- **Binary Expression Support**:
+  - Arithmetic operators: `+`, `-`, `*`, `/`
+  - Comparison operators: `==`, `!=`, `<`, `>`
+  - Parser: `parse_expr()` function handles binary operations
+  - Codegen: Generates correct LLVM IR for all operators
+  - Temporary variable generation for intermediate results
+
+- **Parser Enhancements** (`src/Parser.tsn`):
+  - Added token constants for all operators
+  - Implemented `parse_primary_expr()` for operands
+  - Implemented `parse_expr()` for binary operations
+  - AST nodes store operator type in `value3` field
+
+- **Codegen Enhancements** (`src/Codegen.tsn`):
+  - LLVM arithmetic: `add i32`, `sub i32`, `mul i32`, `sdiv i32`
+  - LLVM comparisons: `icmp eq`, `icmp ne`, `icmp slt`, `icmp sgt`
+  - Temporary counter passed through call chain
+  - Recursive expression generation
+
+- **Test Files**:
+  - `examples/binary_expr_test.tsn` - Comprehensive operator tests
+  - All tests pass with correct results
+
+- **Documentation**:
+  - `BINARY_EXPR_COMPLETE.md` - Implementation details and test results
+  - Updated `SELF_HOSTING_PLAN.md` - Phase 1.1 marked complete
+
+#### Test Results
+- ✅ `2 + 3` → Returns 5
+- ✅ `10 - 4` → Returns 6
+- ✅ `5 * 6` → Returns 30
+- ✅ `20 / 4` → Returns 5
+- ✅ `5 == 5` → Returns true
+- ✅ `5 != 3` → Returns true
+- ✅ `3 < 5` → Returns true
+- ✅ `7 > 4` → Returns true
+
+#### Technical Notes
+- C++ bootstrap compiler includes constant folding optimization
+- Current implementation uses left-to-right evaluation (precedence TODO)
+- All operations assume `i32` type (type system TODO)
+- Comparisons return `i1` (boolean) type
+
+#### Progress
+- **Self-Hosting Progress: 40% → 50%**
+- Next Phase: Unary expressions (`-x`, `!x`, `&x`)
+
 ## [0.4.0] - 2026-04-11
 
 ### 🎊 MAJOR MILESTONE: Self-Hosting Complete!

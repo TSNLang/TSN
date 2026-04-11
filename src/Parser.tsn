@@ -30,6 +30,14 @@ const TK_LBRACE: i32 = 7;
 const TK_RBRACE: i32 = 8;
 const TK_COLON: i32 = 9;
 const TK_COMMA: i32 = 10;
+const TK_LT: i32 = 14;
+const TK_GT: i32 = 15;
+const TK_EQEQ: i32 = 17;
+const TK_NE: i32 = 18;
+const TK_PLUS: i32 = 19;
+const TK_MINUS: i32 = 20;
+const TK_STAR: i32 = 21;
+const TK_SLASH: i32 = 22;
 const TK_KW_FUNCTION: i32 = 30;
 const TK_KW_LET: i32 = 32;
 const TK_KW_RETURN: i32 = 34;
@@ -115,7 +123,36 @@ function parse_expr(
     nodes: ptr<ASTNode>,
     nodeCount: ptr<i32>
 ): i32 {
-    return parse_primary_expr(tokens, starts, lens, pos, nodes, nodeCount);
+    // Parse left operand (primary expression)
+    let left = parse_primary_expr(tokens, starts, lens, pos, nodes, nodeCount);
+    
+    // Check for binary operator
+    let currentPos = pos[0];
+    let op = tokens[currentPos];
+    
+    // Check if it's a binary operator
+    if (op == TK_PLUS || op == TK_MINUS || op == TK_STAR || op == TK_SLASH || 
+        op == TK_EQEQ || op == TK_NE || op == TK_LT || op == TK_GT) {
+        
+        // Consume operator
+        pos[0] = currentPos + 1;
+        
+        // Parse right operand
+        let right = parse_primary_expr(tokens, starts, lens, pos, nodes, nodeCount);
+        
+        // Create binary operation node
+        let binOpIdx = nodeCount[0];
+        nodes[binOpIdx].kind = AST_BINARY_OP;
+        nodes[binOpIdx].value1 = left;
+        nodes[binOpIdx].value2 = right;
+        nodes[binOpIdx].value3 = op;
+        nodeCount[0] = binOpIdx + 1;
+        
+        return binOpIdx;
+    }
+    
+    // No operator, just return the primary expression
+    return left;
 }
 
 // ============================================================================
