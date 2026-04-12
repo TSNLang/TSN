@@ -45,6 +45,8 @@ const TK_AMPERSAND: i32 = 24;
 const TK_KW_FUNCTION: i32 = 30;
 const TK_KW_LET: i32 = 32;
 const TK_KW_RETURN: i32 = 34;
+const TK_KW_IF: i32 = 35;
+const TK_KW_WHILE: i32 = 36;
 
 // ============================================================================
 // AST NODE STRUCTURE (not exported - duplicated in Codegen)
@@ -306,6 +308,156 @@ function parse_assignment(
     return assignIdx;
 }
 
+function parse_if_stmt(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>,
+    src: ptr<i8>
+): i32 {
+    let currentPos = pos[0];
+    
+    if (tokens[currentPos] != TK_KW_IF) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Expect (
+    if (tokens[currentPos] != TK_LPAREN) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Parse condition expression
+    pos[0] = currentPos;
+    let condExpr = parse_expr(tokens, starts, lens, pos, nodes, nodeCount);
+    currentPos = pos[0];
+    
+    // Expect )
+    if (tokens[currentPos] != TK_RPAREN) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Expect {
+    if (tokens[currentPos] != TK_LBRACE) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    pos[0] = currentPos;
+    let bodyStartIdx = nodeCount[0];
+    
+    // Parse statements in body
+    while (currentPos < 1000) {
+        if (tokens[currentPos] == TK_RBRACE) {
+            currentPos = currentPos + 1;
+            break;
+        }
+        
+        pos[0] = currentPos;
+        let stmtIdx = parse_statement(tokens, starts, lens, pos, nodes, nodeCount, src);
+        currentPos = pos[0];
+        
+        if (stmtIdx == 0) {
+            if (tokens[currentPos] == TK_RBRACE) {
+                currentPos = currentPos + 1;
+                break;
+            }
+            currentPos = currentPos + 1;
+        }
+    }
+    
+    pos[0] = currentPos;
+    
+    // Create if statement node
+    let ifIdx = nodeCount[0];
+    nodes[ifIdx].kind = AST_IF_STMT;
+    nodes[ifIdx].value1 = condExpr;
+    nodes[ifIdx].value2 = bodyStartIdx;
+    nodes[ifIdx].value3 = 0;  // No else for now
+    nodeCount[0] = ifIdx + 1;
+    
+    return ifIdx;
+}
+
+function parse_while_stmt(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>,
+    src: ptr<i8>
+): i32 {
+    let currentPos = pos[0];
+    
+    if (tokens[currentPos] != TK_KW_WHILE) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Expect (
+    if (tokens[currentPos] != TK_LPAREN) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Parse condition expression
+    pos[0] = currentPos;
+    let condExpr = parse_expr(tokens, starts, lens, pos, nodes, nodeCount);
+    currentPos = pos[0];
+    
+    // Expect )
+    if (tokens[currentPos] != TK_RPAREN) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    // Expect {
+    if (tokens[currentPos] != TK_LBRACE) {
+        return 0;
+    }
+    currentPos = currentPos + 1;
+    
+    pos[0] = currentPos;
+    let bodyStartIdx = nodeCount[0];
+    
+    // Parse statements in body
+    while (currentPos < 1000) {
+        if (tokens[currentPos] == TK_RBRACE) {
+            currentPos = currentPos + 1;
+            break;
+        }
+        
+        pos[0] = currentPos;
+        let stmtIdx = parse_statement(tokens, starts, lens, pos, nodes, nodeCount, src);
+        currentPos = pos[0];
+        
+        if (stmtIdx == 0) {
+            if (tokens[currentPos] == TK_RBRACE) {
+                currentPos = currentPos + 1;
+                break;
+            }
+            currentPos = currentPos + 1;
+        }
+    }
+    
+    pos[0] = currentPos;
+    
+    // Create while statement node
+    let whileIdx = nodeCount[0];
+    nodes[whileIdx].kind = AST_WHILE_STMT;
+    nodes[whileIdx].value1 = condExpr;
+    nodes[whileIdx].value2 = bodyStartIdx;
+    nodes[whileIdx].value3 = 0;
+    nodeCount[0] = whileIdx + 1;
+    
+    return whileIdx;
+}
+
 function parse_return_stmt(
     tokens: ptr<i32>,
     starts: ptr<i32>,
@@ -356,6 +508,14 @@ function parse_statement(
     
     if (tokens[currentPos] == TK_KW_LET) {
         return parse_var_decl(tokens, starts, lens, pos, nodes, nodeCount, src);
+    }
+    
+    if (tokens[currentPos] == TK_KW_IF) {
+        return parse_if_stmt(tokens, starts, lens, pos, nodes, nodeCount, src);
+    }
+    
+    if (tokens[currentPos] == TK_KW_WHILE) {
+        return parse_while_stmt(tokens, starts, lens, pos, nodes, nodeCount, src);
     }
     
     // Try assignment (identifier = expr;)

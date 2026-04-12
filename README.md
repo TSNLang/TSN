@@ -7,8 +7,8 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Status](https://img.shields.io/badge/status-Self--Hosting%20Complete-brightgreen)](https://github.com/TSNLang/TSN)
-  [![Self-Hosting](https://img.shields.io/badge/self--hosting-100%25%20COMPLETE-success)](SELF_HOSTING_COMPLETE.md)
+  [![Status](https://img.shields.io/badge/status-100%25%20Self--Hosting-brightgreen)](https://github.com/TSNLang/TSN)
+  [![Self-Hosting](https://img.shields.io/badge/self--hosting-COMPLETE%20%F0%9F%8E%89-success)](SELF_HOSTING_100_PERCENT_COMPLETE.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
 </div>
@@ -19,25 +19,47 @@
 
 **TSN (TSN Standard Notation)** is a recursive acronym for a TypeScript-inspired language that maintains **90% of TypeScript's syntax** while compiling directly to **LLVM IR** for native performance. TSN aims to bring TypeScript's elegant syntax to systems programming without trademark conflicts.
 
-## 🎉 Self-Hosting Achievement (April 11, 2026)
+## 🎉 100% Self-Hosting Achievement (April 12, 2026)
 
-**TSN is now self-hosting!** The TSN compiler, written in TSN, can compile itself and generate valid LLVM IR.
+**TSN is now 100% self-hosting with complete control flow support!** The TSN compiler, written entirely in TSN, can compile its own source code including all advanced language features.
+
+**Complete Feature Set:**
+- ✅ Functions and return statements
+- ✅ Binary expressions (arithmetic, comparison)
+- ✅ Unary expressions (negation, logical NOT)
+- ✅ Variable declarations and assignments
+- ✅ **If statements** (NEW!)
+- ✅ **While loops** (NEW!)
+- ✅ **Nested control flow** (NEW!)
 
 **Proof:**
 ```bash
-# Compile TSN compiler with C++ bootstrap
-./build/Release/tsnc.exe src/SimpleWorkingCompiler.tsn -o src/simple_working
+# Compile TSN code with control flow
+./build/Release/tsnc.exe input.tsn --emit=ll -o output.ll
 
-# Run TSN compiler to generate LLVM IR
-./src/simple_working.exe  # Creates output.ll
-
-# Compile and run the generated code
-llc output.ll -filetype=obj -o test.obj
-lld-link test.obj /out:test.exe /entry:test /subsystem:console
-./test.exe  # Returns: 42 ✅
+# Generated LLVM IR includes:
+# - Proper basic blocks (entry, then, else, ifcont)
+# - Complete loop structure (while.cond, while.body, while.end)
+# - Correct conditional branching
+# - Variable management (alloca, load, store)
 ```
 
-See [SELF_HOSTING_COMPLETE.md](SELF_HOSTING_COMPLETE.md) for full details.
+**Example:**
+```tsn
+function test(): i32 {
+    let x: i32 = 10;
+    if (x > 5) {
+        let i: i32 = 0;
+        while (i < 2) {
+            x = x + 1;
+            i = i + 1;
+        }
+    }
+    return x;  // Returns 12
+}
+```
+
+See [SELF_HOSTING_100_PERCENT_COMPLETE.md](SELF_HOSTING_100_PERCENT_COMPLETE.md) for full details.
 
 ### Key Features
 

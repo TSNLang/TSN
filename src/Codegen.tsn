@@ -254,6 +254,129 @@ function codegen_statement(
         buffer_append_substring(output, pos, src, nameStart, nameLen);
         buffer_append(output, pos, ", align 4\n");
     }
+    else if (nodes[nodeIdx].kind == AST_IF_STMT) {
+        // If statement: if (condition) { ... }
+        let condExpr = nodes[nodeIdx].value1;
+        let bodyStart = nodes[nodeIdx].value2;
+        
+        // Generate condition evaluation
+        buffer_append(output, pos, "  %cond");
+        
+        // Generate temp counter for condition
+        let tempNum: i8[10];
+        let counter = tempCounter[0];
+        tempNum[0] = 48 + counter;
+        tempNum[1] = 0;
+        tempCounter[0] = counter + 1;
+        buffer_append(output, pos, tempNum);
+        
+        buffer_append(output, pos, " = ");
+        codegen_expr(nodes, condExpr, src, output, pos, tempCounter);
+        buffer_append(output, pos, "\n");
+        
+        // Generate branch
+        buffer_append(output, pos, "  br i1 %cond");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ", label %if_then");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ", label %if_end");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, "\n\n");
+        
+        // Generate if_then block
+        buffer_append(output, pos, "if_then");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ":\n");
+        
+        // Generate body statements
+        let i = bodyStart;
+        while (i < 100) {
+            if (nodes[i].kind == AST_RETURN_STMT || 
+                nodes[i].kind == AST_VAR_DECL || 
+                nodes[i].kind == AST_ASSIGNMENT ||
+                nodes[i].kind == AST_IF_STMT ||
+                nodes[i].kind == AST_WHILE_STMT) {
+                codegen_statement(nodes, i, src, output, pos, tempCounter);
+                i = i + 1;
+            } else {
+                break;
+            }
+        }
+        
+        buffer_append(output, pos, "  br label %if_end");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, "\n\n");
+        
+        // Generate if_end block
+        buffer_append(output, pos, "if_end");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ":\n");
+    }
+    else if (nodes[nodeIdx].kind == AST_WHILE_STMT) {
+        // While statement: while (condition) { ... }
+        let condExpr = nodes[nodeIdx].value1;
+        let bodyStart = nodes[nodeIdx].value2;
+        
+        // Generate temp counter for labels
+        let tempNum: i8[10];
+        let counter = tempCounter[0];
+        tempNum[0] = 48 + counter;
+        tempNum[1] = 0;
+        tempCounter[0] = counter + 1;
+        
+        // Branch to condition check
+        buffer_append(output, pos, "  br label %while_cond");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, "\n\n");
+        
+        // Generate while_cond block
+        buffer_append(output, pos, "while_cond");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ":\n");
+        
+        buffer_append(output, pos, "  %cond");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, " = ");
+        codegen_expr(nodes, condExpr, src, output, pos, tempCounter);
+        buffer_append(output, pos, "\n");
+        
+        buffer_append(output, pos, "  br i1 %cond");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ", label %while_body");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ", label %while_end");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, "\n\n");
+        
+        // Generate while_body block
+        buffer_append(output, pos, "while_body");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ":\n");
+        
+        // Generate body statements
+        let i = bodyStart;
+        while (i < 100) {
+            if (nodes[i].kind == AST_RETURN_STMT || 
+                nodes[i].kind == AST_VAR_DECL || 
+                nodes[i].kind == AST_ASSIGNMENT ||
+                nodes[i].kind == AST_IF_STMT ||
+                nodes[i].kind == AST_WHILE_STMT) {
+                codegen_statement(nodes, i, src, output, pos, tempCounter);
+                i = i + 1;
+            } else {
+                break;
+            }
+        }
+        
+        buffer_append(output, pos, "  br label %while_cond");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, "\n\n");
+        
+        // Generate while_end block
+        buffer_append(output, pos, "while_end");
+        buffer_append(output, pos, tempNum);
+        buffer_append(output, pos, ":\n");
+    }
 }
 
 // ============================================================================
@@ -282,7 +405,9 @@ function codegen_function(
     while (i < 100) {
         if (nodes[i].kind == AST_RETURN_STMT || 
             nodes[i].kind == AST_VAR_DECL || 
-            nodes[i].kind == AST_ASSIGNMENT) {
+            nodes[i].kind == AST_ASSIGNMENT ||
+            nodes[i].kind == AST_IF_STMT ||
+            nodes[i].kind == AST_WHILE_STMT) {
             codegen_statement(nodes, i, src, output, pos, tempCounter);
             i = i + 1;
         } else {
