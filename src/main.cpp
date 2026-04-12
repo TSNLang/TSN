@@ -2062,13 +2062,29 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
                 val.pop_back();
             }
             
-            // Parse as 32-bit integer by default
-            if (isUnsigned) {
-                uint32_t ival = static_cast<uint32_t>(std::stoul(val));
-                return llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), ival);
-            } else {
-                int32_t ival = static_cast<int32_t>(std::stol(val));
-                return llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), ival, true);
+            // Parse as 32-bit integer
+            // Use stoul to handle large unsigned values, then cast appropriately
+            try {
+                uint64_t uval = std::stoull(val);
+                
+                if (isUnsigned) {
+                    // Unsigned: use full 32-bit range (0 to 4294967295)
+                    uint32_t ival = static_cast<uint32_t>(uval);
+                    return llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), ival, false);
+                } else {
+                    // Signed: check if value fits in signed range
+                    if (uval <= static_cast<uint64_t>(INT32_MAX)) {
+                        int32_t ival = static_cast<int32_t>(uval);
+                        return llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), ival, true);
+                    } else {
+                        // Value too large for signed i32, treat as unsigned
+                        uint32_t ival = static_cast<uint32_t>(uval);
+                        return llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), ival, false);
+                    }
+                }
+            } catch (const std::exception &e) {
+                std::cerr << "ERROR: Failed to parse number: " << val << " - " << e.what() << "\n";
+                return llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), 0);
             }
         }
     }
@@ -3354,8 +3370,18 @@ static bool buildModuleWithImports(const Program &mainProg, const std::string &m
             mutableMainProg.symbolTable[fnDef->params[i].name] = alloca;
         }
 
-        for (const auto &stmtPtr : fnDef->body) {
-            emitStmt(fBuilder, stmtPtr.get(), m, mainProg, llvmFn, strIndex);
+        for (size_t stmtIdx = 0; stmtIdx < fnDef->body.size(); ++stmtIdx) {
+            std::cerr << "DEBUG:   Emitting statement " << stmtIdx << " of " << fnDef->body.size() << "\n";
+            std::cerr.flush();
+            try {
+                emitStmt(fBuilder, fnDef->body[stmtIdx].get(), m, mainProg, llvmFn, strIndex);
+            } catch (const std::exception &e) {
+                std::cerr << "ERROR: Exception while emitting statement: " << e.what() << "\n";
+                return false;
+            } catch (...) {
+                std::cerr << "ERROR: Unknown exception while emitting statement\n";
+                return false;
+            }
         }
         
         if (!fBuilder.GetInsertBlock()->getTerminator()) {
@@ -3369,30 +3395,40 @@ static bool buildModuleWithImports(const Program &mainProg, const std::string &m
         }
     }
     
+    std::cerr << "DEBUG: All functions compiled successfully\n";
+    std::cerr.flush();
+    
     // Check if user defined a main() function
+    std::cerr << "DEBUG: Checking for user main() function\n";
     bool hasUserMain = false;
     bool userMainReturnsVoid = false;
     for (const auto &fnDef : mainProg.functions) {
         if (fnDef->name == "main") {
             hasUserMain = true;
             userMainReturnsVoid = (fnDef->result.kind == TypeName::Kind::Void);
+            std::cerr << "DEBUG: Found user main(), returns void: " << userMainReturnsVoid << "\n";
             break;
         }
     }
     
     // If user defined main(), call it from wrapper main
+    std::cerr << "DEBUG: Creating wrapper main, hasUserMain=" << hasUserMain << "\n";
     if (hasUserMain) {
         llvm::Function *userMain = m.getFunction("__tsn_user_main");
+        std::cerr << "DEBUG: Looking up __tsn_user_main: " << (userMain ? "found" : "not found") << "\n";
         if (userMain) {
             if (userMainReturnsVoid) {
+                std::cerr << "DEBUG: Calling void main\n";
                 b.CreateCall(userMain);
                 b.CreateRet(llvm::ConstantInt::get(i32Ty, 0));
             } else {
+                std::cerr << "DEBUG: Calling non-void main\n";
                 llvm::Value *rc = b.CreateCall(userMain);
                 b.CreateRet(rc);
             }
         }
     } else {
+        std::cerr << "DEBUG: No user main, emitting top-level statements\n";
         // No user main, emit top-level statements
         for (const auto &stmtPtr : mainProg.stmts) {
             emitStmt(b, stmtPtr.get(), m, mainProg, mainFn, strIndex);
@@ -3403,6 +3439,7 @@ static bool buildModuleWithImports(const Program &mainProg, const std::string &m
         }
     }
 
+    std::cerr << "DEBUG: buildModuleWithImports completed successfully\n";
     return true;
 }
 
@@ -3552,20 +3589,37 @@ int main(int argc, char **argv) {
 
     llvm::LLVMContext ctx;
     llvm::Module m(args.inputPath, ctx);
+    std::cerr << "DEBUG: Calling buildModuleWithImports\n";
     if (!tsn::buildModuleWithImports(prog, args.inputPath, m, loadedModules)) {
+        std::cerr << "ERROR: buildModuleWithImports failed\n";
         return 1;
     }
+    std::cerr << "DEBUG: buildModuleWithImports succeeded\n";
 
     if (args.emit == "ll") {
+        std::cerr << "DEBUG: Emitting LLVM IR\n";
         if (!args.outputPath.empty()) {
             std::string ir;
             llvm::raw_string_ostream irOut(ir);
-            m.print(irOut, nullptr);
-            irOut.flush();
+            std::cerr << "DEBUG: Calling m.print()\n";
+            std::cerr.flush();
+            try {
+                m.print(irOut, nullptr);
+                irOut.flush();
+                std::cerr << "DEBUG: m.print() succeeded, IR size: " << ir.size() << " bytes\n";
+            } catch (const std::exception &e) {
+                std::cerr << "ERROR: Exception during m.print(): " << e.what() << "\n";
+                return 1;
+            } catch (...) {
+                std::cerr << "ERROR: Unknown exception during m.print()\n";
+                return 1;
+            }
+            std::cerr << "DEBUG: Writing to file: " << args.outputPath << "\n";
             if (!tsn::writeTextFile(args.outputPath, ir)) {
                 std::cerr << "error: failed to open output file\n";
                 return 1;
             }
+            std::cerr << "DEBUG: File written successfully\n";
             return 0;
         }
         m.print(llvm::outs(), nullptr);
