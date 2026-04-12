@@ -3,6 +3,20 @@
 // Part of the TSN self-hosting compiler
 
 // ============================================================================
+// FORWARD DECLARATIONS
+// ============================================================================
+
+declare function parse_statement(
+    tokens: ptr<i32>,
+    starts: ptr<i32>,
+    lens: ptr<i32>,
+    pos: ptr<i32>,
+    nodes: ptr<ASTNode>,
+    nodeCount: ptr<i32>,
+    src: ptr<i8>
+): i32;
+
+// ============================================================================
 // AST NODE KINDS (not exported - duplicated in Codegen)
 // ============================================================================
 

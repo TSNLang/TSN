@@ -1,0 +1,14 @@
+// Test forward function declarations
+
+// Forward declaration
+declare function helper(x: i32): i32;
+
+function main_func(): i32 {
+    let result = helper(5);
+    return result;
+}
+
+// Actual implementation
+function helper(x: i32): i32 {
+    return x * 2;
+}

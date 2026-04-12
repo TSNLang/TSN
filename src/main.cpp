@@ -592,6 +592,12 @@ struct ExternFunctionDecl {
     TypeName result;
 };
 
+struct ForwardFunctionDecl {
+    std::string name;
+    std::vector<FunctionParam> params;
+    TypeName result;
+};
+
 struct StructField {
     std::string name;
     TypeName type;
@@ -618,6 +624,7 @@ struct ImportDecl {
 struct Program {
     std::vector<std::unique_ptr<Stmt>> stmts;
     std::vector<ExternFunctionDecl> externFns;
+    std::vector<ForwardFunctionDecl> forwardFns;  // Forward declarations
     std::vector<std::unique_ptr<struct FunctionDef>> functions;
     std::vector<StructDef> structs;
     std::vector<ImportDecl> imports;
@@ -821,18 +828,39 @@ private:
             return false;
         }
 
-        ExternFunctionDecl fn;
-        fn.name = tok_.text;
-        fn.lib = std::move(dec.lib);
+        std::string funcName = tok_.text;
         advance();
 
-        if (!consume(TokenKind::LParen, "expected '('") || !parseParamList(fn.params) ||
-            !consume(TokenKind::RParen, "expected ')'") || !consume(TokenKind::Colon, "expected ':'") ||
-            !parseType(fn.result) || !consume(TokenKind::Semicolon, "expected ';'")) {
-            return false;
+        // Check if this is an extern declaration (has @ffi.lib) or forward declaration
+        bool isExtern = !dec.lib.empty();
+
+        if (isExtern) {
+            // Parse as extern function (FFI)
+            ExternFunctionDecl fn;
+            fn.name = funcName;
+            fn.lib = std::move(dec.lib);
+
+            if (!consume(TokenKind::LParen, "expected '('") || !parseParamList(fn.params) ||
+                !consume(TokenKind::RParen, "expected ')'") || !consume(TokenKind::Colon, "expected ':'") ||
+                !parseType(fn.result) || !consume(TokenKind::Semicolon, "expected ';'")) {
+                return false;
+            }
+
+            prog.externFns.push_back(std::move(fn));
+        } else {
+            // Parse as forward function declaration
+            ForwardFunctionDecl fn;
+            fn.name = funcName;
+
+            if (!consume(TokenKind::LParen, "expected '('") || !parseFunctionParamList(fn.params) ||
+                !consume(TokenKind::RParen, "expected ')'") || !consume(TokenKind::Colon, "expected ':'") ||
+                !parseType(fn.result) || !consume(TokenKind::Semicolon, "expected ';'")) {
+                return false;
+            }
+
+            prog.forwardFns.push_back(std::move(fn));
         }
 
-        prog.externFns.push_back(std::move(fn));
         return true;
     }
 
@@ -889,6 +917,35 @@ private:
                 return false;
             }
             out.push_back(std::move(t));
+            if (tok_.kind == TokenKind::Comma) {
+                advance();
+                continue;
+            }
+            return true;
+        }
+    }
+
+    bool parseFunctionParamList(std::vector<FunctionParam> &out) {
+        if (tok_.kind == TokenKind::RParen) {
+            return true;
+        }
+        while (true) {
+            if (!expect(TokenKind::Identifier, "expected parameter name")) {
+                return false;
+            }
+            std::string paramName = tok_.text;
+            advance();
+            if (!consume(TokenKind::Colon, "expected ':'")) {
+                return false;
+            }
+            TypeName paramType;
+            if (!parseType(paramType)) {
+                return false;
+            }
+            FunctionParam param;
+            param.name = std::move(paramName);
+            param.type = std::move(paramType);
+            out.push_back(std::move(param));
             if (tok_.kind == TokenKind::Comma) {
                 advance();
                 continue;
@@ -1846,6 +1903,18 @@ static bool emitLlvmIr(const Program &prog, const std::string &moduleName, llvm:
         params.reserve(fn.params.size());
         for (const auto &p : fn.params) {
             params.push_back(lowerType(ctx, p, prog.structTypes));
+        }
+        llvm::Type *retTy = lowerType(ctx, fn.result, prog.structTypes);
+        auto *fnTy = llvm::FunctionType::get(retTy, params, false);
+        m.getOrInsertFunction(fn.name, fnTy);
+    }
+
+    // Declare forward functions (TSN function declarations)
+    for (const auto &fn : prog.forwardFns) {
+        std::vector<llvm::Type *> params;
+        params.reserve(fn.params.size());
+        for (const auto &p : fn.params) {
+            params.push_back(lowerType(ctx, p.type, prog.structTypes));
         }
         llvm::Type *retTy = lowerType(ctx, fn.result, prog.structTypes);
         auto *fnTy = llvm::FunctionType::get(retTy, params, false);
@@ -3093,12 +3162,36 @@ static bool buildModuleWithImports(const Program &mainProg, const std::string &m
         m.getOrInsertFunction(fn.name, fnTy);
     }
     
+    // Declare forward functions from main program
+    for (const auto &fn : mainProg.forwardFns) {
+        std::vector<llvm::Type *> params;
+        for (const auto &p : fn.params) {
+            params.push_back(lowerType(ctx, p.type, mutableMainProg.structTypes));
+        }
+        llvm::Type *retTy = lowerType(ctx, fn.result, mutableMainProg.structTypes);
+        auto *fnTy = llvm::FunctionType::get(retTy, params, false);
+        m.getOrInsertFunction(fn.name, fnTy);
+    }
+    
     // Declare extern functions from imported modules
     for (const auto &[path, module] : loadedModules) {
         for (const auto &fn : module->externFns) {
             std::vector<llvm::Type *> params;
             for (const auto &p : fn.params) {
                 params.push_back(lowerType(ctx, p, mutableMainProg.structTypes));
+            }
+            llvm::Type *retTy = lowerType(ctx, fn.result, mutableMainProg.structTypes);
+            auto *fnTy = llvm::FunctionType::get(retTy, params, false);
+            m.getOrInsertFunction(fn.name, fnTy);
+        }
+    }
+    
+    // Declare forward functions from imported modules
+    for (const auto &[path, module] : loadedModules) {
+        for (const auto &fn : module->forwardFns) {
+            std::vector<llvm::Type *> params;
+            for (const auto &p : fn.params) {
+                params.push_back(lowerType(ctx, p.type, mutableMainProg.structTypes));
             }
             llvm::Type *retTy = lowerType(ctx, fn.result, mutableMainProg.structTypes);
             auto *fnTy = llvm::FunctionType::get(retTy, params, false);
