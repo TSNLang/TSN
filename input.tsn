@@ -1,11 +1,10 @@
-function test_control_flow(): i32 {
-    let x: i32 = 10;
-    if (x > 5) {
-        let i: i32 = 0;
-        while (i < 2) {
-            x = x + 1;
-            i = i + 1;
-        }
-    }
-    return x;
+// Simple test program for bootstrap compiler
+
+function answer(): i32 {
+    return 42;
+}
+
+function main(): i32 {
+    let result = answer();
+    return result;
 }
