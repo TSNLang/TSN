@@ -74,6 +74,8 @@ enum class TokenKind {
     KwConst,
     KwReturn,
     KwNull,
+    KwTrue,
+    KwFalse,
     KwType,
     KwIf,
     KwElse,
@@ -137,6 +139,12 @@ public:
             }
             if (text == "null") {
                 return Token{TokenKind::KwNull, std::move(text), start};
+            }
+            if (text == "true") {
+                return Token{TokenKind::KwTrue, std::move(text), start};
+            }
+            if (text == "false") {
+                return Token{TokenKind::KwFalse, std::move(text), start};
             }
             if (text == "type") {
                 return Token{TokenKind::KwType, std::move(text), start};
@@ -466,6 +474,10 @@ struct StringLiteral final : Expr {
 
 struct NullLiteral final : Expr {
     TypeName type;
+};
+
+struct BoolLiteral final : Expr {
+    bool value;
 };
 
 struct Identifier final : Expr {
@@ -1604,6 +1616,16 @@ private:
             advance();
             auto e = std::make_unique<NullLiteral>();
             res = std::optional<std::unique_ptr<Expr>>(std::move(e));
+        } else if (tok_.kind == TokenKind::KwTrue) {
+            advance();
+            auto e = std::make_unique<BoolLiteral>();
+            e->value = true;
+            res = std::optional<std::unique_ptr<Expr>>(std::move(e));
+        } else if (tok_.kind == TokenKind::KwFalse) {
+            advance();
+            auto e = std::make_unique<BoolLiteral>();
+            e->value = false;
+            res = std::optional<std::unique_ptr<Expr>>(std::move(e));
         } else if (tok_.kind == TokenKind::Identifier) {
             std::string name = tok_.text;
 
@@ -2022,6 +2044,11 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
     if (const auto *nullLit = dynamic_cast<const NullLiteral *>(e)) {
         llvm::LLVMContext &ctx = m.getContext();
         return llvm::ConstantPointerNull::get(llvm::PointerType::getUnqual(ctx));
+    }
+
+    if (const auto *boolLit = dynamic_cast<const BoolLiteral *>(e)) {
+        llvm::LLVMContext &ctx = m.getContext();
+        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(ctx), boolLit->value ? 1 : 0);
     }
 
     if (const auto *ident = dynamic_cast<const Identifier *>(e)) {

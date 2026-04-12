@@ -1,0 +1,16 @@
+// Test boolean literals
+
+function test_bool(): i32 {
+    let t = true;
+    let f = false;
+    
+    if (t == true) {
+        return 1;
+    }
+    
+    if (f == false) {
+        return 2;
+    }
+    
+    return 0;
+}
