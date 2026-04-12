@@ -81,6 +81,8 @@ enum class TokenKind {
     KwElse,
     KwWhile,
     KwFor,
+    KwBreak,
+    KwContinue,
     KwInterface,
     KwClass,
     KwImport,
@@ -160,6 +162,12 @@ public:
             }
             if (text == "for") {
                 return Token{TokenKind::KwFor, std::move(text), start};
+            }
+            if (text == "break") {
+                return Token{TokenKind::KwBreak, std::move(text), start};
+            }
+            if (text == "continue") {
+                return Token{TokenKind::KwContinue, std::move(text), start};
             }
             if (text == "interface") {
                 return Token{TokenKind::KwInterface, std::move(text), start};
@@ -453,6 +461,12 @@ struct MemberAssignStmt final : Stmt {
 
 struct ReturnStmt final : Stmt {
     std::unique_ptr<struct Expr> value;
+};
+
+struct BreakStmt final : Stmt {
+};
+
+struct ContinueStmt final : Stmt {
 };
 
 struct Expr {
@@ -1497,6 +1511,24 @@ private:
             return std::optional<std::unique_ptr<Stmt>>(std::move(s));
         }
 
+        if (tok_.kind == TokenKind::KwBreak) {
+            advance();
+            if (!consume(TokenKind::Semicolon, "expected ';'")) {
+                return std::nullopt;
+            }
+            auto s = std::make_unique<BreakStmt>();
+            return std::optional<std::unique_ptr<Stmt>>(std::move(s));
+        }
+
+        if (tok_.kind == TokenKind::KwContinue) {
+            advance();
+            if (!consume(TokenKind::Semicolon, "expected ';'")) {
+                return std::nullopt;
+            }
+            auto s = std::make_unique<ContinueStmt>();
+            return std::optional<std::unique_ptr<Stmt>>(std::move(s));
+        }
+
         auto expr = parseExpr();
         if (expr) {
             if (!consume(TokenKind::Semicolon, "expected ';'")) {
@@ -2508,7 +2540,8 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
     return nullptr;
 }
 
-static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, const Program &prog, llvm::Function *llvmFn, int &strIndex) {
+static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, const Program &prog, llvm::Function *llvmFn, int &strIndex, 
+                     llvm::BasicBlock *loopEndBB = nullptr, llvm::BasicBlock *loopCondBB = nullptr) {
     llvm::LLVMContext &ctx = m.getContext();
     llvm::Type *i32Ty = llvm::Type::getInt32Ty(ctx);
     llvm::FunctionCallee logFn = getConsoleLog(m);
@@ -2687,6 +2720,14 @@ static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, co
             if (retTy->isVoidTy()) b.CreateRetVoid();
             else b.CreateRet(llvm::Constant::getNullValue(retTy));
         }
+    } else if (const auto *breakStmt = dynamic_cast<const BreakStmt *>(stmt)) {
+        if (loopEndBB) {
+            b.CreateBr(loopEndBB);
+        }
+    } else if (const auto *continueStmt = dynamic_cast<const ContinueStmt *>(stmt)) {
+        if (loopCondBB) {
+            b.CreateBr(loopCondBB);
+        }
     } else if (const auto *ifStmt = dynamic_cast<const IfStmt *>(stmt)) {
         llvm::Value *cond = emitExpr(b, ifStmt->cond.get(), m, prog);
         if (cond) {
@@ -2700,11 +2741,11 @@ static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, co
             b.CreateCondBr(cond, thenBB, elseBB);
 
             b.SetInsertPoint(thenBB);
-            for (const auto &s : ifStmt->thenBody) emitStmt(b, s.get(), m, prog, llvmFn, strIndex);
+            for (const auto &s : ifStmt->thenBody) emitStmt(b, s.get(), m, prog, llvmFn, strIndex, loopEndBB, loopCondBB);
             if (!b.GetInsertBlock()->getTerminator()) b.CreateBr(mergeBB);
 
             b.SetInsertPoint(elseBB);
-            for (const auto &s : ifStmt->elseBody) emitStmt(b, s.get(), m, prog, llvmFn, strIndex);
+            for (const auto &s : ifStmt->elseBody) emitStmt(b, s.get(), m, prog, llvmFn, strIndex, loopEndBB, loopCondBB);
             if (!b.GetInsertBlock()->getTerminator()) b.CreateBr(mergeBB);
 
             b.SetInsertPoint(mergeBB);
@@ -2726,7 +2767,7 @@ static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, co
 
             b.SetInsertPoint(bodyBB);
             for (const auto &s : whileStmt->body) {
-                emitStmt(b, s.get(), m, prog, llvmFn, strIndex);
+                emitStmt(b, s.get(), m, prog, llvmFn, strIndex, endBB, condBB);
             }
             if (!b.GetInsertBlock()->getTerminator()) {
                 b.CreateBr(condBB);
@@ -2767,14 +2808,14 @@ static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, co
             
             b.SetInsertPoint(bodyBB);
             for (const auto &s : forStmt->body) {
-                emitStmt(b, s.get(), m, prog, llvmFn, strIndex);
+                emitStmt(b, s.get(), m, prog, llvmFn, strIndex, endBB, condBB);
             }
             if (!b.GetInsertBlock()->getTerminator()) {
                 b.CreateBr(incrBB);
             }
             
             b.SetInsertPoint(incrBB);
-            emitStmt(b, forStmt->increment.get(), m, prog, llvmFn, strIndex);
+            emitStmt(b, forStmt->increment.get(), m, prog, llvmFn, strIndex, endBB, condBB);
             if (!b.GetInsertBlock()->getTerminator()) {
                 b.CreateBr(condBB);
             }
