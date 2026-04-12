@@ -1,0 +1,8 @@
+interface ASTNode {
+    kind: i32;
+    value1: i32;
+}
+
+function test_simple(node: ASTNode): void {
+    let value = node.value1;
+}

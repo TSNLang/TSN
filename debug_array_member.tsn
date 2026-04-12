@@ -1,0 +1,8 @@
+interface ASTNode {
+    kind: i32;
+    value1: i32;
+}
+
+function test_array_member(nodes: ptr<ASTNode>, idx: i32): i32 {
+    return nodes[idx].value1;
+}

@@ -657,6 +657,7 @@ struct Program {
     std::map<std::string, llvm::AllocaInst*> symbolTable;
     std::map<std::string, llvm::StructType*> structTypes;
     std::map<std::string, bool> exportedFunctions;  // Track exported functions
+    std::map<std::string, TypeName> pointerElementTypes;  // Track element types for ptr<T> variables
 };
 
 class Parser {
@@ -2103,7 +2104,9 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
         // Look up in symbol table
         auto it = prog.symbolTable.find(ident->name);
         if (it != prog.symbolTable.end()) {
-            return b.CreateLoad(it->second->getAllocatedType(), it->second, ident->name);
+            static int loadCounter = 0;
+            std::string loadName = ident->name + "_load" + std::to_string(++loadCounter);
+            return b.CreateLoad(it->second->getAllocatedType(), it->second, loadName);
         }
         return nullptr;
     }
@@ -2233,6 +2236,35 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
     }
 
     if (const auto *memberExpr = dynamic_cast<const MemberExpr *>(e)) {
+        // Handle member access on array/pointer index: nodes[i].field
+        if (const auto *indexExpr = dynamic_cast<const IndexExpr *>(memberExpr->object.get())) {
+            // First, get the indexed element (which should be a struct)
+            llvm::Value *structVal = emitExpr(b, indexExpr, m, prog);
+            if (structVal && structVal->getType()->isStructTy()) {
+                llvm::StructType *structTy = llvm::cast<llvm::StructType>(structVal->getType());
+                
+                // Find field index
+                std::string structName = structTy->getName().str();
+                auto structIt = std::find_if(prog.structs.begin(), prog.structs.end(),
+                    [&structName](const StructDef &s) { return s.name == structName; });
+                
+                if (structIt != prog.structs.end()) {
+                    int fieldIdx = -1;
+                    for (size_t i = 0; i < structIt->fields.size(); ++i) {
+                        if (structIt->fields[i].name == memberExpr->member) {
+                            fieldIdx = static_cast<int>(i);
+                            break;
+                        }
+                    }
+                    
+                    if (fieldIdx >= 0) {
+                        // Extract field from struct value
+                        return b.CreateExtractValue(structVal, {static_cast<unsigned>(fieldIdx)}, memberExpr->member);
+                    }
+                }
+            }
+        }
+        
         // Get the base object (should be an identifier to a struct variable)
         if (const auto *ident = dynamic_cast<const Identifier *>(memberExpr->object.get())) {
             auto it = prog.symbolTable.find(ident->name);
@@ -2288,7 +2320,14 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
                 } else if (allocatedType->isPointerTy() || allocatedType == llvm::PointerType::getUnqual(m.getContext())) {
                     // Pointer access: ptr[i]
                     llvm::Value *base = b.CreateLoad(allocatedType, alloca, baseIdent->name);
-                    llvm::Type *elemTy = llvm::Type::getInt8Ty(m.getContext());
+                    
+                    // Try to get the element type from tracked pointer types
+                    llvm::Type *elemTy = llvm::Type::getInt32Ty(m.getContext()); // default to i32
+                    auto typeIt = prog.pointerElementTypes.find(baseIdent->name);
+                    if (typeIt != prog.pointerElementTypes.end()) {
+                        elemTy = lowerType(m.getContext(), typeIt->second, prog.structTypes);
+                    }
+                    
                     llvm::Value *ptr = b.CreateInBoundsGEP(elemTy, base, idx, "idxptr");
                     return b.CreateLoad(elemTy, ptr, "idxval");
                 }
@@ -2299,7 +2338,11 @@ static llvm::Value *emitExpr(llvm::IRBuilder<> &b, const Expr *e, llvm::Module &
         llvm::Value *base = emitExpr(b, indexExpr->base.get(), m, prog);
         llvm::Value *idx = emitExpr(b, indexExpr->index.get(), m, prog);
         if (base && idx) {
-            llvm::Type *elemTy = llvm::Type::getInt8Ty(m.getContext());
+            // In modern LLVM, all pointers are opaque
+            // For ptr<i32> access, assume i32 element type
+            // TODO: Need better type tracking for proper typed pointer support
+            llvm::Type *elemTy = llvm::Type::getInt32Ty(m.getContext()); // assume i32 for now
+            
             llvm::Value *ptr = b.CreateInBoundsGEP(elemTy, base, idx, "idxptr");
             return b.CreateLoad(elemTy, ptr, "idxval");
         }
@@ -2652,6 +2695,11 @@ static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, co
             llvm::Type *varType = lowerType(ctx, letStmt->type, prog.structTypes);
             llvm::AllocaInst *alloca = b.CreateAlloca(varType, nullptr, letStmt->name);
             const_cast<Program &>(prog).symbolTable[letStmt->name] = alloca;
+            
+            // If it's a pointer type, store the element type for later use
+            if (letStmt->type.kind == TypeName::Kind::Ptr && letStmt->type.pointee) {
+                const_cast<Program &>(prog).pointerElementTypes[letStmt->name] = letStmt->type.pointee->clone();
+            }
         }
     } else if (const auto *assignStmt = dynamic_cast<const AssignStmt *>(stmt)) {
         llvm::Value *val = emitExpr(b, assignStmt->value.get(), m, prog);
@@ -2935,7 +2983,19 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
         
         // If user defined main(), rename it to __tsn_user_main to avoid collision with wrapper main
         std::string llvmFnName = (fnDef->name == "main") ? "__tsn_user_main" : fnDef->name;
-        llvm::Function *llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, llvmFnName, m);
+        
+        // Check if function was forward declared
+        llvm::Function *llvmFn = m.getFunction(llvmFnName);
+        if (!llvmFn) {
+            // Not forward declared, create new function
+            llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, llvmFnName, m);
+        } else {
+            // Forward declared, verify signature matches
+            if (llvmFn->getFunctionType() != fnTy) {
+                std::cerr << "ERROR: Function " << llvmFnName << " signature mismatch with forward declaration\n";
+                return false;
+            }
+        }
         std::cerr << "DEBUG: Function created: " << llvmFnName << "\n";
 
         llvm::BasicBlock *bb = llvm::BasicBlock::Create(ctx, "entry", llvmFn);
@@ -2947,6 +3007,11 @@ static bool buildModule(const Program &prog, const std::string &moduleName, llvm
             llvm::AllocaInst *alloca = fBuilder.CreateAlloca(arg->getType(), nullptr, fnDef->params[i].name);
             fBuilder.CreateStore(arg, alloca);
             const_cast<Program &>(prog).symbolTable[fnDef->params[i].name] = alloca;
+            
+            // If parameter is a pointer type, store the element type
+            if (fnDef->params[i].type.kind == TypeName::Kind::Ptr && fnDef->params[i].type.pointee) {
+                const_cast<Program &>(prog).pointerElementTypes[fnDef->params[i].name] = fnDef->params[i].type.pointee->clone();
+            }
         }
         std::cerr << "DEBUG: Parameters set up\n";
 
@@ -3320,7 +3385,18 @@ static bool buildModuleWithImports(const Program &mainProg, const std::string &m
             llvm::Type *retTy = lowerType(ctx, fnDef->result, mutableMainProg.structTypes);
             llvm::FunctionType *fnTy = llvm::FunctionType::get(retTy, paramTypes, false);
             
-            llvm::Function *llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, fnDef->name, m);
+            // Check if function was forward declared
+            llvm::Function *llvmFn = m.getFunction(fnDef->name);
+            if (!llvmFn) {
+                // Not forward declared, create new function
+                llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, fnDef->name, m);
+            } else {
+                // Forward declared, verify signature matches
+                if (llvmFn->getFunctionType() != fnTy) {
+                    std::cerr << "ERROR: Function " << fnDef->name << " signature mismatch with forward declaration\n";
+                    return false;
+                }
+            }
 
             llvm::BasicBlock *bb = llvm::BasicBlock::Create(ctx, "entry", llvmFn);
             llvm::IRBuilder<> fBuilder(bb);
@@ -3330,6 +3406,11 @@ static bool buildModuleWithImports(const Program &mainProg, const std::string &m
                 llvm::AllocaInst *alloca = fBuilder.CreateAlloca(arg->getType(), nullptr, fnDef->params[i].name);
                 fBuilder.CreateStore(arg, alloca);
                 mutableModule.symbolTable[fnDef->params[i].name] = alloca;
+                
+                // If parameter is a pointer type, store the element type
+                if (fnDef->params[i].type.kind == TypeName::Kind::Ptr && fnDef->params[i].type.pointee) {
+                    mutableModule.pointerElementTypes[fnDef->params[i].name] = fnDef->params[i].type.pointee->clone();
+                }
             }
 
             for (const auto &stmtPtr : fnDef->body) {
@@ -3358,7 +3439,19 @@ static bool buildModuleWithImports(const Program &mainProg, const std::string &m
         llvm::FunctionType *fnTy = llvm::FunctionType::get(retTy, paramTypes, false);
         
         std::string llvmFnName = (fnDef->name == "main") ? "__tsn_user_main" : fnDef->name;
-        llvm::Function *llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, llvmFnName, m);
+        
+        // Check if function was forward declared
+        llvm::Function *llvmFn = m.getFunction(llvmFnName);
+        if (!llvmFn) {
+            // Not forward declared, create new function
+            llvmFn = llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage, llvmFnName, m);
+        } else {
+            // Forward declared, verify signature matches
+            if (llvmFn->getFunctionType() != fnTy) {
+                std::cerr << "ERROR: Function " << llvmFnName << " signature mismatch with forward declaration\n";
+                return false;
+            }
+        }
 
         llvm::BasicBlock *bb = llvm::BasicBlock::Create(ctx, "entry", llvmFn);
         llvm::IRBuilder<> fBuilder(bb);
@@ -3368,6 +3461,11 @@ static bool buildModuleWithImports(const Program &mainProg, const std::string &m
             llvm::AllocaInst *alloca = fBuilder.CreateAlloca(arg->getType(), nullptr, fnDef->params[i].name);
             fBuilder.CreateStore(arg, alloca);
             mutableMainProg.symbolTable[fnDef->params[i].name] = alloca;
+            
+            // If parameter is a pointer type, store the element type
+            if (fnDef->params[i].type.kind == TypeName::Kind::Ptr && fnDef->params[i].type.pointee) {
+                mutableMainProg.pointerElementTypes[fnDef->params[i].name] = fnDef->params[i].type.pointee->clone();
+            }
         }
 
         for (size_t stmtIdx = 0; stmtIdx < fnDef->body.size(); ++stmtIdx) {

@@ -1,0 +1,7 @@
+interface ASTNode {
+    value1: i32;
+}
+
+function test_simple_array(nodes: ptr<ASTNode>, idx: i32): ASTNode {
+    return nodes[idx];
+}
