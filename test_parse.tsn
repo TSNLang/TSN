@@ -1,0 +1,7 @@
+// Test parsing with minimal bootstrap compiler approach
+
+function main(): i32 {
+    // Just test if we can detect the issue
+    let result = 42;
+    return result;
+}

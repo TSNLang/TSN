@@ -774,7 +774,6 @@ function buffer_append(buffer: ptr<i8>, pos: ptr<i32>, str: ptr<i8>): void {
         i = i + 1;
     }
     
-    buffer[currentPos] = 0;
     pos[0] = currentPos;
 }
 
@@ -978,10 +977,23 @@ function codegen_program(
     buffer_append(output, pos, "; ModuleID = 'tsn_output'\n");
     buffer_append(output, pos, "target triple = \"x86_64-pc-windows-msvc\"\n\n");
     
+    // Debug: show nodeCount
+    buffer_append(output, pos, "; Debug: nodeCount = ");
+    if (nodeCount > 0) {
+        buffer_append(output, pos, "positive\n");
+    } else {
+        buffer_append(output, pos, "zero\n");
+    }
+    
     let i = 0;
     while (i < nodeCount) {
+        // Debug: check each node
+        buffer_append(output, pos, "; Checking node ");
         if (nodes[i].kind == AST_FUNCTION) {
+            buffer_append(output, pos, "; Found function!\n");
             codegen_function(nodes, i, src, output, pos, tempCounter);
+        } else {
+            buffer_append(output, pos, "; Not a function\n");
         }
         i = i + 1;
     }
@@ -1025,12 +1037,34 @@ function main(): void {
     nodeCount[0] = 0;
     
     let funcIdx = parse_function(tokens, starts, lens, pos, nodes, nodeCount, sourceBuffer);
+    
+    // Debug: check if function was parsed
+    if (funcIdx >= 0) {
+        print("Debug: Function parsed successfully!");
+    } else {
+        print("Debug: Function parsing failed!");
+    }
+    
+    // Debug: check nodeCount
+    if (nodeCount[0] > 0) {
+        print("Debug: nodeCount > 0, good!");
+    } else {
+        print("Debug: nodeCount = 0, no nodes!");
+    }
+    
     print("   ✓ AST built");
     
     print("⚙️  [4/5] Code generation (LLVM IR)...");
     let outputBuffer: i8[10000];
     let outputLen = codegen_program(nodes, nodeCount[0], sourceBuffer, outputBuffer);
     print("   ✓ LLVM IR generated");
+    
+    // Debug: check if outputLen > 0
+    if (outputLen > 0) {
+        print("Debug: outputLen > 0, good!");
+    } else {
+        print("Debug: outputLen = 0, no functions found!");
+    }
     
     print("💾 [5/5] Writing output.ll...");
     let ok = write_file("output.ll", outputBuffer, outputLen);

@@ -1,0 +1,54 @@
+// Test file writing functionality
+
+@ffi.lib("kernel32")
+declare function CreateFileA(
+    lpFileName: ptr<u8>,
+    dwDesiredAccess: u32,
+    dwShareMode: u32,
+    lpSecurityAttributes: ptr<void>,
+    dwCreationDisposition: u32,
+    dwFlagsAndAttributes: u32,
+    hTemplateFile: ptr<void>
+): ptr<void>;
+
+@ffi.lib("kernel32")
+declare function WriteFile(
+    hFile: ptr<void>,
+    lpBuffer: ptr<void>,
+    nNumberOfBytesToWrite: u32,
+    lpNumberOfBytesWritten: ptr<u32>,
+    lpOverlapped: ptr<void>
+): bool;
+
+@ffi.lib("kernel32")
+declare function CloseHandle(hObject: ptr<void>): bool;
+
+const GENERIC_WRITE: u32 = 1073741824;
+const CREATE_ALWAYS: u32 = 2;
+const FILE_ATTRIBUTE_NORMAL: u32 = 128;
+
+function write_test_file(): bool {
+    let filename = "test_output.txt";
+    let content = "Hello from TSN!\n";
+    
+    let hFile = CreateFileA(filename, GENERIC_WRITE, 0, null, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, null);
+    if (hFile == null) {
+        return false;
+    }
+    
+    let bytesWritten: u32;
+    let bytesWrittenPtr = addressof(bytesWritten);
+    let success = WriteFile(hFile, content, 17, bytesWrittenPtr, null);
+    CloseHandle(hFile);
+    
+    return success;
+}
+
+function main(): i32 {
+    let result = write_test_file();
+    if (result) {
+        return 0;  // success
+    } else {
+        return 1;  // failure
+    }
+}
