@@ -776,6 +776,8 @@ function parse_function(
     nodes[funcIdx].value2 = nameLen;
     nodes[funcIdx].value3 = bodyStartIdx;
     
+    print("DEBUG: Set nodes[funcIdx].kind = AST_FUNCTION (20)");
+    
     nodeCount[0] = funcIdx + 1;
     return funcIdx;
 }
@@ -999,23 +1001,23 @@ function codegen_program(
     buffer_append(output, pos, "; ModuleID = 'tsn_output'\n");
     buffer_append(output, pos, "target triple = \"x86_64-pc-windows-msvc\"\n\n");
     
-    // Debug: show nodeCount
-    buffer_append(output, pos, "; Debug: nodeCount = ");
-    if (nodeCount > 0) {
-        buffer_append(output, pos, "positive\n");
-    } else {
-        buffer_append(output, pos, "zero\n");
-    }
-    
     let i = 0;
     while (i < nodeCount) {
-        // Debug: check each node
-        buffer_append(output, pos, "; Checking node ");
-        if (nodes[i].kind == AST_FUNCTION) {
-            buffer_append(output, pos, "; Found function!\n");
+        // Debug: check node kind value
+        let nodeKind = nodes[i].kind;
+        if (nodeKind == 20) {
+            buffer_append(output, pos, "; Found AST_FUNCTION (kind=20) at index ");
             codegen_function(nodes, i, src, output, pos, tempCounter);
+        } else if (nodeKind == 0) {
+            buffer_append(output, pos, "; Node[");
+            buffer_append(output, pos, "] kind is 0\n");
+        } else if (nodeKind == 12) {
+            buffer_append(output, pos, "; Node[");
+            buffer_append(output, pos, "] kind is 12 (AST_RETURN_STMT)\n");
         } else {
-            buffer_append(output, pos, "; Not a function\n");
+            buffer_append(output, pos, "; Node[");
+            buffer_append(output, pos, "] kind is ");
+            buffer_append(output, pos, " (not 20)\n");
         }
         i = i + 1;
     }

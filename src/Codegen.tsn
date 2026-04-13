@@ -1,449 +1,187 @@
-// TSN Codegen - Self-Hosting
-// Generates LLVM IR from Abstract Syntax Tree (AST)
-// Part of the TSN self-hosting compiler
+// Codegen.tsn - LLVM IR code generator for TSN compiler
+// Written in TSN, compiled by TSN
 
-// ============================================================================
-// AST NODE KINDS (from Parser)
-// ============================================================================
+// Global state
+let output: ptr<i8>;
+let outputLen: i32;
+let tempCounter: i32;
+let labelCounter: i32;
 
-const AST_NUMBER: i32 = 1;
-const AST_IDENTIFIER: i32 = 2;
-const AST_BINARY_OP: i32 = 3;
-const AST_UNARY_OP: i32 = 4;
-const AST_CALL: i32 = 5;
-const AST_VAR_DECL: i32 = 10;
-const AST_ASSIGNMENT: i32 = 11;
-const AST_RETURN_STMT: i32 = 12;
-const AST_IF_STMT: i32 = 13;
-const AST_WHILE_STMT: i32 = 14;
-const AST_BLOCK: i32 = 15;
-const AST_FUNCTION: i32 = 20;
-const AST_PARAM: i32 = 21;
-
-// Token kinds (for operators)
-const TK_PLUS: i32 = 19;
-const TK_MINUS: i32 = 20;
-const TK_STAR: i32 = 21;
-const TK_SLASH: i32 = 22;
-const TK_EXCLAIM: i32 = 23;
-const TK_AMPERSAND: i32 = 24;
-const TK_EQEQ: i32 = 17;
-const TK_NE: i32 = 18;
-const TK_LT: i32 = 14;
-const TK_GT: i32 = 15;
-
-// ============================================================================
-// AST NODE STRUCTURE
-// ============================================================================
-
-interface ASTNode {
-    kind: i32;
-    value1: i32;
-    value2: i32;
-    value3: i32;
+// Initialize codegen
+function codegen_init(outBuffer: ptr<i8>): void {
+    output = outBuffer;
+    outputLen = 0;
+    tempCounter = 0;
+    labelCounter = 0;
 }
 
-// ============================================================================
-// CODEGEN HELPER FUNCTIONS
-// ============================================================================
-
-function buffer_append(buffer: ptr<i8>, pos: ptr<i32>, str: ptr<i8>): void {
-    let currentPos = pos[0];
-    let strLen = string_length(str);
-    
-    let i = 0;
-    while (i < strLen) {
-        let ch = string_char_at(str, i);
-        buffer[currentPos] = ch;
-        currentPos = currentPos + 1;
-        i = i + 1;
-    }
-    
-    buffer[currentPos] = 0;
-    pos[0] = currentPos;
-}
-
-function buffer_append_substring(
-    buffer: ptr<i8>,
-    pos: ptr<i32>,
-    src: ptr<i8>,
-    start: i32,
-    len: i32
-): void {
-    let currentPos = pos[0];
-    
-    let i = 0;
+// Helper: Append string to output
+function emit(str: ptr<i8>): void {
+    let len: i32 = string_length(str);
+    let i: i32 = 0;
     while (i < len) {
-        let ch = string_char_at(src, start + i);
-        buffer[currentPos] = ch;
-        currentPos = currentPos + 1;
+        let c: i32 = string_char_at(str, i);
+        // TODO: Write character to output buffer
+        i = i + 1;
+    }
+    outputLen = outputLen + len;
+}
+
+// Helper: Emit newline
+function emit_newline(): void {
+    // TODO: Write newline to output
+    outputLen = outputLen + 1;
+}
+
+// Helper: Generate new temp variable
+function new_temp(): i32 {
+    let temp: i32 = tempCounter;
+    tempCounter = tempCounter + 1;
+    return temp;
+}
+
+// Helper: Generate new label
+function new_label(): i32 {
+    let label: i32 = labelCounter;
+    labelCounter = labelCounter + 1;
+    return label;
+}
+
+// Generate expression
+function generate_expression(nodeIdx: i32): void {
+    let node: ASTNode = nodes[nodeIdx];
+    
+    if (node.kind == AST_IDENTIFIER) {
+        // Load identifier
+        let temp: i32 = new_temp();
+        emit("  %");
+        // TODO: Emit temp number
+        emit(" = load i32, ptr %");
+        // TODO: Emit identifier name
+        emit(", align 4");
+        emit_newline();
+    }
+    else if (node.kind == AST_NUMBER_LITERAL) {
+        // Number literal - just use the value directly
+        // TODO: Emit number value
+    }
+}
+
+// Generate statement
+function generate_statement(nodeIdx: i32): void {
+    let node: ASTNode = nodes[nodeIdx];
+    
+    if (node.kind == AST_RETURN_STMT) {
+        emit("  ret i32 ");
+        if (node.data1 != 0) {
+            generate_expression(node.data1);
+        }
+        else {
+            emit("0");
+        }
+        emit_newline();
+    }
+    else if (node.kind == AST_VAR_DECL) {
+        // Variable declaration
+        emit("  %");
+        // TODO: Emit variable name
+        emit(" = alloca i32, align 4");
+        emit_newline();
+        
+        if (node.data4 != 0) {
+            // Has initializer
+            emit("  store i32 ");
+            generate_expression(node.data4);
+            emit(", ptr %");
+            // TODO: Emit variable name
+            emit(", align 4");
+            emit_newline();
+        }
+    }
+    else if (node.kind == AST_ASSIGNMENT) {
+        emit("  store i32 ");
+        generate_expression(node.data2);
+        emit(", ptr %");
+        // TODO: Emit target name
+        emit(", align 4");
+        emit_newline();
+    }
+}
+
+// Generate function
+function generate_function(nodeIdx: i32): void {
+    let node: ASTNode = nodes[nodeIdx];
+    
+    emit("define i32 @");
+    // TODO: Emit function name
+    emit("() {");
+    emit_newline();
+    emit("entry:");
+    emit_newline();
+    
+    // Generate statements
+    let firstStmt: i32 = node.data3;
+    let stmtCount: i32 = node.data4;
+    let i: i32 = 0;
+    
+    while (i < stmtCount) {
+        let stmtIdx: i32 = firstStmt + i;
+        generate_statement(stmtIdx);
         i = i + 1;
     }
     
-    buffer[currentPos] = 0;
-    pos[0] = currentPos;
+    emit("}");
+    emit_newline();
+    emit_newline();
 }
 
-// ============================================================================
-// EXPRESSION CODEGEN
-// ============================================================================
-
-function codegen_expr(
-    nodes: ptr<ASTNode>,
-    nodeIdx: i32,
-    src: ptr<i8>,
-    output: ptr<i8>,
-    pos: ptr<i32>,
-    tempCounter: ptr<i32>
-): void {
-    if (nodes[nodeIdx].kind == AST_NUMBER) {
-        let numStart = nodes[nodeIdx].value1;
-        let numLen = nodes[nodeIdx].value2;
-        buffer_append_substring(output, pos, src, numStart, numLen);
-    }
-    else if (nodes[nodeIdx].kind == AST_IDENTIFIER) {
-        let idStart = nodes[nodeIdx].value1;
-        let idLen = nodes[nodeIdx].value2;
-        
-        // Generate load from variable
-        buffer_append(output, pos, "%tmp");
-        
-        // Convert temp counter to string
-        let tempNum: i8[10];
-        let counter = tempCounter[0];
-        tempNum[0] = 48 + counter;  // ASCII '0' + counter
-        tempNum[1] = 0;
-        tempCounter[0] = counter + 1;
-        buffer_append(output, pos, tempNum);
-        
-        buffer_append(output, pos, " = load i32, ptr %");
-        buffer_append_substring(output, pos, src, idStart, idLen);
-        buffer_append(output, pos, ", align 4\n");
-    }
-    else if (nodes[nodeIdx].kind == AST_UNARY_OP) {
-        // Generate temp variable for result
-        buffer_append(output, pos, "%tmp");
-        
-        // Convert temp counter to string
-        let tempNum: i8[10];
-        let counter = tempCounter[0];
-        tempNum[0] = 48 + counter;  // ASCII '0' + counter
-        tempNum[1] = 0;
-        tempCounter[0] = counter + 1;
-        buffer_append(output, pos, tempNum);
-        
-        buffer_append(output, pos, " = ");
-        
-        // Get operator and operand
-        let operandIdx = nodes[nodeIdx].value1;
-        let op = nodes[nodeIdx].value2;
-        
-        // Generate operation
-        if (op == TK_MINUS) {
-            buffer_append(output, pos, "sub i32 0, ");
-        } else if (op == TK_EXCLAIM) {
-            buffer_append(output, pos, "xor i1 ");
-        }
-        
-        // Generate operand
-        codegen_expr(nodes, operandIdx, src, output, pos, tempCounter);
-        
-        // For logical NOT, add ", true" to xor with true
-        if (op == TK_EXCLAIM) {
-            buffer_append(output, pos, ", true");
-        }
-        
-        buffer_append(output, pos, "\n");
-    }
-    else if (nodes[nodeIdx].kind == AST_BINARY_OP) {
-        // Generate temp variable for result
-        buffer_append(output, pos, "%tmp");
-        
-        // Convert temp counter to string (simple: just use single digit for now)
-        let tempNum: i8[10];
-        let counter = tempCounter[0];
-        tempNum[0] = 48 + counter;  // ASCII '0' + counter
-        tempNum[1] = 0;
-        tempCounter[0] = counter + 1;
-        buffer_append(output, pos, tempNum);
-        
-        buffer_append(output, pos, " = ");
-        
-        // Get operator and operands
-        let leftIdx = nodes[nodeIdx].value1;
-        let rightIdx = nodes[nodeIdx].value2;
-        let op = nodes[nodeIdx].value3;
-        
-        // Generate operation
-        if (op == TK_PLUS) {
-            buffer_append(output, pos, "add i32 ");
-        } else if (op == TK_MINUS) {
-            buffer_append(output, pos, "sub i32 ");
-        } else if (op == TK_STAR) {
-            buffer_append(output, pos, "mul i32 ");
-        } else if (op == TK_SLASH) {
-            buffer_append(output, pos, "sdiv i32 ");
-        } else if (op == TK_EQEQ) {
-            buffer_append(output, pos, "icmp eq i32 ");
-        } else if (op == TK_NE) {
-            buffer_append(output, pos, "icmp ne i32 ");
-        } else if (op == TK_LT) {
-            buffer_append(output, pos, "icmp slt i32 ");
-        } else if (op == TK_GT) {
-            buffer_append(output, pos, "icmp sgt i32 ");
-        }
-        
-        // Generate left operand
-        codegen_expr(nodes, leftIdx, src, output, pos, tempCounter);
-        buffer_append(output, pos, ", ");
-        
-        // Generate right operand
-        codegen_expr(nodes, rightIdx, src, output, pos, tempCounter);
-        buffer_append(output, pos, "\n");
-    }
+// Generate interface (struct type)
+function generate_interface(nodeIdx: i32): void {
+    let node: ASTNode = nodes[nodeIdx];
+    
+    emit("%");
+    // TODO: Emit interface name
+    emit(" = type { i32 }");
+    emit_newline();
 }
 
-// ============================================================================
-// STATEMENT CODEGEN
-// ============================================================================
-
-function codegen_statement(
-    nodes: ptr<ASTNode>,
-    nodeIdx: i32,
-    src: ptr<i8>,
-    output: ptr<i8>,
-    pos: ptr<i32>,
-    tempCounter: ptr<i32>
-): void {
-    if (nodes[nodeIdx].kind == AST_RETURN_STMT) {
-        let exprIdx = nodes[nodeIdx].value1;
+// Main codegen function
+function generate(programIdx: i32): void {
+    emit("; ModuleID = 'tsn_output'");
+    emit_newline();
+    emit("target triple = \"x86_64-pc-windows-msvc\"");
+    emit_newline();
+    emit_newline();
+    
+    let program: ASTNode = nodes[programIdx];
+    let firstDecl: i32 = program.data1;
+    let declCount: i32 = program.data2;
+    
+    // First pass: Generate interfaces
+    let i: i32 = 0;
+    while (i < declCount) {
+        let declIdx: i32 = firstDecl + i;
+        let decl: ASTNode = nodes[declIdx];
         
-        buffer_append(output, pos, "  ret i32 ");
-        codegen_expr(nodes, exprIdx, src, output, pos, tempCounter);
-        buffer_append(output, pos, "\n");
-    }
-    else if (nodes[nodeIdx].kind == AST_VAR_DECL) {
-        // Variable declaration: let x: i32 = 42;
-        let nameStart = nodes[nodeIdx].value1;
-        let nameLen = nodes[nodeIdx].value2;
-        let initExpr = nodes[nodeIdx].value3;
-        
-        // Generate alloca for variable
-        buffer_append(output, pos, "  %");
-        buffer_append_substring(output, pos, src, nameStart, nameLen);
-        buffer_append(output, pos, " = alloca i32, align 4\n");
-        
-        // If there's initialization, generate store
-        if (initExpr > 0) {
-            buffer_append(output, pos, "  store i32 ");
-            codegen_expr(nodes, initExpr, src, output, pos, tempCounter);
-            buffer_append(output, pos, ", ptr %");
-            buffer_append_substring(output, pos, src, nameStart, nameLen);
-            buffer_append(output, pos, ", align 4\n");
-        }
-    }
-    else if (nodes[nodeIdx].kind == AST_ASSIGNMENT) {
-        // Assignment: x = 42;
-        let nameStart = nodes[nodeIdx].value1;
-        let nameLen = nodes[nodeIdx].value2;
-        let exprIdx = nodes[nodeIdx].value3;
-        
-        buffer_append(output, pos, "  store i32 ");
-        codegen_expr(nodes, exprIdx, src, output, pos, tempCounter);
-        buffer_append(output, pos, ", ptr %");
-        buffer_append_substring(output, pos, src, nameStart, nameLen);
-        buffer_append(output, pos, ", align 4\n");
-    }
-    else if (nodes[nodeIdx].kind == AST_IF_STMT) {
-        // If statement: if (condition) { ... }
-        let condExpr = nodes[nodeIdx].value1;
-        let bodyStart = nodes[nodeIdx].value2;
-        
-        // Generate condition evaluation
-        buffer_append(output, pos, "  %cond");
-        
-        // Generate temp counter for condition
-        let tempNum: i8[10];
-        let counter = tempCounter[0];
-        tempNum[0] = 48 + counter;
-        tempNum[1] = 0;
-        tempCounter[0] = counter + 1;
-        buffer_append(output, pos, tempNum);
-        
-        buffer_append(output, pos, " = ");
-        codegen_expr(nodes, condExpr, src, output, pos, tempCounter);
-        buffer_append(output, pos, "\n");
-        
-        // Generate branch
-        buffer_append(output, pos, "  br i1 %cond");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ", label %if_then");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ", label %if_end");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, "\n\n");
-        
-        // Generate if_then block
-        buffer_append(output, pos, "if_then");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ":\n");
-        
-        // Generate body statements
-        let i = bodyStart;
-        while (i < 100) {
-            if (nodes[i].kind == AST_RETURN_STMT || 
-                nodes[i].kind == AST_VAR_DECL || 
-                nodes[i].kind == AST_ASSIGNMENT ||
-                nodes[i].kind == AST_IF_STMT ||
-                nodes[i].kind == AST_WHILE_STMT) {
-                codegen_statement(nodes, i, src, output, pos, tempCounter);
-                i = i + 1;
-            } else {
-                break;
-            }
+        if (decl.kind == AST_INTERFACE_DECL) {
+            generate_interface(declIdx);
         }
         
-        buffer_append(output, pos, "  br label %if_end");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, "\n\n");
-        
-        // Generate if_end block
-        buffer_append(output, pos, "if_end");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ":\n");
-    }
-    else if (nodes[nodeIdx].kind == AST_WHILE_STMT) {
-        // While statement: while (condition) { ... }
-        let condExpr = nodes[nodeIdx].value1;
-        let bodyStart = nodes[nodeIdx].value2;
-        
-        // Generate temp counter for labels
-        let tempNum: i8[10];
-        let counter = tempCounter[0];
-        tempNum[0] = 48 + counter;
-        tempNum[1] = 0;
-        tempCounter[0] = counter + 1;
-        
-        // Branch to condition check
-        buffer_append(output, pos, "  br label %while_cond");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, "\n\n");
-        
-        // Generate while_cond block
-        buffer_append(output, pos, "while_cond");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ":\n");
-        
-        buffer_append(output, pos, "  %cond");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, " = ");
-        codegen_expr(nodes, condExpr, src, output, pos, tempCounter);
-        buffer_append(output, pos, "\n");
-        
-        buffer_append(output, pos, "  br i1 %cond");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ", label %while_body");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ", label %while_end");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, "\n\n");
-        
-        // Generate while_body block
-        buffer_append(output, pos, "while_body");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ":\n");
-        
-        // Generate body statements
-        let i = bodyStart;
-        while (i < 100) {
-            if (nodes[i].kind == AST_RETURN_STMT || 
-                nodes[i].kind == AST_VAR_DECL || 
-                nodes[i].kind == AST_ASSIGNMENT ||
-                nodes[i].kind == AST_IF_STMT ||
-                nodes[i].kind == AST_WHILE_STMT) {
-                codegen_statement(nodes, i, src, output, pos, tempCounter);
-                i = i + 1;
-            } else {
-                break;
-            }
-        }
-        
-        buffer_append(output, pos, "  br label %while_cond");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, "\n\n");
-        
-        // Generate while_end block
-        buffer_append(output, pos, "while_end");
-        buffer_append(output, pos, tempNum);
-        buffer_append(output, pos, ":\n");
-    }
-}
-
-// ============================================================================
-// FUNCTION CODEGEN
-// ============================================================================
-
-function codegen_function(
-    nodes: ptr<ASTNode>,
-    funcIdx: i32,
-    src: ptr<i8>,
-    output: ptr<i8>,
-    pos: ptr<i32>,
-    tempCounter: ptr<i32>
-): void {
-    let nameStart = nodes[funcIdx].value1;
-    let nameLen = nodes[funcIdx].value2;
-    let bodyStart = nodes[funcIdx].value3;
-    
-    buffer_append(output, pos, "define i32 @");
-    buffer_append_substring(output, pos, src, nameStart, nameLen);
-    buffer_append(output, pos, "() {\n");
-    buffer_append(output, pos, "entry:\n");
-    
-    // Process all statements in function body
-    let i = bodyStart;
-    while (i < 100) {
-        if (nodes[i].kind == AST_RETURN_STMT || 
-            nodes[i].kind == AST_VAR_DECL || 
-            nodes[i].kind == AST_ASSIGNMENT ||
-            nodes[i].kind == AST_IF_STMT ||
-            nodes[i].kind == AST_WHILE_STMT) {
-            codegen_statement(nodes, i, src, output, pos, tempCounter);
-            i = i + 1;
-        } else {
-            break;
-        }
-    }
-    
-    buffer_append(output, pos, "}\n\n");
-}
-
-// ============================================================================
-// PROGRAM CODEGEN
-// ============================================================================
-
-export function codegen_program(
-    nodes: ptr<ASTNode>,
-    nodeCount: i32,
-    src: ptr<i8>,
-    output: ptr<i8>
-): i32 {
-    let pos: i32[1];
-    pos[0] = 0;
-    
-    let tempCounter: i32[1];
-    tempCounter[0] = 0;
-    
-    buffer_append(output, pos, "; ModuleID = 'tsn_output'\n");
-    buffer_append(output, pos, "target triple = \"x86_64-pc-windows-msvc\"\n\n");
-    
-    let i = 0;
-    while (i < nodeCount) {
-        if (nodes[i].kind == AST_FUNCTION) {
-            codegen_function(nodes, i, src, output, pos, tempCounter);
-        }
         i = i + 1;
     }
     
-    return pos[0];
+    emit_newline();
+    
+    // Second pass: Generate functions
+    i = 0;
+    while (i < declCount) {
+        let declIdx: i32 = firstDecl + i;
+        let decl: ASTNode = nodes[declIdx];
+        
+        if (decl.kind == AST_FUNCTION_DECL) {
+            generate_function(declIdx);
+        }
+        
+        i = i + 1;
+    }
 }

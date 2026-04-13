@@ -1,4 +1,0 @@
-function test_array(arr: ptr<i32>, idx: i32): i32 {
-    let value = arr[idx];
-    return value;
-}

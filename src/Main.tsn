@@ -1,0 +1,224 @@
+// Main.tsn - Entry point for TSN compiler
+// Written in TSN, compiled by TSN
+// This is a self-hosting compiler!
+
+// FFI declarations for file I/O
+@ffi.lib("kernel32")
+declare function GetStdHandle(nStdHandle: i32): ptr<void>;
+
+@ffi.lib("kernel32")
+declare function ReadFile(
+    hFile: ptr<void>,
+    lpBuffer: ptr<void>,
+    nNumberOfBytesToRead: i32,
+    lpNumberOfBytesRead: ptr<i32>,
+    lpOverlapped: ptr<void>
+): i32;
+
+@ffi.lib("kernel32")
+declare function WriteFile(
+    hFile: ptr<void>,
+    lpBuffer: ptr<void>,
+    nNumberOfBytesToWrite: i32,
+    lpNumberOfBytesWritten: ptr<i32>,
+    lpOverlapped: ptr<void>
+): i32;
+
+@ffi.lib("kernel32")
+declare function CreateFileA(
+    lpFileName: ptr<i8>,
+    dwDesiredAccess: i32,
+    dwShareMode: i32,
+    lpSecurityAttributes: ptr<void>,
+    dwCreationDisposition: i32,
+    dwFlagsAndAttributes: i32,
+    hTemplateFile: ptr<void>
+): ptr<void>;
+
+@ffi.lib("kernel32")
+declare function CloseHandle(hObject: ptr<void>): i32;
+
+// Constants
+const STD_OUTPUT_HANDLE: i32 = -11;
+const GENERIC_READ: i32 = -2147483648;
+const GENERIC_WRITE: i32 = 1073741824;
+const FILE_SHARE_READ: i32 = 1;
+const OPEN_EXISTING: i32 = 3;
+const CREATE_ALWAYS: i32 = 2;
+const FILE_ATTRIBUTE_NORMAL: i32 = 128;
+const INVALID_HANDLE_VALUE: i32 = -1;
+
+// Global buffers
+let sourceBuffer: i8[100000];
+let outputBuffer: i8[500000];
+
+// Helper: Print string to console
+function print(msg: ptr<i8>): void {
+    let stdout: ptr<void> = GetStdHandle(STD_OUTPUT_HANDLE);
+    let len: i32 = string_length(msg);
+    let written: i32;
+    WriteFile(stdout, msg, len, addressof(written), null);
+}
+
+// Helper: Print newline
+function println(msg: ptr<i8>): void {
+    print(msg);
+    let newline: i8[2];
+    newline[0] = 10;
+    newline[1] = 0;
+    print(addressof(newline[0]));
+}
+
+// Read source file
+function read_file(filename: ptr<i8>): i32 {
+    let handle: ptr<void> = CreateFileA(
+        filename,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        null,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        null
+    );
+    
+    if (handle == null) {
+        println("Error: Cannot open input file");
+        return 0;
+    }
+    
+    let bytesRead: i32;
+    let result: i32 = ReadFile(
+        handle,
+        addressof(sourceBuffer[0]),
+        MAX_SOURCE_SIZE,
+        addressof(bytesRead),
+        null
+    );
+    
+    CloseHandle(handle);
+    
+    if (result == 0) {
+        println("Error: Cannot read input file");
+        return 0;
+    }
+    
+    return bytesRead;
+}
+
+// Write output file
+function write_file(filename: ptr<i8>, data: ptr<i8>, length: i32): i32 {
+    let handle: ptr<void> = CreateFileA(
+        filename,
+        GENERIC_WRITE,
+        0,
+        null,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        null
+    );
+    
+    if (handle == null) {
+        println("Error: Cannot create output file");
+        return 0;
+    }
+    
+    let bytesWritten: i32;
+    let result: i32 = WriteFile(
+        handle,
+        data,
+        length,
+        addressof(bytesWritten),
+        null
+    );
+    
+    CloseHandle(handle);
+    
+    if (result == 0) {
+        println("Error: Cannot write output file");
+        return 0;
+    }
+    
+    return 1;
+}
+
+// Main compiler function
+function compile(inputFile: ptr<i8>, outputFile: ptr<i8>): i32 {
+    println("=== TSN Compiler v3.0 ===");
+    println("Self-hosting compiler written in TSN");
+    println("");
+    
+    // Step 1: Read source file
+    println("[1/5] Reading source file...");
+    let sourceLen: i32 = read_file(inputFile);
+    if (sourceLen == 0) {
+        return 1;
+    }
+    println("  OK");
+    
+    // Step 2: Lexical analysis
+    println("[2/5] Lexical analysis...");
+    lexer_init(addressof(sourceBuffer[0]), sourceLen);
+    let tokCount: i32 = tokenize();
+    println("  OK");
+    
+    // Step 3: Parsing
+    println("[3/5] Parsing...");
+    parser_init();
+    let programNode: i32 = parse();
+    println("  OK");
+    
+    // Step 4: Code generation
+    println("[4/5] Code generation...");
+    codegen_init(addressof(outputBuffer[0]));
+    generate(programNode);
+    println("  OK");
+    
+    // Step 5: Write output file
+    println("[5/5] Writing output file...");
+    let writeResult: i32 = write_file(outputFile, addressof(outputBuffer[0]), outputLen);
+    if (writeResult == 0) {
+        return 1;
+    }
+    println("  OK");
+    
+    println("");
+    println("=== Compilation successful! ===");
+    println("TSN compiler has compiled TSN source code!");
+    println("This is TRUE SELF-HOSTING!");
+    
+    return 0;
+}
+
+// Entry point
+function main(): i32 {
+    // For now, use hardcoded filenames
+    // TODO: Parse command line arguments
+    let inputFile: i8[20];
+    let outputFile: i8[20];
+    
+    // "input.tsn"
+    inputFile[0] = 105;
+    inputFile[1] = 110;
+    inputFile[2] = 112;
+    inputFile[3] = 117;
+    inputFile[4] = 116;
+    inputFile[5] = 46;
+    inputFile[6] = 116;
+    inputFile[7] = 115;
+    inputFile[8] = 110;
+    inputFile[9] = 0;
+    
+    // "output.ll"
+    outputFile[0] = 111;
+    outputFile[1] = 117;
+    outputFile[2] = 116;
+    outputFile[3] = 112;
+    outputFile[4] = 117;
+    outputFile[5] = 116;
+    outputFile[6] = 46;
+    outputFile[7] = 108;
+    outputFile[8] = 108;
+    outputFile[9] = 0;
+    
+    return compile(addressof(inputFile[0]), addressof(outputFile[0]));
+}

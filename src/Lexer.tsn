@@ -1,409 +1,363 @@
-// TSN Lexer - Self-Hosting
-// Tokenizes TSN source code
-// Part of the TSN self-hosting compiler
+// Lexer.tsn - Lexical analyzer for TSN compiler
+// Written in TSN, compiled by TSN
 
-// ============================================================================
-// TOKEN KINDS
-// ============================================================================
+// Global state
+let source: ptr<i8>;
+let sourceLen: i32;
+let tokens: Token[10000];
+let tokenCount: i32;
+let pos: i32;
+let line: i32;
+let column: i32;
 
-const TK_END: i32 = 0;
-const TK_IDENTIFIER: i32 = 1;
-const TK_STRING: i32 = 2;
-const TK_NUMBER: i32 = 3;
-const TK_SEMICOLON: i32 = 4;
-const TK_LPAREN: i32 = 5;
-const TK_RPAREN: i32 = 6;
-const TK_LBRACE: i32 = 7;
-const TK_RBRACE: i32 = 8;
-const TK_COLON: i32 = 9;
-const TK_COMMA: i32 = 10;
-const TK_DOT: i32 = 11;
-const TK_LBRACKET: i32 = 12;
-const TK_RBRACKET: i32 = 13;
-const TK_LT: i32 = 14;
-const TK_GT: i32 = 15;
-const TK_EQ: i32 = 16;
-const TK_EQEQ: i32 = 17;
-const TK_NE: i32 = 18;
-const TK_PLUS: i32 = 19;
-const TK_MINUS: i32 = 20;
-const TK_STAR: i32 = 21;
-const TK_SLASH: i32 = 22;
-const TK_AMPERSAND: i32 = 23;
-const TK_PIPE: i32 = 24;
-
-// Keywords
-const TK_KW_FUNCTION: i32 = 30;
-const TK_KW_DECLARE: i32 = 31;
-const TK_KW_LET: i32 = 32;
-const TK_KW_CONST: i32 = 33;
-const TK_KW_RETURN: i32 = 34;
-const TK_KW_NULL: i32 = 35;
-const TK_KW_TRUE: i32 = 36;
-const TK_KW_FALSE: i32 = 37;
-const TK_KW_IF: i32 = 38;
-const TK_KW_ELSE: i32 = 39;
-const TK_KW_WHILE: i32 = 40;
-const TK_KW_FOR: i32 = 41;
-const TK_KW_BREAK: i32 = 42;
-const TK_KW_CONTINUE: i32 = 43;
-const TK_KW_IMPORT: i32 = 44;
-const TK_KW_EXPORT: i32 = 45;
-const TK_KW_FROM: i32 = 46;
-const TK_KW_AS: i32 = 47;
-const TK_KW_INTERFACE: i32 = 48;
-const TK_KW_TYPE: i32 = 49;
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-function is_digit(c: i8): bool {
-    if (c >= 48) { 
-        if (c <= 57) { 
-            return true; 
-        } 
-    }
-    return false;
+// Initialize lexer
+function lexer_init(src: ptr<i8>, len: i32): void {
+    source = src;
+    sourceLen = len;
+    tokenCount = 0;
+    pos = 0;
+    line = 1;
+    column = 1;
 }
 
-function is_alpha(c: i8): bool {
-    if (c >= 97) { 
-        if (c <= 122) { 
-            return true; 
-        } 
-    }
-    if (c >= 65) { 
-        if (c <= 90) { 
-            return true; 
-        } 
-    }
-    if (c == 95) { 
-        return true; 
-    }
-    return false;
+// Helper: Check if character is whitespace
+function is_whitespace(c: i32): i32 {
+    if (c == CHAR_SPACE) return 1;
+    if (c == CHAR_TAB) return 1;
+    if (c == CHAR_NEWLINE) return 1;
+    if (c == 13) return 1; // CR
+    return 0;
 }
 
-function is_whitespace(c: i8): bool {
-    if (c == 32) { return true; }
-    if (c == 9) { return true; }
-    if (c == 10) { return true; }
-    if (c == 13) { return true; }
-    return false;
-}
-
-function match_keyword(src: ptr<i8>, start: i32, len: i32, keyword: ptr<i8>): bool {
-    let keywordLen = string_length(keyword);
-    if (len != keywordLen) { 
-        return false; 
-    }
-    
-    let i = 0;
-    while (i < len) {
-        let c1 = string_char_at(src, start + i);
-        let c2 = string_char_at(keyword, i);
-        if (c1 != c2) { 
-            return false; 
+// Helper: Check if character is digit
+function is_digit(c: i32): i32 {
+    if (c >= CHAR_ZERO) {
+        if (c <= CHAR_NINE) {
+            return 1;
         }
-        i = i + 1;
     }
-    return true;
+    return 0;
 }
 
-function get_keyword_kind(src: ptr<i8>, start: i32, len: i32): i32 {
-    if (len == 2) {
-        if (match_keyword(src, start, len, "if")) { return TK_KW_IF; }
-        if (match_keyword(src, start, len, "as")) { return TK_KW_AS; }
-    }
-    if (len == 3) {
-        if (match_keyword(src, start, len, "let")) { return TK_KW_LET; }
-        if (match_keyword(src, start, len, "for")) { return TK_KW_FOR; }
-    }
-    if (len == 4) {
-        if (match_keyword(src, start, len, "null")) { return TK_KW_NULL; }
-        if (match_keyword(src, start, len, "true")) { return TK_KW_TRUE; }
-        if (match_keyword(src, start, len, "else")) { return TK_KW_ELSE; }
-        if (match_keyword(src, start, len, "from")) { return TK_KW_FROM; }
-        if (match_keyword(src, start, len, "type")) { return TK_KW_TYPE; }
-    }
-    if (len == 5) {
-        if (match_keyword(src, start, len, "const")) { return TK_KW_CONST; }
-        if (match_keyword(src, start, len, "false")) { return TK_KW_FALSE; }
-        if (match_keyword(src, start, len, "while")) { return TK_KW_WHILE; }
-        if (match_keyword(src, start, len, "break")) { return TK_KW_BREAK; }
-    }
-    if (len == 6) {
-        if (match_keyword(src, start, len, "return")) { return TK_KW_RETURN; }
-        if (match_keyword(src, start, len, "import")) { return TK_KW_IMPORT; }
-        if (match_keyword(src, start, len, "export")) { return TK_KW_EXPORT; }
-    }
-    if (len == 7) {
-        if (match_keyword(src, start, len, "declare")) { return TK_KW_DECLARE; }
-    }
-    if (len == 8) {
-        if (match_keyword(src, start, len, "function")) { return TK_KW_FUNCTION; }
-        if (match_keyword(src, start, len, "continue")) { return TK_KW_CONTINUE; }
-    }
-    if (len == 9) {
-        if (match_keyword(src, start, len, "interface")) { return TK_KW_INTERFACE; }
-    }
-    
-    return TK_IDENTIFIER;
-}
-
-// ============================================================================
-// LEXER - Main Function
-// ============================================================================
-
-export function lex(
-    src: ptr<i8>, 
-    srcLen: i32, 
-    tokens: ptr<i32>, 
-    starts: ptr<i32>, 
-    lens: ptr<i32>
-): i32 {
-    let pos = 0;
-    let count = 0;
-    let maxTokens = 1000;
-    
-    while (pos < srcLen) {
-        if (count >= maxTokens) { 
-            return count; 
+// Helper: Check if character is letter
+function is_letter(c: i32): i32 {
+    if (c >= CHAR_A_LOWER) {
+        if (c <= CHAR_Z_LOWER) {
+            return 1;
         }
+    }
+    if (c >= CHAR_A_UPPER) {
+        if (c <= CHAR_Z_UPPER) {
+            return 1;
+        }
+    }
+    if (c == CHAR_UNDERSCORE) return 1;
+    return 0;
+}
+
+// Helper: Check if character is alphanumeric
+function is_alnum(c: i32): i32 {
+    if (is_letter(c)) return 1;
+    if (is_digit(c)) return 1;
+    return 0;
+}
+
+// Helper: Get current character
+function current_char(): i32 {
+    if (pos >= sourceLen) return 0;
+    return string_char_at(source, pos);
+}
+
+// Helper: Peek next character
+function peek_char(): i32 {
+    if (pos + 1 >= sourceLen) return 0;
+    return string_char_at(source, pos + 1);
+}
+
+// Helper: Advance position
+function advance(): void {
+    let c: i32 = current_char();
+    pos = pos + 1;
+    if (c == CHAR_NEWLINE) {
+        line = line + 1;
+        column = 1;
+    }
+    else {
+        column = column + 1;
+    }
+}
+
+// Helper: Add token
+function add_token(kind: i32, start: i32, length: i32): void {
+    tokens[tokenCount].kind = kind;
+    tokens[tokenCount].start = start;
+    tokens[tokenCount].length = length;
+    tokens[tokenCount].line = line;
+    tokens[tokenCount].column = column;
+    tokenCount = tokenCount + 1;
+}
+
+// Skip whitespace and comments
+function skip_whitespace(): void {
+    while (pos < sourceLen) {
+        let c: i32 = current_char();
         
-        let c = string_char_at(src, pos);
-        let start = pos;
-        
-        // Skip whitespace
         if (is_whitespace(c)) {
-            pos = pos + 1;
+            advance();
         }
-        // Skip line comments
-        else if (c == 47) {
-            let next = string_char_at(src, pos + 1);
-            if (next == 47) {
-                pos = pos + 2;
-                while (pos < srcLen) {
-                    let ch = string_char_at(src, pos);
-                    if (ch == 10) {
-                        pos = pos + 1;
-                        break;
+        else if (c == CHAR_SLASH) {
+            let next: i32 = peek_char();
+            if (next == CHAR_SLASH) {
+                // Single-line comment
+                advance();
+                advance();
+                while (pos < sourceLen) {
+                    let ch: i32 = current_char();
+                    if (ch == CHAR_NEWLINE) break;
+                    advance();
+                }
+            }
+            else if (next == CHAR_STAR) {
+                // Multi-line comment
+                advance();
+                advance();
+                while (pos < sourceLen) {
+                    let ch: i32 = current_char();
+                    if (ch == CHAR_STAR) {
+                        if (peek_char() == CHAR_SLASH) {
+                            advance();
+                            advance();
+                            break;
+                        }
                     }
-                    pos = pos + 1;
-                }
-            } else {
-                tokens[count] = TK_SLASH;
-                starts[count] = start;
-                lens[count] = 1;
-                count = count + 1;
-                pos = pos + 1;
-            }
-        }
-        // Numbers
-        else if (is_digit(c)) {
-            while (pos < srcLen) {
-                if (is_digit(string_char_at(src, pos))) {
-                    pos = pos + 1;
-                } else {
-                    break;
+                    advance();
                 }
             }
-            tokens[count] = TK_NUMBER;
-            starts[count] = start;
-            lens[count] = pos - start;
-            count = count + 1;
-        }
-        // Strings
-        else if (c == 34) {
-            pos = pos + 1;
-            while (pos < srcLen) {
-                let ch = string_char_at(src, pos);
-                if (ch == 34) {
-                    pos = pos + 1;
-                    break;
-                }
-                if (ch == 92) {
-                    pos = pos + 2;
-                } else {
-                    pos = pos + 1;
-                }
+            else {
+                break;
             }
-            tokens[count] = TK_STRING;
-            starts[count] = start;
-            lens[count] = pos - start;
-            count = count + 1;
-        }
-        // Identifiers and keywords
-        else if (is_alpha(c)) {
-            while (pos < srcLen) {
-                let ch = string_char_at(src, pos);
-                if (is_alpha(ch) || is_digit(ch)) {
-                    pos = pos + 1;
-                } else {
-                    break;
-                }
-            }
-            
-            let wordLen = pos - start;
-            let kind = get_keyword_kind(src, start, wordLen);
-            
-            tokens[count] = kind;
-            starts[count] = start;
-            lens[count] = wordLen;
-            count = count + 1;
-        }
-        // Operators and punctuation
-        else if (c == 59) {
-            tokens[count] = TK_SEMICOLON;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 40) {
-            tokens[count] = TK_LPAREN;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 41) {
-            tokens[count] = TK_RPAREN;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 123) {
-            tokens[count] = TK_LBRACE;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 125) {
-            tokens[count] = TK_RBRACE;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 58) {
-            tokens[count] = TK_COLON;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 44) {
-            tokens[count] = TK_COMMA;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 46) {
-            tokens[count] = TK_DOT;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 91) {
-            tokens[count] = TK_LBRACKET;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 93) {
-            tokens[count] = TK_RBRACKET;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 60) {
-            tokens[count] = TK_LT;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 62) {
-            tokens[count] = TK_GT;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 61) {
-            let next = string_char_at(src, pos + 1);
-            if (next == 61) {
-                tokens[count] = TK_EQEQ;
-                starts[count] = start;
-                lens[count] = 2;
-                count = count + 1;
-                pos = pos + 2;
-            } else {
-                tokens[count] = TK_EQ;
-                starts[count] = start;
-                lens[count] = 1;
-                count = count + 1;
-                pos = pos + 1;
-            }
-        }
-        else if (c == 33) {
-            let next = string_char_at(src, pos + 1);
-            if (next == 61) {
-                tokens[count] = TK_NE;
-                starts[count] = start;
-                lens[count] = 2;
-                count = count + 1;
-                pos = pos + 2;
-            } else {
-                pos = pos + 1;
-            }
-        }
-        else if (c == 43) {
-            tokens[count] = TK_PLUS;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 45) {
-            tokens[count] = TK_MINUS;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 42) {
-            tokens[count] = TK_STAR;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 38) {
-            tokens[count] = TK_AMPERSAND;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
-        }
-        else if (c == 124) {
-            tokens[count] = TK_PIPE;
-            starts[count] = start;
-            lens[count] = 1;
-            count = count + 1;
-            pos = pos + 1;
         }
         else {
-            pos = pos + 1;
+            break;
+        }
+    }
+}
+
+// Lex identifier or keyword
+function lex_identifier(): void {
+    let start: i32 = pos;
+    let startCol: i32 = column;
+    
+    while (pos < sourceLen) {
+        let c: i32 = current_char();
+        if (is_alnum(c)) {
+            advance();
+        }
+        else {
+            break;
         }
     }
     
-    return count;
+    let length: i32 = pos - start;
+    
+    // Check for keywords
+    let kind: i32 = TK_IDENTIFIER;
+    
+    // TODO: Implement keyword matching
+    // For now, just treat everything as identifier
+    
+    add_token(kind, start, length);
+}
+
+// Lex number
+function lex_number(): void {
+    let start: i32 = pos;
+    
+    while (pos < sourceLen) {
+        let c: i32 = current_char();
+        if (is_digit(c)) {
+            advance();
+        }
+        else {
+            break;
+        }
+    }
+    
+    let length: i32 = pos - start;
+    add_token(TK_NUMBER, start, length);
+}
+
+// Lex string
+function lex_string(): void {
+    let start: i32 = pos;
+    advance(); // Skip opening quote
+    
+    while (pos < sourceLen) {
+        let c: i32 = current_char();
+        if (c == CHAR_QUOTE) {
+            advance(); // Skip closing quote
+            break;
+        }
+        if (c == 92) { // Backslash
+            advance();
+            if (pos < sourceLen) advance();
+        }
+        else {
+            advance();
+        }
+    }
+    
+    let length: i32 = pos - start;
+    add_token(TK_STRING, start, length);
+}
+
+// Main tokenize function
+function tokenize(): i32 {
+    while (pos < sourceLen) {
+        skip_whitespace();
+        if (pos >= sourceLen) break;
+        
+        let c: i32 = current_char();
+        let start: i32 = pos;
+        
+        // Identifier or keyword
+        if (is_letter(c)) {
+            lex_identifier();
+        }
+        // Number
+        else if (is_digit(c)) {
+            lex_number();
+        }
+        // String
+        else if (c == CHAR_QUOTE) {
+            lex_string();
+        }
+        // Operators and punctuation
+        else if (c == 43) { // +
+            advance();
+            add_token(TK_PLUS, start, 1);
+        }
+        else if (c == 45) { // -
+            advance();
+            add_token(TK_MINUS, start, 1);
+        }
+        else if (c == CHAR_STAR) { // *
+            advance();
+            add_token(TK_STAR, start, 1);
+        }
+        else if (c == CHAR_SLASH) { // /
+            advance();
+            add_token(TK_SLASH, start, 1);
+        }
+        else if (c == 37) { // %
+            advance();
+            add_token(TK_PERCENT, start, 1);
+        }
+        else if (c == 61) { // =
+            advance();
+            if (current_char() == 61) {
+                advance();
+                add_token(TK_EQUAL_EQUAL, start, 2);
+            }
+            else {
+                add_token(TK_EQUAL, start, 1);
+            }
+        }
+        else if (c == 33) { // !
+            advance();
+            if (current_char() == 61) {
+                advance();
+                add_token(TK_NOT_EQUAL, start, 2);
+            }
+            else {
+                add_token(TK_NOT, start, 1);
+            }
+        }
+        else if (c == 60) { // <
+            advance();
+            if (current_char() == 61) {
+                advance();
+                add_token(TK_LESS_EQUAL, start, 2);
+            }
+            else {
+                add_token(TK_LESS, start, 1);
+            }
+        }
+        else if (c == 62) { // >
+            advance();
+            if (current_char() == 61) {
+                advance();
+                add_token(TK_GREATER_EQUAL, start, 2);
+            }
+            else {
+                add_token(TK_GREATER, start, 1);
+            }
+        }
+        else if (c == 38) { // &
+            advance();
+            if (current_char() == 38) {
+                advance();
+                add_token(TK_AND, start, 2);
+            }
+        }
+        else if (c == 124) { // |
+            advance();
+            if (current_char() == 124) {
+                advance();
+                add_token(TK_OR, start, 2);
+            }
+        }
+        else if (c == 40) { // (
+            advance();
+            add_token(TK_LPAREN, start, 1);
+        }
+        else if (c == 41) { // )
+            advance();
+            add_token(TK_RPAREN, start, 1);
+        }
+        else if (c == 123) { // {
+            advance();
+            add_token(TK_LBRACE, start, 1);
+        }
+        else if (c == 125) { // }
+            advance();
+            add_token(TK_RBRACE, start, 1);
+        }
+        else if (c == 91) { // [
+            advance();
+            add_token(TK_LBRACKET, start, 1);
+        }
+        else if (c == 93) { // ]
+            advance();
+            add_token(TK_RBRACKET, start, 1);
+        }
+        else if (c == 59) { // ;
+            advance();
+            add_token(TK_SEMICOLON, start, 1);
+        }
+        else if (c == 58) { // :
+            advance();
+            add_token(TK_COLON, start, 1);
+        }
+        else if (c == 44) { // ,
+            advance();
+            add_token(TK_COMMA, start, 1);
+        }
+        else if (c == 46) { // .
+            advance();
+            add_token(TK_DOT, start, 1);
+        }
+        else if (c == 64) { // @
+            advance();
+            add_token(TK_AT, start, 1);
+        }
+        else {
+            // Unknown character, skip it
+            advance();
+        }
+    }
+    
+    // Add EOF token
+    add_token(TK_EOF, pos, 0);
+    return tokenCount;
 }

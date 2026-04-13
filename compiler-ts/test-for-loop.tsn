@@ -1,0 +1,15 @@
+// Test for loop
+function sum(): i32 {
+    let total: i32 = 0;
+    let i: i32;
+    
+    for (i = 0; i < 10; i = i + 1) {
+        total = total + i;
+    }
+    
+    return total;
+}
+
+function main(): i32 {
+    return sum();
+}
