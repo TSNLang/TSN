@@ -2723,8 +2723,22 @@ static void emitStmt(llvm::IRBuilder<> &b, const Stmt *stmt, llvm::Module &m, co
                         llvm::Type *arrayType = arrayAlloca->getAllocatedType();
                         
                         if (arrayType->isArrayTy()) {
+                            // Array type: arr[i] = value
                             llvm::Value *zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), 0);
                             llvm::Value *elemPtr = b.CreateInBoundsGEP(arrayType, arrayAlloca, {zero, idx}, "elemptr");
+                            b.CreateStore(val, elemPtr);
+                        } else if (arrayType->isPointerTy() || arrayType == llvm::PointerType::getUnqual(ctx)) {
+                            // Pointer type: ptr[i] = value
+                            llvm::Value *base = b.CreateLoad(arrayType, arrayAlloca, baseIdent->name);
+                            
+                            // Get element type from tracked pointer types
+                            llvm::Type *elemTy = llvm::Type::getInt32Ty(ctx); // default to i32
+                            auto typeIt = prog.pointerElementTypes.find(baseIdent->name);
+                            if (typeIt != prog.pointerElementTypes.end()) {
+                                elemTy = lowerType(ctx, typeIt->second, prog.structTypes);
+                            }
+                            
+                            llvm::Value *elemPtr = b.CreateInBoundsGEP(elemTy, base, idx, "elemptr");
                             b.CreateStore(val, elemPtr);
                         }
                     }

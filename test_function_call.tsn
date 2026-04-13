@@ -1,0 +1,15 @@
+// Test function call with array parameters
+
+function test_func(arr1: ptr<i32>, arr2: ptr<i32>): i32 {
+    return arr1[0] + arr2[0];
+}
+
+function main(): i32 {
+    let a: i32[10];
+    let b: i32[10];
+    a[0] = 5;
+    b[0] = 10;
+    
+    let result = test_func(a, b);
+    return result;
+}

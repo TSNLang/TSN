@@ -687,11 +687,33 @@ function parse_function(
     nodeCount: ptr<i32>,
     src: ptr<i8>
 ): i32 {
+    print("DEBUG: parse_function called!");
     let currentPos = pos[0];
     
+    // Debug: check currentPos
+    if (currentPos == 0) {
+        print("DEBUG: currentPos is 0");
+    } else {
+        print("DEBUG: currentPos is NOT 0!");
+    }
+    
+    print("DEBUG: Checking first token...");
+    let firstToken = tokens[currentPos];
+    
+    // Debug: check token value
+    if (firstToken == 30) {
+        print("DEBUG: Token is 30 (TK_KW_FUNCTION)");
+    } else if (firstToken == 0) {
+        print("DEBUG: Token is 0 (TK_END)");
+    } else {
+        print("DEBUG: Token is something else");
+    }
+    
     if (tokens[currentPos] != TK_KW_FUNCTION) {
+        print("DEBUG: First token is NOT function keyword!");
         return 0;
     }
+    print("DEBUG: First token IS function keyword!");
     currentPos = currentPos + 1;
     
     if (tokens[currentPos] != TK_IDENTIFIER) {
@@ -1027,6 +1049,14 @@ function main(): void {
     let starts: i32[1000];
     let lens: i32[1000];
     let tokenCount = lex(sourceBuffer, sourceLen, tokens, starts, lens);
+    
+    // Debug: check tokenCount
+    if (tokenCount > 0) {
+        print("DEBUG: tokenCount > 0, good!");
+    } else {
+        print("DEBUG: tokenCount = 0, no tokens!");
+    }
+    
     print("   ✓ Tokenization complete");
     
     print("🌳 [3/5] Parsing (AST generation)...");
@@ -1035,6 +1065,15 @@ function main(): void {
     let nodeCount: i32[1];
     pos[0] = 0;
     nodeCount[0] = 0;
+    
+    // Debug: check tokens[0] before calling parse_function
+    if (tokens[0] == 30) {
+        print("DEBUG: tokens[0] is 30 (TK_KW_FUNCTION) - GOOD!");
+    } else if (tokens[0] == 0) {
+        print("DEBUG: tokens[0] is 0 (TK_END) - BAD!");
+    } else {
+        print("DEBUG: tokens[0] is something else");
+    }
     
     let funcIdx = parse_function(tokens, starts, lens, pos, nodes, nodeCount, sourceBuffer);
     

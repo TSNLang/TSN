@@ -1,0 +1,21 @@
+// Test array passing to function
+
+function fill_array(arr: ptr<i32>): void {
+    arr[0] = 42;
+    arr[1] = 100;
+}
+
+function main(): i32 {
+    let myArray: i32[10];
+    myArray[0] = 0;
+    myArray[1] = 0;
+    
+    fill_array(myArray);
+    
+    // Check if array was modified
+    if (myArray[0] == 42) {
+        return 1;  // Success
+    } else {
+        return 0;  // Fail
+    }
+}

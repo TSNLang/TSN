@@ -1,0 +1,11 @@
+// Test indexed assignment in function
+
+function set_value(arr: ptr<i32>): void {
+    arr[0] = 42;
+}
+
+function main(): i32 {
+    let myArray: i32[10];
+    set_value(myArray);
+    return myArray[0];
+}
