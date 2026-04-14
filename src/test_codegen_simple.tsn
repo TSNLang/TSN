@@ -1,0 +1,153 @@
+// test_codegen_simple.tsn - Test codegen functions
+// Tests that codegen logic compiles correctly
+
+// Constants
+const AST_NUMBER_LITERAL: i32 = 136;
+const AST_IDENTIFIER: i32 = 135;
+const AST_BINARY_EXPR: i32 = 130;
+const AST_CALL_EXPR: i32 = 132;
+const AST_VAR_DECL: i32 = 112;
+const AST_RETURN_STMT: i32 = 120;
+const AST_ASSIGNMENT: i32 = 127;
+const AST_IF_STMT: i32 = 121;
+const AST_INTERFACE_DECL: i32 = 111;
+const AST_FUNCTION_DECL: i32 = 110;
+
+// Structures
+interface ASTNode {
+    kind: i32;
+    data1: i32;
+    data2: i32;
+    data3: i32;
+    data4: i32;
+    line: i32;
+    column: i32;
+}
+
+// Global state
+let nodes: ASTNode[100];
+let nodeCount: i32 = 0;
+let source: i32[1000];
+let sourceSize: i32 = 0;
+
+// Output buffer
+let output: i32[10000];
+let outputSize: i32 = 0;
+
+// Counters
+let tempCounter: i32 = 0;
+let labelCounter: i32 = 0;
+let indentLevel: i32 = 0;
+
+// Current function params
+let currentFunctionParamNames: i32[10];
+let currentFunctionParamCount: i32 = 0;
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function emit_char(ch: i32): void {
+    output[outputSize] = ch;
+    outputSize = outputSize + 1;
+}
+
+function emit_number(num: i32): void {
+    if (num == 0) {
+        emit_char(48); // '0'
+        return;
+    }
+    
+    let digits: i32[10];
+    let count: i32 = 0;
+    let temp: i32 = num;
+    
+    while (temp > 0) {
+        digits[count] = 48 + (temp % 10);
+        temp = temp / 10;
+        count = count + 1;
+    }
+    
+    while (count > 0) {
+        count = count - 1;
+        emit_char(digits[count]);
+    }
+}
+
+function new_temp(): i32 {
+    let temp: i32 = tempCounter;
+    tempCounter = tempCounter + 1;
+    return temp;
+}
+
+function new_label(): i32 {
+    let label: i32 = labelCounter;
+    labelCounter = labelCounter + 1;
+    return label;
+}
+
+// ============================================================================
+// SIMPLE EXPRESSION GENERATION
+// ============================================================================
+
+function generate_number_literal(nodeIdx: i32): i32 {
+    // Number literal - just return the node index
+    // Caller will extract the value
+    return nodeIdx;
+}
+
+function generate_simple_binary(leftVal: i32, rightVal: i32, op: i32): i32 {
+    // Generate: %temp = add i32 left, right
+    let temp: i32 = new_temp();
+    
+    // Emit: %temp = add i32 left, right
+    emit_char(37); // '%'
+    emit_number(temp);
+    emit_char(32);
+    emit_char(61); // '='
+    emit_char(32);
+    
+    // Operator
+    if (op == 43) { // '+'
+        emit_char(97); // 'a'
+        emit_char(100); // 'd'
+        emit_char(100); // 'd'
+    }
+    
+    emit_char(32);
+    emit_char(105); // 'i'
+    emit_char(51); // '3'
+    emit_char(50); // '2'
+    emit_char(32);
+    emit_number(leftVal);
+    emit_char(44); // ','
+    emit_char(32);
+    emit_number(rightVal);
+    emit_char(10); // newline
+    
+    return temp;
+}
+
+// ============================================================================
+// TEST FUNCTION
+// ============================================================================
+
+function main(): i32 {
+    // Initialize
+    outputSize = 0;
+    tempCounter = 0;
+    labelCounter = 0;
+    
+    // Test: Generate "5 + 3"
+    // Expected output: "%0 = add i32 5, 3\n"
+    
+    let result: i32 = generate_simple_binary(5, 3, 43);
+    
+    // Verify output
+    // Should have generated some characters
+    if (outputSize > 10) {
+        return 1; // Success
+    }
+    
+    return 0; // Failure
+}
