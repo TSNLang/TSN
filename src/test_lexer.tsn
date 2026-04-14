@@ -1,0 +1,44 @@
+// test_lexer.tsn - Simple test for the Lexer
+// This will test keyword recognition
+
+function test_keywords(): i32 {
+    // Test all keywords
+    let x: i32 = 0;
+    const y: i32 = 10;
+    
+    if (x < y) {
+        x = x + 1;
+    }
+    else {
+        x = x - 1;
+    }
+    
+    while (x < 5) {
+        x = x + 1;
+    }
+    
+    for (x = 0; x < 10; x = x + 1) {
+        if (x == 5) break;
+        if (x == 3) continue;
+    }
+    
+    return x;
+}
+
+interface Point {
+    x: i32;
+    y: i32;
+}
+
+declare function external_func(a: i32): i32;
+
+function main(): i32 {
+    let result: i32 = test_keywords();
+    let flag: bool = true;
+    
+    if (flag == false) {
+        return 0;
+    }
+    
+    return result;
+}

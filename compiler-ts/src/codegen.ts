@@ -26,6 +26,7 @@ export class CodeGenerator {
   private globals: Map<string, GlobalInfo> = new Map();
   private stringLiterals: Map<string, string> = new Map();
   private loopStack: LoopContext[] = [];
+  private currentFunctionParams: Set<string> = new Set();
 
   generate(program: Program): string {
     // Generate struct definitions first
@@ -106,6 +107,12 @@ export class CodeGenerator {
       return;
     }
 
+    // Track parameters for this function
+    this.currentFunctionParams.clear();
+    for (const param of decl.params) {
+      this.currentFunctionParams.add(param.name);
+    }
+
     // Function definition
     this.emit(`define ${returnType} @${decl.name}(${params}) {`);
     this.emit('entry:');
@@ -135,6 +142,9 @@ export class CodeGenerator {
     this.indent--;
     this.emit('}');
     this.emit('');
+    
+    // Clear parameters after function
+    this.currentFunctionParams.clear();
   }
 
   private generateStatement(stmt: Statement): void {
@@ -467,7 +477,14 @@ export class CodeGenerator {
       return temp;
     }
     
-    // Local variable
+    // Check if it's a parameter (has .addr version)
+    if (this.currentFunctionParams.has(expr.name)) {
+      const temp = this.newTemp();
+      this.emit(`${temp} = load i32, ptr %${expr.name}.addr, align 4`);
+      return temp;
+    }
+    
+    // Otherwise it's a local variable
     const temp = this.newTemp();
     this.emit(`${temp} = load i32, ptr %${expr.name}, align 4`);
     return temp;

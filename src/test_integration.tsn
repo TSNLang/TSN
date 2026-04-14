@@ -1,0 +1,13 @@
+// test_integration.tsn - Simple test for compiler integration
+// This tests that Lexer → Parser → Codegen pipeline works
+
+function add(a: i32, b: i32): i32 {
+    return a + b;
+}
+
+function main(): i32 {
+    let x: i32 = 10;
+    let y: i32 = 20;
+    let result: i32 = add(x, y);
+    return result;
+}

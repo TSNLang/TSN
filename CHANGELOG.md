@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.0-indev] - 2026-04-14
 
+### Fixed
+- **Critical Bug**: Fixed parameter vs local variable loading in TypeScript compiler codegen
+  - Parameters now correctly load from `%name.addr`
+  - Local variables correctly load from `%name`
+  - Globals correctly load from `@name`
+  - Added parameter tracking with `currentFunctionParams` set
+  - Verified with integration test returning correct exit code (30)
+  - Files: `compiler-ts/src/codegen.ts`, `src/test_integration.tsn`
+
 ### � Major Changes
 - **Complete rewrite**: Moved from C++ to TypeScript/Deno + TSN
 - **Dual compiler system**: TypeScript compiler for bootstrap, TSN compiler for self-hosting
