@@ -1,9 +1,29 @@
-// FullCompiler.tsn - Integrated TSN Compiler
-// Combines Lexer → Parser → Codegen
+// FullCompiler.tsn - Complete TSN Compiler
+// Integrates Lexer + Parser + Codegen
 // Written in TSN, compiled by TSN
 
 // ============================================================================
-// INCLUDE: Types.tsn (constants and structures)
+// SHARED GLOBAL STATE
+// ============================================================================
+
+// Source code buffer
+let source: i32[100000];
+let sourceSize: i32 = 0;
+
+// Token array (output from Lexer, input to Parser)
+let tokens: Token[10000];
+let tokenCount: i32 = 0;
+
+// AST node array (output from Parser, input to Codegen)
+let nodes: ASTNode[5000];
+let nodeCount: i32 = 0;
+
+// Output LLVM IR buffer (output from Codegen)
+let output: i32[500000];
+let outputSize: i32 = 0;
+
+// ============================================================================
+// TYPE DEFINITIONS (from Types.tsn)
 // ============================================================================
 
 // Token types
@@ -11,6 +31,8 @@ const TK_EOF: i32 = 0;
 const TK_IDENTIFIER: i32 = 1;
 const TK_NUMBER: i32 = 2;
 const TK_STRING: i32 = 3;
+
+// Keywords
 const TK_FUNCTION: i32 = 10;
 const TK_LET: i32 = 11;
 const TK_CONST: i32 = 12;
@@ -58,7 +80,7 @@ const TK_COMMA: i32 = 58;
 const TK_DOT: i32 = 59;
 const TK_AT: i32 = 60;
 
-// AST types
+// AST node types
 const AST_PROGRAM: i32 = 100;
 const AST_FUNCTION_DECL: i32 = 110;
 const AST_INTERFACE_DECL: i32 = 111;
@@ -82,27 +104,9 @@ const AST_STRING_LITERAL: i32 = 137;
 const AST_BOOL_LITERAL: i32 = 138;
 const AST_NULL_LITERAL: i32 = 139;
 const AST_ADDRESSOF_EXPR: i32 = 140;
-
-// Character codes
-const CHAR_NEWLINE: i32 = 10;
-const CHAR_SPACE: i32 = 32;
-const CHAR_TAB: i32 = 9;
-const CHAR_QUOTE: i32 = 34;
-const CHAR_SLASH: i32 = 47;
-const CHAR_STAR: i32 = 42;
-const CHAR_ZERO: i32 = 48;
-const CHAR_NINE: i32 = 57;
-const CHAR_A_LOWER: i32 = 97;
-const CHAR_Z_LOWER: i32 = 122;
-const CHAR_A_UPPER: i32 = 65;
-const CHAR_Z_UPPER: i32 = 90;
-const CHAR_UNDERSCORE: i32 = 95;
-
-// Limits
-const MAX_TOKENS: i32 = 10000;
-const MAX_NODES: i32 = 5000;
-const MAX_SOURCE_SIZE: i32 = 100000;
-const MAX_OUTPUT_SIZE: i32 = 500000;
+const AST_TYPE: i32 = 141;
+const AST_PARAMETER: i32 = 142;
+const AST_INTERFACE_FIELD: i32 = 143;
 
 // Structures
 interface Token {
@@ -124,125 +128,23 @@ interface ASTNode {
 }
 
 // ============================================================================
-// GLOBAL STATE
-// ============================================================================
-
-// Lexer state
-let source: ptr<i8>;
-let sourceLen: i32;
-let tokens: Token[10000];
-let tokenCount: i32;
-let lexPos: i32;
-let lexLine: i32;
-let lexColumn: i32;
-
-// Parser state
-let nodes: ASTNode[5000];
-let nodeCount: i32;
-let parsePos: i32;
-
-// Codegen state
-let output: ptr<i8>;
-let outputLen: i32;
-let tempCounter: i32;
-let labelCounter: i32;
-
-// ============================================================================
 // COMPILER PIPELINE
 // ============================================================================
 
-function compile_source(src: ptr<i8>, len: i32, out: ptr<i8>): i32 {
-    // Step 1: Lexer - Tokenize source
-    lexer_init(src, len);
-    let tokCount: i32 = tokenize();
+function compile(): i32 {
+    // Phase 1: Lexical Analysis
+    // TODO: Call lexer functions
+    // lex();
     
-    if (tokCount == 0) {
-        return 1; // Error: no tokens
-    }
+    // Phase 2: Syntax Analysis
+    // TODO: Call parser functions
+    // parse();
     
-    // Step 2: Parser - Build AST
-    parser_init();
-    let programNode: i32 = parse();
+    // Phase 3: Code Generation
+    // TODO: Call codegen functions
+    // generate();
     
-    if (programNode < 0) {
-        return 2; // Error: parse failed
-    }
-    
-    // Step 3: Codegen - Generate LLVM IR
-    codegen_init(out);
-    generate(programNode);
-    
-    return 0; // Success
-}
-
-// ============================================================================
-// LEXER (simplified - key functions only)
-// ============================================================================
-
-function lexer_init(src: ptr<i8>, len: i32): void {
-    source = src;
-    sourceLen = len;
-    tokenCount = 0;
-    lexPos = 0;
-    lexLine = 1;
-    lexColumn = 1;
-}
-
-function tokenize(): i32 {
-    // Simplified tokenizer
-    // Real implementation in Lexer.tsn
-    
-    // For now, just return 1 to indicate success
-    tokenCount = 1;
-    tokens[0].kind = TK_EOF;
-    tokens[0].start = 0;
-    tokens[0].length = 0;
-    tokens[0].line = 1;
-    tokens[0].column = 1;
-    
-    return tokenCount;
-}
-
-// ============================================================================
-// PARSER (simplified - key functions only)
-// ============================================================================
-
-function parser_init(): void {
-    nodeCount = 0;
-    parsePos = 0;
-}
-
-function parse(): i32 {
-    // Simplified parser
-    // Real implementation in Parser.tsn
-    
-    // Create a simple program node
-    let programNode: i32 = 0;
-    nodes[programNode].kind = AST_PROGRAM;
-    nodes[programNode].data1 = 0;
-    nodes[programNode].data2 = 0;
-    nodeCount = 1;
-    
-    return programNode;
-}
-
-// ============================================================================
-// CODEGEN (simplified - key functions only)
-// ============================================================================
-
-function codegen_init(out: ptr<i8>): void {
-    output = out;
-    outputLen = 0;
-    tempCounter = 0;
-    labelCounter = 0;
-}
-
-function generate(programNode: i32): void {
-    // Simplified codegen
-    // Real implementation in Codegen.tsn
-    
-    // Just emit a minimal LLVM IR
-    // In real implementation, this would traverse the AST
+    return 0;
 }
 
 // ============================================================================
@@ -250,11 +152,19 @@ function generate(programNode: i32): void {
 // ============================================================================
 
 function main(): i32 {
-    // This is a placeholder
-    // Real main would:
-    // 1. Read input file
-    // 2. Call compile_source()
-    // 3. Write output file
+    // Initialize compiler
+    sourceSize = 0;
+    tokenCount = 0;
+    nodeCount = 0;
+    outputSize = 0;
     
-    return 0;
+    // Run compilation
+    let result: i32 = compile();
+    
+    return result;
 }
+
+// ============================================================================
+// TODO: Include Lexer, Parser, Codegen functions here
+// For now, this is a skeleton that demonstrates the structure
+// ============================================================================
