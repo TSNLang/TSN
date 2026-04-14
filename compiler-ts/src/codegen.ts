@@ -283,7 +283,16 @@ export class CodeGenerator {
     if (stmt.target.kind === ASTKind.Identifier) {
       const ident = stmt.target as Identifier;
       const valueType = this.getValueType(value);
-      this.emit(`store ${valueType} ${value}, ptr %${ident.name}, align 4`);
+      
+      // Check if it's a global variable
+      const global = this.globals.get(ident.name);
+      if (global) {
+        // Global variable: use @name
+        this.emit(`store ${valueType} ${value}, ptr @${ident.name}, align 4`);
+      } else {
+        // Local variable or parameter: use %name
+        this.emit(`store ${valueType} ${value}, ptr %${ident.name}, align 4`);
+      }
       return;
     }
   }
@@ -299,7 +308,18 @@ export class CodeGenerator {
   }
 
   private generateIf(stmt: IfStmt): void {
-    const condition = this.generateExpression(stmt.condition);
+    const conditionValue = this.generateExpression(stmt.condition);
+    
+    // Check if condition is already i1 (from comparison) or needs conversion
+    let condition = conditionValue;
+    // If it's a temp variable from comparison, it's already i1
+    // If it's a number or identifier, convert to i1
+    if (!conditionValue.startsWith('%') || this.needsI1Conversion(stmt.condition)) {
+      const temp = this.newTemp();
+      this.emit(`${temp} = icmp ne i32 ${conditionValue}, 0`);
+      condition = temp;
+    }
+    
     const thenLabel = this.newLabel('then');
     const endLabel = this.newLabel('endif');
 
@@ -312,20 +332,32 @@ export class CodeGenerator {
       this.emit('');
       this.emit(`${thenLabel}:`);
       this.indent++;
+      let thenHasReturn = false;
       for (const s of stmt.thenBranch) {
         this.generateStatement(s);
+        if (s.kind === ASTKind.ReturnStmt) {
+          thenHasReturn = true;
+        }
       }
-      this.emit(`br label %${endLabel}`);
+      if (!thenHasReturn) {
+        this.emit(`br label %${endLabel}`);
+      }
       this.indent--;
 
       // Else branch
       this.emit('');
       this.emit(`${elseLabel}:`);
       this.indent++;
+      let elseHasReturn = false;
       for (const s of stmt.elseBranch) {
         this.generateStatement(s);
+        if (s.kind === ASTKind.ReturnStmt) {
+          elseHasReturn = true;
+        }
       }
-      this.emit(`br label %${endLabel}`);
+      if (!elseHasReturn) {
+        this.emit(`br label %${endLabel}`);
+      }
       this.indent--;
     } else {
       // No else branch - branch directly to end
@@ -335,16 +367,35 @@ export class CodeGenerator {
       this.emit('');
       this.emit(`${thenLabel}:`);
       this.indent++;
+      let thenHasReturn = false;
       for (const s of stmt.thenBranch) {
         this.generateStatement(s);
+        if (s.kind === ASTKind.ReturnStmt) {
+          thenHasReturn = true;
+        }
       }
-      this.emit(`br label %${endLabel}`);
+      if (!thenHasReturn) {
+        this.emit(`br label %${endLabel}`);
+      }
       this.indent--;
     }
 
     // End
     this.emit('');
     this.emit(`${endLabel}:`);
+  }
+
+  private needsI1Conversion(expr: Expression): boolean {
+    // Binary expressions with comparison operators already return i1
+    if (expr.kind === ASTKind.BinaryExpr) {
+      const binExpr = expr as BinaryExpr;
+      const compOps = ['==', '!=', '<', '<=', '>', '>='];
+      if (compOps.includes(binExpr.operator)) {
+        return false; // Already i1
+      }
+    }
+    // Everything else needs conversion
+    return true;
   }
 
   private generateWhile(stmt: WhileStmt): void {
@@ -360,7 +411,16 @@ export class CodeGenerator {
     this.emit('');
     this.emit(`${condLabel}:`);
     this.indent++;
-    const condition = this.generateExpression(stmt.condition);
+    const conditionValue = this.generateExpression(stmt.condition);
+    
+    // Check if condition is already i1 or needs conversion
+    let condition = conditionValue;
+    if (!conditionValue.startsWith('%') || this.needsI1Conversion(stmt.condition)) {
+      const temp = this.newTemp();
+      this.emit(`${temp} = icmp ne i32 ${conditionValue}, 0`);
+      condition = temp;
+    }
+    
     this.emit(`br i1 ${condition}, label %${bodyLabel}, label %${endLabel}`);
     this.indent--;
 
@@ -401,7 +461,16 @@ export class CodeGenerator {
     this.emit(`${condLabel}:`);
     this.indent++;
     if (stmt.condition) {
-      const condition = this.generateExpression(stmt.condition);
+      const conditionValue = this.generateExpression(stmt.condition);
+      
+      // Check if condition is already i1 or needs conversion
+      let condition = conditionValue;
+      if (!conditionValue.startsWith('%') || this.needsI1Conversion(stmt.condition)) {
+        const temp = this.newTemp();
+        this.emit(`${temp} = icmp ne i32 ${conditionValue}, 0`);
+        condition = temp;
+      }
+      
       this.emit(`br i1 ${condition}, label %${bodyLabel}, label %${endLabel}`);
     } else {
       this.emit(`br label %${bodyLabel}`);

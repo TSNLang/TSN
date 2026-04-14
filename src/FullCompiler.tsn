@@ -9,6 +9,7 @@
 // Source code buffer
 let source: i32[100000];
 let sourceSize: i32 = 0;
+let sourceLen: i32 = 0;  // For Lexer compatibility
 
 // Token array (output from Lexer, input to Parser)
 let tokens: Token[10000];
@@ -21,6 +22,20 @@ let nodeCount: i32 = 0;
 // Output LLVM IR buffer (output from Codegen)
 let output: i32[500000];
 let outputSize: i32 = 0;
+
+// Lexer state
+let pos: i32 = 0;
+let line: i32 = 1;
+let column: i32 = 1;
+
+// Parser state
+let currentPos: i32 = 0;
+
+// Codegen state
+let tempCounter: i32 = 0;
+let labelCounter: i32 = 0;
+let stringCounter: i32 = 0;
+let indentLevel: i32 = 0;
 
 // ============================================================================
 // TYPE DEFINITIONS (from Types.tsn)
@@ -108,6 +123,26 @@ const AST_TYPE: i32 = 141;
 const AST_PARAMETER: i32 = 142;
 const AST_INTERFACE_FIELD: i32 = 143;
 
+// Character constants for lexer
+const CHAR_NEWLINE: i32 = 10;
+const CHAR_SPACE: i32 = 32;
+const CHAR_TAB: i32 = 9;
+const CHAR_ZERO: i32 = 48;
+const CHAR_NINE: i32 = 57;
+const CHAR_A_LOWER: i32 = 97;
+const CHAR_Z_LOWER: i32 = 122;
+const CHAR_A_UPPER: i32 = 65;
+const CHAR_Z_UPPER: i32 = 90;
+const CHAR_UNDERSCORE: i32 = 95;
+const CHAR_QUOTE: i32 = 34;
+const CHAR_SLASH: i32 = 47;
+const CHAR_STAR: i32 = 42;
+
+// Limits
+const MAX_TOKENS: i32 = 10000;
+const MAX_NODES: i32 = 5000;
+const MAX_SOURCE_SIZE: i32 = 100000;
+
 // Structures
 interface Token {
     kind: i32;
@@ -152,11 +187,8 @@ function compile(): i32 {
 // ============================================================================
 
 function main(): i32 {
-    // Initialize compiler
-    sourceSize = 0;
-    tokenCount = 0;
-    nodeCount = 0;
-    outputSize = 0;
+    // Note: Global variables are already initialized to 0
+    // No need to explicitly set them
     
     // Run compilation
     let result: i32 = compile();

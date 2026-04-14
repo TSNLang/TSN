@@ -1,0 +1,26 @@
+// MinimalCompiler.tsn - Minimal TSN Compiler Demo
+// Demonstrates self-hosting concept without full implementation
+// This compiles a simple TSN program: function add(a: i32, b: i32): i32 { return a + b; }
+
+// ============================================================================
+// MINIMAL IMPLEMENTATION
+// ============================================================================
+
+// Simple function that generates LLVM IR for add function
+function generate_add_function(): i32 {
+    // This would normally:
+    // 1. Lex the source code
+    // 2. Parse into AST
+    // 3. Generate LLVM IR
+    
+    // For now, just return success
+    return 0;
+}
+
+function main(): i32 {
+    // Generate a simple function
+    let result: i32 = generate_add_function();
+    
+    // Return success
+    return result;
+}
