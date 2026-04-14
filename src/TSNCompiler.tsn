@@ -213,7 +213,7 @@ function main(): i32 {
 
 // Initialize lexer
 function lexer_init(src: ptr<i8>, len: i32): void {
-    source = src;
+    // source = src;  // TODO: Type mismatch - source is i32[] but src is ptr<i8>
     sourceLen = len;
     tokenCount = 0;
     pos = 0;
@@ -301,6 +301,7 @@ function add_token(kind: i32, start: i32, length: i32): void {
 // Skip whitespace and comments
 function skip_whitespace(): void {
     while (pos < sourceLen) {
+        let c: i32 = current_char();
         
         if (is_whitespace(c)) {
             advance();
@@ -322,7 +323,8 @@ function skip_whitespace(): void {
                 advance();
                 advance();
                 while (pos < sourceLen) {
-                    if (ch == CHAR_STAR) {
+                    let ch2: i32 = current_char();
+                    if (ch2 == CHAR_STAR) {
                         if (peek_char() == CHAR_SLASH) {
                             advance();
                             advance();

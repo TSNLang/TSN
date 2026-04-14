@@ -27,6 +27,7 @@ export class CodeGenerator {
   private stringLiterals: Map<string, string> = new Map();
   private loopStack: LoopContext[] = [];
   private currentFunctionParams: Set<string> = new Set();
+  private currentFunctionParamTypes: Map<string, string> = new Map();
 
   generate(program: Program): string {
     // Generate struct definitions first
@@ -128,8 +129,10 @@ export class CodeGenerator {
 
     // Track parameters for this function
     this.currentFunctionParams.clear();
+    this.currentFunctionParamTypes.clear();
     for (const param of decl.params) {
       this.currentFunctionParams.add(param.name);
+      this.currentFunctionParamTypes.set(param.name, this.getLLVMType(param.type));
     }
 
     // Function definition
@@ -164,6 +167,7 @@ export class CodeGenerator {
     
     // Clear parameters after function
     this.currentFunctionParams.clear();
+    this.currentFunctionParamTypes.clear();
   }
 
   private generateStatement(stmt: Statement): void {
@@ -229,10 +233,14 @@ export class CodeGenerator {
           // Get the struct type from the base identifier
           const structType = this.guessStructType(baseIdent.name);
           
+          // Check if base is global array
+          const global = this.globals.get(baseIdent.name);
+          const basePtr = global && global.type.startsWith('[') ? `@${baseIdent.name}` : `%${baseIdent.name}`;
+          
           // For array of structs: arr[i].field
           // First GEP to get pointer to arr[i]
           const elemPtrTemp = this.newTemp();
-          this.emit(`${elemPtrTemp} = getelementptr inbounds %${structType}, ptr %${baseIdent.name}, i32 ${index}`);
+          this.emit(`${elemPtrTemp} = getelementptr inbounds %${structType}, ptr ${basePtr}, i32 ${index}`);
           
           // Get field index
           const fieldIndex = this.getFieldIndex(structType, memberExpr.member);
@@ -332,14 +340,14 @@ export class CodeGenerator {
       this.emit('');
       this.emit(`${thenLabel}:`);
       this.indent++;
-      let thenHasReturn = false;
+      let thenHasTerminator = false;
       for (const s of stmt.thenBranch) {
         this.generateStatement(s);
-        if (s.kind === ASTKind.ReturnStmt) {
-          thenHasReturn = true;
+        if (s.kind === ASTKind.ReturnStmt || s.kind === ASTKind.BreakStmt || s.kind === ASTKind.ContinueStmt) {
+          thenHasTerminator = true;
         }
       }
-      if (!thenHasReturn) {
+      if (!thenHasTerminator) {
         this.emit(`br label %${endLabel}`);
       }
       this.indent--;
@@ -348,14 +356,14 @@ export class CodeGenerator {
       this.emit('');
       this.emit(`${elseLabel}:`);
       this.indent++;
-      let elseHasReturn = false;
+      let elseHasTerminator = false;
       for (const s of stmt.elseBranch) {
         this.generateStatement(s);
-        if (s.kind === ASTKind.ReturnStmt) {
-          elseHasReturn = true;
+        if (s.kind === ASTKind.ReturnStmt || s.kind === ASTKind.BreakStmt || s.kind === ASTKind.ContinueStmt) {
+          elseHasTerminator = true;
         }
       }
-      if (!elseHasReturn) {
+      if (!elseHasTerminator) {
         this.emit(`br label %${endLabel}`);
       }
       this.indent--;
@@ -367,14 +375,14 @@ export class CodeGenerator {
       this.emit('');
       this.emit(`${thenLabel}:`);
       this.indent++;
-      let thenHasReturn = false;
+      let thenHasTerminator = false;
       for (const s of stmt.thenBranch) {
         this.generateStatement(s);
-        if (s.kind === ASTKind.ReturnStmt) {
-          thenHasReturn = true;
+        if (s.kind === ASTKind.ReturnStmt || s.kind === ASTKind.BreakStmt || s.kind === ASTKind.ContinueStmt) {
+          thenHasTerminator = true;
         }
       }
-      if (!thenHasReturn) {
+      if (!thenHasTerminator) {
         this.emit(`br label %${endLabel}`);
       }
       this.indent--;
@@ -574,6 +582,13 @@ export class CodeGenerator {
     // Check if it's a global constant
     const global = this.globals.get(expr.name);
     if (global) {
+      // If it's an array type, return pointer directly (don't load)
+      if (global.type.startsWith('[')) {
+        // Array type - return pointer to array
+        return `@${expr.name}`;
+      }
+      
+      // Regular global - load value
       const temp = this.newTemp();
       this.emit(`${temp} = load ${global.type}, ptr @${expr.name}, align ${this.getAlignment(global.type)}`);
       return temp;
@@ -581,8 +596,9 @@ export class CodeGenerator {
     
     // Check if it's a parameter (has .addr version)
     if (this.currentFunctionParams.has(expr.name)) {
+      const paramType = this.currentFunctionParamTypes.get(expr.name) || 'i32';
       const temp = this.newTemp();
-      this.emit(`${temp} = load i32, ptr %${expr.name}.addr, align 4`);
+      this.emit(`${temp} = load ${paramType}, ptr %${expr.name}.addr, align ${this.getAlignment(paramType)}`);
       return temp;
     }
     
@@ -767,9 +783,13 @@ export class CodeGenerator {
       const structType = this.guessStructType(base);
       const fieldIndex = this.getFieldIndex(structType, expr.member);
       
+      // Check if base is global array
+      const global = this.globals.get(base);
+      const basePtr = global && global.type.startsWith('[') ? `@${base}` : `%${base}`;
+      
       // For array of structs: arr[i].field
       const elemPtrTemp = this.newTemp();
-      this.emit(`${elemPtrTemp} = getelementptr inbounds %${structType}, ptr %${base}, i32 ${index}`);
+      this.emit(`${elemPtrTemp} = getelementptr inbounds %${structType}, ptr ${basePtr}, i32 ${index}`);
       
       const fieldPtrTemp = this.newTemp();
       this.emit(`${fieldPtrTemp} = getelementptr inbounds %${structType}, ptr ${elemPtrTemp}, i32 0, i32 ${fieldIndex}`);
