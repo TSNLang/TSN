@@ -63,12 +63,31 @@ export class CodeGenerator {
   }
 
   private generateGlobalConst(decl: VarDecl): void {
+    const llvmType = decl.type ? this.getLLVMType(decl.type) : 'i32';
+    
+    // Handle arrays (no initializer needed - use zeroinitializer)
+    if (decl.type?.isArray) {
+      const size = decl.type.arraySize || 0;
+      const elementType = this.getLLVMType({ name: decl.type.name, isPointer: false, isArray: false, arraySize: undefined });
+      
+      // Store in globals map
+      this.globals.set(decl.name, { name: decl.name, type: `[${size} x ${elementType}]`, isConst: decl.isConst });
+      
+      // Emit global array with zero initialization
+      if (decl.isConst) {
+        this.emit(`@${decl.name} = constant [${size} x ${elementType}] zeroinitializer, align 4`);
+      } else {
+        this.emit(`@${decl.name} = global [${size} x ${elementType}] zeroinitializer, align 4`);
+      }
+      return;
+    }
+    
+    // Handle number literals (existing code)
     if (!decl.init || decl.init.kind !== ASTKind.NumberLiteral) {
       console.error(`Global ${decl.isConst ? 'const' : 'let'} ${decl.name} must have a number literal initializer`);
       return;
     }
 
-    const llvmType = decl.type ? this.getLLVMType(decl.type) : 'i32';
     const value = (decl.init as NumberLiteral).value;
     
     // Store in globals map for later reference
@@ -630,6 +649,23 @@ export class CodeGenerator {
     const base = (expr.base as Identifier).name;
     const index = this.generateExpression(expr.index);
     
+    // Check if it's a global array
+    const global = this.globals.get(base);
+    if (global && global.type.startsWith('[')) {
+      // Global array: @name
+      // Extract element type from array type: [100 x %Token] -> %Token
+      const match = global.type.match(/\[.*? x (.*?)\]/);
+      const elementType = match ? match[1] : 'i32';
+      
+      const elemPtrTemp = this.newTemp();
+      this.emit(`${elemPtrTemp} = getelementptr inbounds ${global.type}, ptr @${base}, i32 0, i32 ${index}`);
+      
+      const temp = this.newTemp();
+      this.emit(`${temp} = load ${elementType}, ptr ${elemPtrTemp}, align 4`);
+      return temp;
+    }
+    
+    // Local array: %name
     const elemPtrTemp = this.newTemp();
     this.emit(`${elemPtrTemp} = getelementptr inbounds i32, ptr %${base}, i32 0, i32 ${index}`);
     
