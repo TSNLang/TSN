@@ -361,6 +361,14 @@ function match_keyword(start: i32, length: i32, keyword: ptr<i8>, keywordLen: i3
 
 // Helper: Get keyword token kind
 function get_keyword_kind(start: i32, length: i32): i32 {
+    // Declare all character variables at function start
+    let c0: i32 = 0;
+    let c1: i32 = 0;
+    let c2: i32 = 0;
+    let c3: i32 = 0;
+    let c4: i32 = 0;
+    let c5: i32 = 0;
+    
     // Check length first for optimization
     if (length == 2) {
         // "if"
@@ -371,7 +379,9 @@ function get_keyword_kind(start: i32, length: i32): i32 {
         }
     }
     else if (length == 3) {
-        let c0: i32 = string_char_at(source, start);
+        c0 = string_char_at(source, start);
+        c1 = string_char_at(source, start + 1);
+        c2 = string_char_at(source, start + 2);
         
         // "let"
         if (c0 == 108) { // 'l'
@@ -391,7 +401,10 @@ function get_keyword_kind(start: i32, length: i32): i32 {
         }
     }
     else if (length == 4) {
-        let c3: i32 = string_char_at(source, start + 3);
+        c0 = string_char_at(source, start);
+        c1 = string_char_at(source, start + 1);
+        c2 = string_char_at(source, start + 2);
+        c3 = string_char_at(source, start + 3);
         
         // "else"
         if (c0 == 101) { // 'e'
@@ -425,7 +438,11 @@ function get_keyword_kind(start: i32, length: i32): i32 {
         }
     }
     else if (length == 5) {
-        let c4: i32 = string_char_at(source, start + 4);
+        c0 = string_char_at(source, start);
+        c1 = string_char_at(source, start + 1);
+        c2 = string_char_at(source, start + 2);
+        c3 = string_char_at(source, start + 3);
+        c4 = string_char_at(source, start + 4);
         
         // "const"
         if (c0 == 99) { // 'c'
@@ -477,7 +494,12 @@ function get_keyword_kind(start: i32, length: i32): i32 {
         }
     }
     else if (length == 6) {
-        let c5: i32 = string_char_at(source, start + 5);
+        c0 = string_char_at(source, start);
+        c1 = string_char_at(source, start + 1);
+        c2 = string_char_at(source, start + 2);
+        c3 = string_char_at(source, start + 3);
+        c4 = string_char_at(source, start + 4);
+        c5 = string_char_at(source, start + 5);
         
         // "return"
         if (c0 == 114) { // 'r'
@@ -495,6 +517,7 @@ function get_keyword_kind(start: i32, length: i32): i32 {
         }
     }
     else if (length == 7) {
+        c0 = string_char_at(source, start);
         
         // "declare"
         if (c0 == 100) { // 'd'
@@ -514,6 +537,7 @@ function get_keyword_kind(start: i32, length: i32): i32 {
         }
     }
     else if (length == 8) {
+        c0 = string_char_at(source, start);
         
         // "function"
         if (c0 == 102) { // 'f'
@@ -553,6 +577,7 @@ function get_keyword_kind(start: i32, length: i32): i32 {
         }
     }
     else if (length == 9) {
+        c0 = string_char_at(source, start);
         
         // "interface"
         if (c0 == 105) { // 'i'
@@ -605,6 +630,7 @@ function lex_identifier(): void {
     let startCol: i32 = column;
     
     while (pos < sourceLen) {
+        let c: i32 = current_char();
         if (is_alnum(c)) {
             advance();
         }
@@ -623,8 +649,10 @@ function lex_identifier(): void {
 
 // Lex number
 function lex_number(): void {
+    let start: i32 = pos;
     
     while (pos < sourceLen) {
+        let c: i32 = current_char();
         if (is_digit(c)) {
             advance();
         }
@@ -633,14 +661,17 @@ function lex_number(): void {
         }
     }
     
+    let length: i32 = pos - start;
     add_token(TK_NUMBER, start, length);
 }
 
 // Lex string
 function lex_string(): void {
+    let start: i32 = pos;
     advance(); // Skip opening quote
     
     while (pos < sourceLen) {
+        let c: i32 = current_char();
         if (c == CHAR_QUOTE) {
             advance(); // Skip closing quote
             break;
@@ -654,6 +685,7 @@ function lex_string(): void {
         }
     }
     
+    let length: i32 = pos - start;
     add_token(TK_STRING, start, length);
 }
 
@@ -663,6 +695,8 @@ function tokenize(): i32 {
         skip_whitespace();
         if (pos >= sourceLen) break;
         
+        let c: i32 = current_char();
+        let start: i32 = pos;
         
         // Identifier or keyword
         if (is_letter(c)) {
