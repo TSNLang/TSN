@@ -301,27 +301,41 @@ export class CodeGenerator {
   private generateIf(stmt: IfStmt): void {
     const condition = this.generateExpression(stmt.condition);
     const thenLabel = this.newLabel('then');
-    const elseLabel = stmt.elseBranch ? this.newLabel('else') : this.newLabel('endif');
     const endLabel = this.newLabel('endif');
 
-    this.emit(`br i1 ${condition}, label %${thenLabel}, label %${elseLabel}`);
-    
-    // Then branch
-    this.emit('');
-    this.emit(`${thenLabel}:`);
-    this.indent++;
-    for (const s of stmt.thenBranch) {
-      this.generateStatement(s);
-    }
-    this.emit(`br label %${endLabel}`);
-    this.indent--;
-
-    // Else branch
     if (stmt.elseBranch) {
+      // Has else branch
+      const elseLabel = this.newLabel('else');
+      this.emit(`br i1 ${condition}, label %${thenLabel}, label %${elseLabel}`);
+      
+      // Then branch
+      this.emit('');
+      this.emit(`${thenLabel}:`);
+      this.indent++;
+      for (const s of stmt.thenBranch) {
+        this.generateStatement(s);
+      }
+      this.emit(`br label %${endLabel}`);
+      this.indent--;
+
+      // Else branch
       this.emit('');
       this.emit(`${elseLabel}:`);
       this.indent++;
       for (const s of stmt.elseBranch) {
+        this.generateStatement(s);
+      }
+      this.emit(`br label %${endLabel}`);
+      this.indent--;
+    } else {
+      // No else branch - branch directly to end
+      this.emit(`br i1 ${condition}, label %${thenLabel}, label %${endLabel}`);
+      
+      // Then branch
+      this.emit('');
+      this.emit(`${thenLabel}:`);
+      this.indent++;
+      for (const s of stmt.thenBranch) {
         this.generateStatement(s);
       }
       this.emit(`br label %${endLabel}`);

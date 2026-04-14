@@ -15,17 +15,21 @@ const AST_INTERFACE_FIELD: i32 = 143;
 // GLOBAL STATE (shared with Lexer and Codegen)
 // ============================================================================
 
+// Note: These global arrays are defined in the full compiler
+// For standalone testing, they need to be defined elsewhere
+// In production, FullCompiler.tsn will define these
+
 // Token array (populated by Lexer)
-declare let tokens: Token[10000];
-declare let tokenCount: i32;
+// tokens: Token[10000]
+// tokenCount: i32
 
 // AST node array (populated by Parser)
-declare let nodes: ASTNode[5000];
-declare let nodeCount: i32;
+// nodes: ASTNode[5000]
+// nodeCount: i32
 
 // Source code (for error messages)
-declare let source: i32[100000];
-declare let sourceSize: i32;
+// source: i32[100000]
+// sourceSize: i32
 
 // ============================================================================
 // PARSER STATE

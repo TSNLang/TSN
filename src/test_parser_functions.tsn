@@ -1,0 +1,264 @@
+// test_parser_functions.tsn - Test individual parser functions
+// This file tests that parser logic compiles correctly
+
+// Constants from Types.tsn
+const TK_EOF: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_NUMBER: i32 = 2;
+const TK_PLUS: i32 = 30;
+const TK_MINUS: i32 = 31;
+const TK_STAR: i32 = 32;
+const TK_LPAREN: i32 = 50;
+const TK_RPAREN: i32 = 51;
+const TK_SEMICOLON: i32 = 56;
+
+const AST_NUMBER_LITERAL: i32 = 136;
+const AST_IDENTIFIER: i32 = 135;
+const AST_BINARY_EXPR: i32 = 130;
+
+// Structures
+interface Token {
+    kind: i32;
+    start: i32;
+    length: i32;
+    line: i32;
+    column: i32;
+}
+
+interface ASTNode {
+    kind: i32;
+    data1: i32;
+    data2: i32;
+    data3: i32;
+    data4: i32;
+    line: i32;
+    column: i32;
+}
+
+// Global state
+let tokens: Token[100];
+let tokenCount: i32 = 0;
+let nodes: ASTNode[100];
+let nodeCount: i32 = 0;
+let currentPos: i32 = 0;
+
+// ============================================================================
+// TOKEN HELPERS
+// ============================================================================
+
+function is_at_end(): i32 {
+    let tok: Token = tokens[currentPos];
+    let isEof: i32 = 0;
+    if (tok.kind == TK_EOF) {
+        isEof = 1;
+    }
+    return isEof;
+}
+
+function current_token(): Token {
+    return tokens[currentPos];
+}
+
+function advance(): Token {
+    if (is_at_end() == 0) {
+        currentPos = currentPos + 1;
+    }
+    return tokens[currentPos - 1];
+}
+
+function previous(): Token {
+    return tokens[currentPos - 1];
+}
+
+function check(kind: i32): i32 {
+    if (is_at_end()) {
+        return 0;
+    }
+    let tok: Token = current_token();
+    let matches: i32 = 0;
+    if (tok.kind == kind) {
+        matches = 1;
+    }
+    return matches;
+}
+
+function match(kind: i32): i32 {
+    if (check(kind)) {
+        advance();
+        return 1;
+    }
+    return 0;
+}
+
+function consume(kind: i32): Token {
+    if (check(kind)) {
+        return advance();
+    }
+    return current_token();
+}
+
+// ============================================================================
+// AST NODE CREATION
+// ============================================================================
+
+function new_node(kind: i32): i32 {
+    let idx: i32 = nodeCount;
+    nodes[idx].kind = kind;
+    nodes[idx].data1 = 0;
+    nodes[idx].data2 = 0;
+    nodes[idx].data3 = 0;
+    nodes[idx].data4 = 0;
+    let tok: Token = current_token();
+    nodes[idx].line = tok.line;
+    nodes[idx].column = tok.column;
+    nodeCount = nodeCount + 1;
+    return idx;
+}
+
+// ============================================================================
+// EXPRESSION PARSING
+// ============================================================================
+
+function parse_primary(): i32 {
+    // Number literal
+    if (match(TK_NUMBER)) {
+        let node: i32 = new_node(AST_NUMBER_LITERAL);
+        let numTok: Token = previous();
+        nodes[node].data1 = numTok.start;
+        nodes[node].data2 = numTok.length;
+        return node;
+    }
+    
+    // Identifier
+    if (match(TK_IDENTIFIER)) {
+        let node: i32 = new_node(AST_IDENTIFIER);
+        let idTok: Token = previous();
+        nodes[node].data1 = idTok.start;
+        nodes[node].data2 = idTok.length;
+        return node;
+    }
+    
+    // Parenthesized expression
+    if (match(TK_LPAREN)) {
+        let expr: i32 = parse_additive();
+        consume(TK_RPAREN);
+        return expr;
+    }
+    
+    // Error: return dummy node
+    return new_node(AST_IDENTIFIER);
+}
+
+function parse_multiplicative(): i32 {
+    let left: i32 = parse_primary();
+    
+    while (match(TK_STAR)) {
+        let node: i32 = new_node(AST_BINARY_EXPR);
+        let opTok: Token = previous();
+        nodes[node].data1 = opTok.start;
+        nodes[node].data2 = opTok.length;
+        nodes[node].data3 = left;
+        nodes[node].data4 = parse_primary();
+        left = node;
+    }
+    
+    return left;
+}
+
+function parse_additive(): i32 {
+    let left: i32 = parse_multiplicative();
+    
+    while (match(TK_PLUS)) {
+        let node: i32 = new_node(AST_BINARY_EXPR);
+        let opTok: Token = previous();
+        nodes[node].data1 = opTok.start;
+        nodes[node].data2 = opTok.length;
+        nodes[node].data3 = left;
+        nodes[node].data4 = parse_multiplicative();
+        left = node;
+    }
+    
+    if (match(TK_MINUS)) {
+        let node: i32 = new_node(AST_BINARY_EXPR);
+        let opTok: Token = previous();
+        nodes[node].data1 = opTok.start;
+        nodes[node].data2 = opTok.length;
+        nodes[node].data3 = left;
+        nodes[node].data4 = parse_multiplicative();
+        left = node;
+    }
+    
+    return left;
+}
+
+// ============================================================================
+// TEST FUNCTION
+// ============================================================================
+
+function main(): i32 {
+    // Setup tokens for: 2 + 3 * 4
+    // Expected AST: (+ 2 (* 3 4))
+    
+    // Token 0: 2 (number)
+    tokens[0].kind = TK_NUMBER;
+    tokens[0].start = 0;
+    tokens[0].length = 1;
+    tokens[0].line = 1;
+    tokens[0].column = 1;
+    
+    // Token 1: + (plus)
+    tokens[1].kind = TK_PLUS;
+    tokens[1].start = 2;
+    tokens[1].length = 1;
+    tokens[1].line = 1;
+    tokens[1].column = 3;
+    
+    // Token 2: 3 (number)
+    tokens[2].kind = TK_NUMBER;
+    tokens[2].start = 4;
+    tokens[2].length = 1;
+    tokens[2].line = 1;
+    tokens[2].column = 5;
+    
+    // Token 3: * (star)
+    tokens[3].kind = TK_STAR;
+    tokens[3].start = 6;
+    tokens[3].length = 1;
+    tokens[3].line = 1;
+    tokens[3].column = 7;
+    
+    // Token 4: 4 (number)
+    tokens[4].kind = TK_NUMBER;
+    tokens[4].start = 8;
+    tokens[4].length = 1;
+    tokens[4].line = 1;
+    tokens[4].column = 9;
+    
+    // Token 5: EOF
+    tokens[5].kind = TK_EOF;
+    tokens[5].start = 9;
+    tokens[5].length = 0;
+    tokens[5].line = 1;
+    tokens[5].column = 10;
+    
+    tokenCount = 6;
+    currentPos = 0;
+    nodeCount = 0;
+    
+    // Parse expression
+    let rootNode: i32 = parse_additive();
+    
+    // Verify: should have created 5 nodes
+    // Node 0: number 2
+    // Node 1: number 3
+    // Node 2: number 4
+    // Node 3: binary * (nodes[1], nodes[2])
+    // Node 4: binary + (nodes[0], nodes[3])
+    
+    let success: i32 = 0;
+    if (nodeCount == 5) {
+        success = 1;
+    }
+    
+    return success;
+}
