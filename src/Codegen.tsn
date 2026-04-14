@@ -1,187 +1,470 @@
 // Codegen.tsn - LLVM IR code generator for TSN compiler
 // Written in TSN, compiled by TSN
+// Generates LLVM IR from AST
 
-// Global state
-let output: ptr<i8>;
-let outputLen: i32;
-let tempCounter: i32;
-let labelCounter: i32;
+// ============================================================================
+// CODEGEN STATE
+// ============================================================================
 
-// Initialize codegen
-function codegen_init(outBuffer: ptr<i8>): void {
-    output = outBuffer;
-    outputLen = 0;
+// Output buffer
+let output: i32[500000];  // Output LLVM IR (as character codes)
+let outputSize: i32 = 0;
+
+// Counters
+let tempCounter: i32 = 0;
+let labelCounter: i32 = 0;
+let stringCounter: i32 = 0;
+let indentLevel: i32 = 0;
+
+// Loop context (for break/continue)
+let loopBreakLabels: i32[10];    // Stack of break labels
+let loopContinueLabels: i32[10]; // Stack of continue labels
+let loopDepth: i32 = 0;
+
+// Struct registry
+let structNames: i32[100];       // Struct name offsets in source
+let structFieldCounts: i32[100]; // Number of fields per struct
+let structCount: i32 = 0;
+
+// Global registry
+let globalNames: i32[100];       // Global variable name offsets
+let globalTypes: i32[100];       // Global variable type offsets
+let globalIsConst: i32[100];     // Is constant flag
+let globalCount: i32 = 0;
+
+// String literals
+let stringLiteralValues: i32[100]; // String value offsets
+let stringLiteralNames: i32[100];  // Generated @.str.N names
+let stringLiteralCount: i32 = 0;
+
+// Current function parameters (for identifier resolution)
+let currentFunctionParamNames: i32[20]; // Parameter name offsets
+let currentFunctionParamCount: i32 = 0;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+function codegen_init(): void {
+    outputSize = 0;
     tempCounter = 0;
     labelCounter = 0;
+    stringCounter = 0;
+    indentLevel = 0;
+    loopDepth = 0;
+    structCount = 0;
+    globalCount = 0;
+    stringLiteralCount = 0;
+    currentFunctionParamCount = 0;
 }
 
-// Helper: Append string to output
-function emit(str: ptr<i8>): void {
-    let len: i32 = string_length(str);
+// ============================================================================
+// OUTPUT HELPERS
+// ============================================================================
+
+function emit_char(ch: i32): void {
+    output[outputSize] = ch;
+    outputSize = outputSize + 1;
+}
+
+function emit_string(str: i32, len: i32): void {
     let i: i32 = 0;
     while (i < len) {
-        let c: i32 = string_char_at(str, i);
-        // TODO: Write character to output buffer
+        emit_char(source[str + i]);
         i = i + 1;
     }
-    outputLen = outputLen + len;
 }
 
-// Helper: Emit newline
 function emit_newline(): void {
-    // TODO: Write newline to output
-    outputLen = outputLen + 1;
+    emit_char(10); // '\n'
 }
 
-// Helper: Generate new temp variable
+function emit_indent(): void {
+    let i: i32 = 0;
+    while (i < indentLevel) {
+        emit_char(32); // space
+        emit_char(32);
+        i = i + 1;
+    }
+}
+
+function emit_number(num: i32): void {
+    // Simple number to string conversion
+    // For now, just emit digits
+    // TODO: Handle negative numbers
+    if (num == 0) {
+        emit_char(48); // '0'
+        return;
+    }
+    
+    // Count digits
+    let temp: i32 = num;
+    let digits: i32 = 0;
+    while (temp > 0) {
+        digits = digits + 1;
+        temp = temp / 10;
+    }
+    
+    // Emit digits in reverse
+    let digitBuffer: i32[20];
+    let idx: i32 = 0;
+    temp = num;
+    while (temp > 0) {
+        digitBuffer[idx] = 48 + (temp % 10);
+        temp = temp / 10;
+        idx = idx + 1;
+    }
+    
+    // Emit in correct order
+    while (idx > 0) {
+        idx = idx - 1;
+        emit_char(digitBuffer[idx]);
+    }
+}
+
+// ============================================================================
+// TEMP AND LABEL GENERATION
+// ============================================================================
+
 function new_temp(): i32 {
     let temp: i32 = tempCounter;
     tempCounter = tempCounter + 1;
     return temp;
 }
 
-// Helper: Generate new label
 function new_label(): i32 {
     let label: i32 = labelCounter;
     labelCounter = labelCounter + 1;
     return label;
 }
 
-// Generate expression
-function generate_expression(nodeIdx: i32): void {
-    let node: ASTNode = nodes[nodeIdx];
+// ============================================================================
+// TYPE HELPERS
+// ============================================================================
+
+function get_llvm_type(typeNameOffset: i32, typeNameLen: i32): void {
+    // Map TSN types to LLVM types
+    // For now, just emit the type name
+    // TODO: Handle ptr<T>, arrays, etc.
     
-    if (node.kind == AST_IDENTIFIER) {
-        // Load identifier
-        let temp: i32 = new_temp();
-        emit("  %");
-        // TODO: Emit temp number
-        emit(" = load i32, ptr %");
-        // TODO: Emit identifier name
-        emit(", align 4");
-        emit_newline();
+    // Check for i32
+    if (typeNameLen == 3) {
+        if (source[typeNameOffset] == 105) { // 'i'
+            if (source[typeNameOffset + 1] == 51) { // '3'
+                if (source[typeNameOffset + 2] == 50) { // '2'
+                    emit_string(typeNameOffset, 3);
+                    return;
+                }
+            }
+        }
     }
-    else if (node.kind == AST_NUMBER_LITERAL) {
-        // Number literal - just use the value directly
-        // TODO: Emit number value
+    
+    // Check for void
+    if (typeNameLen == 4) {
+        if (source[typeNameOffset] == 118) { // 'v'
+            emit_string(typeNameOffset, 4);
+            return;
+        }
     }
+    
+    // Otherwise it's a struct type - emit %TypeName
+    emit_char(37); // '%'
+    emit_string(typeNameOffset, typeNameLen);
 }
 
-// Generate statement
-function generate_statement(nodeIdx: i32): void {
-    let node: ASTNode = nodes[nodeIdx];
-    
-    if (node.kind == AST_RETURN_STMT) {
-        emit("  ret i32 ");
-        if (node.data1 != 0) {
-            generate_expression(node.data1);
-        }
-        else {
-            emit("0");
-        }
-        emit_newline();
-    }
-    else if (node.kind == AST_VAR_DECL) {
-        // Variable declaration
-        emit("  %");
-        // TODO: Emit variable name
-        emit(" = alloca i32, align 4");
-        emit_newline();
-        
-        if (node.data4 != 0) {
-            // Has initializer
-            emit("  store i32 ");
-            generate_expression(node.data4);
-            emit(", ptr %");
-            // TODO: Emit variable name
-            emit(", align 4");
-            emit_newline();
-        }
-    }
-    else if (node.kind == AST_ASSIGNMENT) {
-        emit("  store i32 ");
-        generate_expression(node.data2);
-        emit(", ptr %");
-        // TODO: Emit target name
-        emit(", align 4");
-        emit_newline();
-    }
+function get_alignment(typeNameOffset: i32, typeNameLen: i32): i32 {
+    // Return alignment for type
+    // For now, everything is 4-byte aligned
+    return 4;
 }
 
-// Generate function
-function generate_function(nodeIdx: i32): void {
-    let node: ASTNode = nodes[nodeIdx];
+// ============================================================================
+// STRUCT GENERATION
+// ============================================================================
+
+function generate_interface(nodeIdx: i32): void {
+    // interface Name { field1: type1; field2: type2; }
+    // Generates: %Name = type { type1, type2 }
     
-    emit("define i32 @");
-    // TODO: Emit function name
-    emit("() {");
-    emit_newline();
-    emit("entry:");
-    emit_newline();
+    let nameOffset: i32 = nodes[nodeIdx].data1;
+    let nameLen: i32 = nodes[nodeIdx].data2;
+    let firstField: i32 = nodes[nodeIdx].data3;
+    let fieldCount: i32 = nodes[nodeIdx].data4;
     
-    // Generate statements
-    let firstStmt: i32 = node.data3;
-    let stmtCount: i32 = node.data4;
+    // Register struct
+    structNames[structCount] = nameOffset;
+    structFieldCounts[structCount] = fieldCount;
+    structCount = structCount + 1;
+    
+    // Emit: %Name = type {
+    emit_char(37); // '%'
+    emit_string(nameOffset, nameLen);
+    emit_char(32); // space
+    emit_char(61); // '='
+    emit_char(32);
+    emit_string(116, 4); // "type"
+    emit_char(32);
+    emit_char(123); // '{'
+    
+    // Emit fields
     let i: i32 = 0;
-    
-    while (i < stmtCount) {
-        let stmtIdx: i32 = firstStmt + i;
-        generate_statement(stmtIdx);
+    while (i < fieldCount) {
+        let fieldIdx: i32 = firstField + i;
+        let fieldTypeIdx: i32 = nodes[fieldIdx].data3;
+        let typeNameOffset: i32 = nodes[fieldTypeIdx].data1;
+        let typeNameLen: i32 = nodes[fieldTypeIdx].data2;
+        
+        if (i > 0) {
+            emit_char(44); // ','
+        }
+        emit_char(32);
+        get_llvm_type(typeNameOffset, typeNameLen);
+        
         i = i + 1;
     }
     
-    emit("}");
-    emit_newline();
-    emit_newline();
-}
-
-// Generate interface (struct type)
-function generate_interface(nodeIdx: i32): void {
-    let node: ASTNode = nodes[nodeIdx];
-    
-    emit("%");
-    // TODO: Emit interface name
-    emit(" = type { i32 }");
+    emit_char(32);
+    emit_char(125); // '}'
     emit_newline();
 }
 
-// Main codegen function
-function generate(programIdx: i32): void {
-    emit("; ModuleID = 'tsn_output'");
+// ============================================================================
+// GLOBAL VARIABLE GENERATION
+// ============================================================================
+
+function generate_global_const(nodeIdx: i32): void {
+    // const/let NAME: TYPE = VALUE;
+    // Generates: @NAME = constant/global TYPE VALUE, align N
+    
+    let isConst: i32 = nodes[nodeIdx].data1;
+    let nameOffset: i32 = nodes[nodeIdx].data2;
+    let nameLen: i32 = nodes[nodeIdx].data3;
+    let initExpr: i32 = nodes[nodeIdx].data4;
+    
+    // Register global
+    globalNames[globalCount] = nameOffset;
+    globalIsConst[globalCount] = isConst;
+    globalCount = globalCount + 1;
+    
+    // Emit: @NAME =
+    emit_char(64); // '@'
+    emit_string(nameOffset, nameLen);
+    emit_char(32);
+    emit_char(61); // '='
+    emit_char(32);
+    
+    // constant or global
+    if (isConst) {
+        emit_string(99, 8); // "constant"
+    }
+    if (isConst == 0) {
+        emit_string(103, 6); // "global"
+    }
+    emit_char(32);
+    
+    // Type (assume i32 for now)
+    emit_string(105, 3); // "i32"
+    emit_char(32);
+    
+    // Value (assume number literal)
+    if (initExpr > 0) {
+        let valueOffset: i32 = nodes[initExpr].data1;
+        let valueLen: i32 = nodes[initExpr].data2;
+        emit_string(valueOffset, valueLen);
+    }
+    if (initExpr == 0) {
+        emit_char(48); // '0'
+    }
+    
+    // Alignment
+    emit_string(44, 7); // ", align"
+    emit_char(32);
+    emit_char(52); // '4'
     emit_newline();
-    emit("target triple = \"x86_64-pc-windows-msvc\"");
+}
+
+// ============================================================================
+// FUNCTION GENERATION
+// ============================================================================
+
+function generate_function(nodeIdx: i32): void {
+    // function name(param1: type1, param2: type2): returnType { body }
+    // Generates: define returnType @name(type1 %param1, type2 %param2) { ... }
+    
+    let nameOffset: i32 = nodes[nodeIdx].data1;
+    let nameLen: i32 = nodes[nodeIdx].data2;
+    let firstParam: i32 = nodes[nodeIdx].data3;
+    let paramCount: i32 = nodes[nodeIdx].data4;
+    
+    // TODO: Get return type and body
+    // For now, assume i32 return type and empty body
+    
+    // Track parameters
+    currentFunctionParamCount = 0;
+    let i: i32 = 0;
+    while (i < paramCount) {
+        let paramIdx: i32 = firstParam + i;
+        let paramNameOffset: i32 = nodes[paramIdx].data1;
+        currentFunctionParamNames[currentFunctionParamCount] = paramNameOffset;
+        currentFunctionParamCount = currentFunctionParamCount + 1;
+        i = i + 1;
+    }
+    
+    // Emit: define i32 @name(
+    emit_string(100, 6); // "define"
+    emit_char(32);
+    emit_string(105, 3); // "i32" (return type)
+    emit_char(32);
+    emit_char(64); // '@'
+    emit_string(nameOffset, nameLen);
+    emit_char(40); // '('
+    
+    // Emit parameters
+    i = 0;
+    while (i < paramCount) {
+        let paramIdx: i32 = firstParam + i;
+        let paramNameOffset: i32 = nodes[paramIdx].data1;
+        let paramNameLen: i32 = nodes[paramIdx].data2;
+        let paramTypeIdx: i32 = nodes[paramIdx].data3;
+        let typeNameOffset: i32 = nodes[paramTypeIdx].data1;
+        let typeNameLen: i32 = nodes[paramTypeIdx].data2;
+        
+        if (i > 0) {
+            emit_char(44); // ','
+            emit_char(32);
+        }
+        
+        get_llvm_type(typeNameOffset, typeNameLen);
+        emit_char(32);
+        emit_char(37); // '%'
+        emit_string(paramNameOffset, paramNameLen);
+        
+        i = i + 1;
+    }
+    
+    emit_char(41); // ')'
+    emit_char(32);
+    emit_char(123); // '{'
+    emit_newline();
+    
+    // Entry label
+    emit_string(101, 5); // "entry"
+    emit_char(58); // ':'
+    emit_newline();
+    
+    indentLevel = indentLevel + 1;
+    
+    // Allocate space for parameters
+    i = 0;
+    while (i < paramCount) {
+        let paramIdx: i32 = firstParam + i;
+        let paramNameOffset: i32 = nodes[paramIdx].data1;
+        let paramNameLen: i32 = nodes[paramIdx].data2;
+        let paramTypeIdx: i32 = nodes[paramIdx].data3;
+        let typeNameOffset: i32 = nodes[paramTypeIdx].data1;
+        let typeNameLen: i32 = nodes[paramTypeIdx].data2;
+        
+        emit_indent();
+        emit_char(37); // '%'
+        emit_string(paramNameOffset, paramNameLen);
+        emit_string(46, 5); // ".addr"
+        emit_char(32);
+        emit_char(61); // '='
+        emit_char(32);
+        emit_string(97, 6); // "alloca"
+        emit_char(32);
+        get_llvm_type(typeNameOffset, typeNameLen);
+        emit_string(44, 7); // ", align"
+        emit_char(32);
+        emit_char(52); // '4'
+        emit_newline();
+        
+        // Store parameter
+        emit_indent();
+        emit_string(115, 5); // "store"
+        emit_char(32);
+        get_llvm_type(typeNameOffset, typeNameLen);
+        emit_char(32);
+        emit_char(37); // '%'
+        emit_string(paramNameOffset, paramNameLen);
+        emit_string(44, 5); // ", ptr"
+        emit_char(32);
+        emit_char(37); // '%'
+        emit_string(paramNameOffset, paramNameLen);
+        emit_string(46, 5); // ".addr"
+        emit_string(44, 7); // ", align"
+        emit_char(32);
+        emit_char(52); // '4'
+        emit_newline();
+        
+        i = i + 1;
+    }
+    
+    // TODO: Generate function body statements
+    
+    // Default return
+    emit_indent();
+    emit_string(114, 3); // "ret"
+    emit_char(32);
+    emit_string(105, 3); // "i32"
+    emit_char(32);
+    emit_char(48); // '0'
+    emit_newline();
+    
+    indentLevel = indentLevel - 1;
+    
+    emit_char(125); // '}'
     emit_newline();
     emit_newline();
     
-    let program: ASTNode = nodes[programIdx];
-    let firstDecl: i32 = program.data1;
-    let declCount: i32 = program.data2;
+    // Clear parameters
+    currentFunctionParamCount = 0;
+}
+
+// ============================================================================
+// MAIN GENERATION FUNCTION
+// ============================================================================
+
+function generate(): void {
+    // Generate LLVM IR from AST
     
-    // First pass: Generate interfaces
+    // Get program node (root)
+    let programNode: i32 = 0;
+    let firstDecl: i32 = nodes[programNode].data1;
+    let declCount: i32 = nodes[programNode].data2;
+    
+    // Pass 1: Generate struct definitions
     let i: i32 = 0;
     while (i < declCount) {
         let declIdx: i32 = firstDecl + i;
-        let decl: ASTNode = nodes[declIdx];
-        
-        if (decl.kind == AST_INTERFACE_DECL) {
+        if (nodes[declIdx].kind == AST_INTERFACE_DECL) {
             generate_interface(declIdx);
         }
-        
         i = i + 1;
     }
     
-    emit_newline();
-    
-    // Second pass: Generate functions
+    // Pass 2: Generate global constants
     i = 0;
     while (i < declCount) {
         let declIdx: i32 = firstDecl + i;
-        let decl: ASTNode = nodes[declIdx];
-        
-        if (decl.kind == AST_FUNCTION_DECL) {
+        if (nodes[declIdx].kind == AST_VAR_DECL) {
+            generate_global_const(declIdx);
+        }
+        i = i + 1;
+    }
+    
+    // String literals section
+    emit_string(59, 17); // "; String literals"
+    emit_newline();
+    emit_newline();
+    
+    // Pass 3: Generate functions
+    i = 0;
+    while (i < declCount) {
+        let declIdx: i32 = firstDecl + i;
+        if (nodes[declIdx].kind == AST_FUNCTION_DECL) {
             generate_function(declIdx);
         }
-        
         i = i + 1;
     }
 }
