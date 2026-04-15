@@ -1,0 +1,13 @@
+import * as console from "std:console";
+
+function add(a: i32, b: i32): i32 {
+    return a + b;
+}
+
+function main(): i32 {
+    let result = add(10, 32);
+    if (result == 42) {
+        console.log("math works!");
+    }
+    return 0;
+}

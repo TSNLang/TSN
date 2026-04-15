@@ -182,7 +182,6 @@ export class Lexer {
       ':': TokenKind.Colon,
       ',': TokenKind.Comma,
       '.': TokenKind.Dot,
-      '@': TokenKind.At,
     };
 
     const kind = map[ch];
@@ -210,6 +209,10 @@ export class Lexer {
       'true': TokenKind.True,
       'false': TokenKind.False,
       'addressof': TokenKind.Addressof,
+      'import': TokenKind.Import,
+      'export': TokenKind.Export,
+      'from': TokenKind.From,
+      'as': TokenKind.As,
     };
 
     return keywords[text] || TokenKind.Identifier;

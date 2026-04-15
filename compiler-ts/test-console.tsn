@@ -1,0 +1,6 @@
+import * as console from "std:console";
+
+function main(): i32 {
+    console.log("Hello, World!");
+    return 0;
+}

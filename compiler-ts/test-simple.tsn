@@ -1,0 +1,4 @@
+// Simple test program
+function main(): i32 {
+    return 42;
+}

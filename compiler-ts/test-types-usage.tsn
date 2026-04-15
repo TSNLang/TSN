@@ -1,0 +1,21 @@
+// Test using constants from Types.tsn
+
+// Token type constants (from Types.tsn)
+const TK_EOF: i32 = 0;
+const TK_IDENTIFIER: i32 = 1;
+const TK_NUMBER: i32 = 2;
+const TK_PLUS: i32 = 30;
+const TK_MINUS: i32 = 31;
+
+function main(): i32 {
+    let tok_type = TK_IDENTIFIER;
+    let op_type = TK_PLUS;
+    
+    if (tok_type == TK_IDENTIFIER) {
+        if (op_type == TK_PLUS) {
+            return 42;
+        }
+    }
+    
+    return 0;
+}

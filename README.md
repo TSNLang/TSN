@@ -8,7 +8,7 @@
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
   [![Version](https://img.shields.io/badge/version-0.10.0--indev-orange)](https://github.com/TSNLang/TSN)
-  [![Self-Hosting](https://img.shields.io/badge/self--hosting-IN%20PROGRESS%20%F0%9F%9A%80-yellow)](src/README.md)
+  [![Self-Hosting](https://img.shields.io/badge/self--hosting-PARTIAL%20%E2%9C%85%20(7.8k%20tokens)-green)](SELF_HOSTING_PROGRESS.md)
   [![Compiler](https://img.shields.io/badge/compiler-TypeScript%20%2B%20TSN-blue)](compiler-ts/)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*

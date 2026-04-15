@@ -1,4 +1,4 @@
-import { Token, TokenKind, ASTKind, Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ExprStmt, Parameter, InterfaceField, TypeAnnotation, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr } from './types.ts';
+import { Token, TokenKind, ASTKind, Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ExprStmt, Parameter, InterfaceField, TypeAnnotation, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ImportDecl, ExportDecl, ImportSpecifier } from './types.ts';
 
 export class Parser {
   private tokens: Token[];
@@ -13,9 +13,13 @@ export class Parser {
     const declarations: Declaration[] = [];
 
     while (!this.isAtEnd()) {
+      const posBefore = this.pos;
       const decl = this.parseDeclaration();
       if (decl) {
         declarations.push(decl);
+      } else if (this.pos === posBefore) {
+        // No progress was made - advance to prevent infinite loop
+        this.advance();
       }
     }
 
@@ -29,6 +33,16 @@ export class Parser {
 
   // Parse top-level declarations
   private parseDeclaration(): Declaration | null {
+    // Import statement
+    if (this.match(TokenKind.Import)) {
+      return this.parseImport();
+    }
+
+    // Export statement
+    if (this.match(TokenKind.Export)) {
+      return this.parseExport();
+    }
+
     // FFI annotation: @ffi.lib("kernel32")
     let ffiLib: string | undefined;
     if (this.match(TokenKind.At)) {
@@ -878,5 +892,69 @@ export class Parser {
     const token = this.peek();
     console.error(`Parse error at ${token.line}:${token.column}: ${message}`);
     console.error(`  Got: ${token.kind} "${token.text}"`);
+  }
+
+  // Parse import statement
+  // Supports: import * as name from "module"
+  // Supports: import { foo, bar as baz } from "module"
+  private parseImport(): ImportDecl {
+    const token = this.previous();
+    let namespace: string | undefined;
+    const specifiers: ImportSpecifier[] = [];
+
+    // import * as name from "module"
+    if (this.match(TokenKind.Star)) {
+      this.consume(TokenKind.As, 'Expected "as" after *');
+      namespace = this.consume(TokenKind.Identifier, 'Expected namespace name').text;
+    }
+    // import { foo, bar as baz } from "module"
+    else if (this.match(TokenKind.LBrace)) {
+      do {
+        const imported = this.consume(TokenKind.Identifier, 'Expected import name').text;
+        let local = imported;
+        
+        if (this.match(TokenKind.As)) {
+          local = this.consume(TokenKind.Identifier, 'Expected local name').text;
+        }
+        
+        specifiers.push({ imported, local });
+      } while (this.match(TokenKind.Comma));
+      
+      this.consume(TokenKind.RBrace, 'Expected }');
+    }
+
+    this.consume(TokenKind.From, 'Expected "from"');
+    const source = this.consume(TokenKind.String, 'Expected module path').text;
+    this.consume(TokenKind.Semicolon, 'Expected ;');
+
+    return {
+      kind: ASTKind.ImportDecl,
+      specifiers,
+      namespace,
+      source,
+      line: token.line,
+      column: token.column,
+    };
+  }
+
+  // Parse export statement
+  // Supports: export function foo() {}
+  // Supports: export const x = 5;
+  private parseExport(): ExportDecl {
+    const token = this.previous();
+    
+    // Parse the declaration being exported
+    const declaration = this.parseDeclaration();
+    
+    if (!declaration) {
+      this.error('Expected declaration after export');
+    }
+
+    return {
+      kind: ASTKind.ExportDecl,
+      declaration: declaration!,
+      line: token.line,
+      column: token.column,
+    };
   }
 }

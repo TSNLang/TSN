@@ -22,6 +22,10 @@ export enum TokenKind {
   True = 'TRUE',
   False = 'FALSE',
   Addressof = 'ADDRESSOF',
+  Import = 'IMPORT',
+  Export = 'EXPORT',
+  From = 'FROM',
+  As = 'AS',
   
   // Operators
   Plus = '+',
@@ -95,6 +99,8 @@ export enum ASTKind {
   // Declarations
   FunctionDecl = 'FunctionDecl',
   InterfaceDecl = 'InterfaceDecl',
+  ImportDecl = 'ImportDecl',
+  ExportDecl = 'ExportDecl',
   
   // Program
   Program = 'Program',
@@ -272,7 +278,25 @@ export interface InterfaceDecl extends ASTNode {
   fields: InterfaceField[];
 }
 
-export type Declaration = FunctionDecl | InterfaceDecl | VarDecl;
+// Import/Export declarations
+export interface ImportSpecifier {
+  imported: string;  // Original name in module
+  local: string;     // Local name (for 'as' alias)
+}
+
+export interface ImportDecl extends ASTNode {
+  kind: ASTKind.ImportDecl;
+  specifiers: ImportSpecifier[];  // For: import { foo, bar as baz } from "module"
+  namespace?: string;              // For: import * as name from "module"
+  source: string;                  // Module path
+}
+
+export interface ExportDecl extends ASTNode {
+  kind: ASTKind.ExportDecl;
+  declaration: Declaration;  // The thing being exported
+}
+
+export type Declaration = FunctionDecl | InterfaceDecl | VarDecl | ImportDecl | ExportDecl;
 
 // Program
 export interface Program extends ASTNode {

@@ -1,4 +1,5 @@
-import { Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, ExprStmt, BreakStmt, ContinueStmt, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ASTKind, TypeAnnotation } from './types.ts';
+import { Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, ExprStmt, BreakStmt, ContinueStmt, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ASTKind, TypeAnnotation, ImportDecl, ExportDecl } from './types.ts';
+import { ModuleResolver, ExportedSymbol } from './module-resolver.ts';
 
 interface StructInfo {
   name: string;
@@ -16,6 +17,12 @@ interface LoopContext {
   continueLabel: string;
 }
 
+interface FunctionInfo {
+  name: string;
+  returnType: string;
+  paramTypes: string[];
+}
+
 export class CodeGenerator {
   private output: string[] = [];
   private indent: number = 0;
@@ -24,43 +31,150 @@ export class CodeGenerator {
   private stringCounter: number = 0;
   private structs: Map<string, StructInfo> = new Map();
   private globals: Map<string, GlobalInfo> = new Map();
+  private functions: Map<string, FunctionInfo> = new Map();
   private stringLiterals: Map<string, string> = new Map();
   private loopStack: LoopContext[] = [];
   private currentFunctionParams: Set<string> = new Set();
   private currentFunctionParamTypes: Map<string, string> = new Map();
+  private currentFunctionReturnType: string = 'void';
+  private tempTypes: Map<string, string> = new Map(); // Track temp variable types
+  private moduleResolver: ModuleResolver;
+  // Set of variable names whose alloca has already been hoisted to entry
+  private hoistedVars: Set<string> = new Set();
+  // Track LLVM types of local variables (name -> llvmType)
+  private localVarTypes: Map<string, string> = new Map();
+  // Maps local alias -> ExportedSymbol (for imported functions)
+  private importedSymbols: Map<string, ExportedSymbol> = new Map();
+  // Tracks external declarations to be emitted at top of file
+  private externalDecls: string[] = [];
+  // Tracks exported symbols in this module (for .meta generation)
+  private exportedSymbols: ExportedSymbol[] = [];
+
+  constructor(moduleResolver?: ModuleResolver) {
+    this.moduleResolver = moduleResolver ?? new ModuleResolver('.');
+  }
+
+  // Returns exported symbols (for .meta file generation)
+  getExportedSymbols(): ExportedSymbol[] {
+    return this.exportedSymbols;
+  }
 
   generate(program: Program): string {
-    // Generate struct definitions first
+    // Process imports first - collect imported symbol signatures
+    for (const decl of program.declarations) {
+      if (decl.kind === ASTKind.ImportDecl) {
+        this.processImport(decl as ImportDecl);
+      }
+    }
+
+    // Generate struct definitions (from both direct and exported interfaces)
     for (const decl of program.declarations) {
       if (decl.kind === ASTKind.InterfaceDecl) {
         this.generateInterface(decl);
       }
+      if (decl.kind === ASTKind.ExportDecl) {
+        const exportDecl = decl as ExportDecl;
+        if (exportDecl.declaration.kind === ASTKind.InterfaceDecl) {
+          this.generateInterface(exportDecl.declaration as InterfaceDecl);
+        }
+      }
     }
 
-    // Generate global constants
+    // Generate global constants (from both direct and exported vars)
     for (const decl of program.declarations) {
       if (decl.kind === ASTKind.VarDecl) {
         this.generateGlobalConst(decl);
       }
+      if (decl.kind === ASTKind.ExportDecl) {
+        const exportDecl = decl as ExportDecl;
+        if (exportDecl.declaration.kind === ASTKind.VarDecl) {
+          this.generateGlobalConst(exportDecl.declaration as VarDecl);
+          // Track exported var
+          const varDecl = exportDecl.declaration as VarDecl;
+          const llvmType = varDecl.type ? this.getLLVMType(varDecl.type) : 'i32';
+          this.exportedSymbols.push({
+            name: varDecl.name,
+            kind: varDecl.isConst ? 'const' : 'let',
+            varType: llvmType,
+          });
+        }
+      }
     }
 
-    // Generate string literals
-    this.emit('; String literals');
-    for (const [globalName, value] of this.stringLiterals) {
-      const escaped = this.escapeString(value);
-      const len = value.length + 1; // +1 for null terminator
-      this.emit(`${globalName} = private unnamed_addr constant [${len} x i8] c"${escaped}\\00", align 1`);
-    }
+    // Mark where string literals will go (actual strings collected during function generation)
+    const stringLiteralMarkerIdx = this.output.length;
+    this.emit('; String literals -- PLACEHOLDER');
     this.emit('');
 
-    // Generate function declarations and definitions
+    // Generate function declarations and definitions (direct + exported)
     for (const decl of program.declarations) {
       if (decl.kind === ASTKind.FunctionDecl) {
         this.generateFunction(decl);
       }
+      if (decl.kind === ASTKind.ExportDecl) {
+        const exportDecl = decl as ExportDecl;
+        if (exportDecl.declaration.kind === ASTKind.FunctionDecl) {
+          const fnDecl = exportDecl.declaration as FunctionDecl;
+          this.generateFunction(fnDecl);
+          // Track exported function
+          const returnType = this.getLLVMType(fnDecl.returnType);
+          const paramTypes = fnDecl.params.map(p => this.getLLVMType(p.type));
+          this.exportedSymbols.push({
+            name: fnDecl.name,
+            kind: 'function',
+            llvmType: returnType,
+            paramTypes,
+          });
+        }
+      }
+    }
+
+    // Now emit all string literals collected during function generation
+    const strLines: string[] = ['; String literals'];
+    for (const [globalName, value] of this.stringLiterals) {
+      const escaped = this.escapeString(value);
+      const len = value.length + 1;
+      strLines.push(`${globalName} = private unnamed_addr constant [${len} x i8] c"${escaped}\\00", align 1`);
+    }
+    // Replace the placeholder with actual string literals
+    this.output.splice(stringLiteralMarkerIdx, 2, ...strLines, '');
+
+    // Prepend external declarations (from imports) at very top
+    if (this.externalDecls.length > 0) {
+      this.output.unshift(...this.externalDecls, '');
     }
 
     return this.output.join('\n');
+  }
+
+  // Process import declaration: resolve module and track imported symbols
+  private processImport(decl: ImportDecl): void {
+    const moduleExports = this.moduleResolver.resolveModule(decl.source);
+
+    if (!moduleExports) {
+      // Unknown module - emit a comment but don't fail
+      this.emit(`; Warning: Could not resolve module "${decl.source}"`);
+      return;
+    }
+
+    const imported = this.moduleResolver.getImportedSymbols(decl, moduleExports);
+
+    // Register imported symbols - so when we see a call like console.log(...)
+    // we know it's an imported function with known signature
+    for (const [localName, sym] of imported) {
+      this.importedSymbols.set(localName, sym);
+    }
+  }
+
+  // Emit external declaration for an imported symbol on first use
+  private ensureExternalDeclaration(mangledName: string, sym: ExportedSymbol): void {
+    // Check already declared (by name in externalDecls)
+    if (this.externalDecls.some(l => l.includes(`@${mangledName}(`))) return;
+
+    if (sym.kind === 'function') {
+      const params = (sym.paramTypes || []).join(', ');
+      this.externalDecls.push(`declare ${sym.llvmType} @${mangledName}(${params})`);
+    }
   }
 
   private generateGlobalConst(decl: VarDecl): void {
@@ -79,6 +193,18 @@ export class CodeGenerator {
         this.emit(`@${decl.name} = constant [${size} x ${elementType}] zeroinitializer, align 4`);
       } else {
         this.emit(`@${decl.name} = global [${size} x ${elementType}] zeroinitializer, align 4`);
+      }
+      return;
+    }
+    
+    // Handle pointer types with 0 initializer -> use null
+    if (decl.type?.isPointer && decl.init?.kind === ASTKind.NumberLiteral && (decl.init as NumberLiteral).value === 0) {
+      this.globals.set(decl.name, { name: decl.name, type: llvmType, isConst: decl.isConst });
+      
+      if (decl.isConst) {
+        this.emit(`@${decl.name} = constant ${llvmType} null, align ${this.getAlignment(llvmType)}`);
+      } else {
+        this.emit(`@${decl.name} = global ${llvmType} null, align ${this.getAlignment(llvmType)}`);
       }
       return;
     }
@@ -116,9 +242,63 @@ export class CodeGenerator {
     this.emit(`%${decl.name} = type { ${llvmFields.join(', ')} }`);
   }
 
+  // ============================================================================
+  // ALLOCA HOISTING: Collect all variable declarations from a function body
+  // (including inside if/while/for blocks) so we can emit all allocas in the
+  // entry block, satisfying LLVM IR's requirement.
+  // ============================================================================
+
+  private collectVarDecls(stmts: Statement[]): { name: string; llvmType: string }[] {
+    const vars: { name: string; llvmType: string }[] = [];
+    for (const stmt of stmts) {
+      this.collectVarDeclsFromStmt(stmt, vars);
+    }
+    return vars;
+  }
+
+  private collectVarDeclsFromStmt(
+    stmt: Statement,
+    out: { name: string; llvmType: string }[]
+  ): void {
+    switch (stmt.kind) {
+      case ASTKind.VarDecl: {
+        const v = stmt as VarDecl;
+        const llvmType = v.type ? this.getLLVMType(v.type) : 'i32';
+        out.push({ name: v.name, llvmType });
+        break;
+      }
+      case ASTKind.IfStmt: {
+        const s = stmt as IfStmt;
+        for (const child of s.thenBranch) this.collectVarDeclsFromStmt(child, out);
+        if (s.elseBranch) for (const child of s.elseBranch) this.collectVarDeclsFromStmt(child, out);
+        break;
+      }
+      case ASTKind.WhileStmt: {
+        const s = stmt as WhileStmt;
+        for (const child of s.body) this.collectVarDeclsFromStmt(child, out);
+        break;
+      }
+      case ASTKind.ForStmt: {
+        const s = stmt as ForStmt;
+        if (s.init) this.collectVarDeclsFromStmt(s.init, out);
+        for (const child of s.body) this.collectVarDeclsFromStmt(child, out);
+        break;
+      }
+      // Other statement kinds don't declare local variables
+    }
+  }
+
   private generateFunction(decl: FunctionDecl): void {
     const returnType = this.getLLVMType(decl.returnType);
     const params = decl.params.map(p => `${this.getLLVMType(p.type)} %${p.name}`).join(', ');
+    const paramTypes = decl.params.map(p => this.getLLVMType(p.type));
+
+    // Register function info
+    this.functions.set(decl.name, {
+      name: decl.name,
+      returnType: returnType,
+      paramTypes: paramTypes
+    });
 
     if (decl.isDeclare) {
       // Forward declaration (FFI or forward reference)
@@ -127,27 +307,48 @@ export class CodeGenerator {
       return;
     }
 
-    // Track parameters for this function
+    // Track parameters and return type for this function
     this.currentFunctionParams.clear();
     this.currentFunctionParamTypes.clear();
+    this.currentFunctionReturnType = returnType;
+    this.hoistedVars.clear();
+    this.localVarTypes.clear();
+
     for (const param of decl.params) {
       this.currentFunctionParams.add(param.name);
       this.currentFunctionParamTypes.set(param.name, this.getLLVMType(param.type));
     }
 
-    // Function definition
+    // Function definition header
     this.emit(`define ${returnType} @${decl.name}(${params}) {`);
     this.emit('entry:');
     this.indent++;
 
-    // Allocate space for parameters (to make them mutable)
+    // ── ALLOCA HOISTING ────────────────────────────────────────────────────
+    // 1. Allocate space for parameters (to make them mutable)
     for (const param of decl.params) {
       const llvmType = this.getLLVMType(param.type);
       this.emit(`%${param.name}.addr = alloca ${llvmType}, align ${this.getAlignment(llvmType)}`);
       this.emit(`store ${llvmType} %${param.name}, ptr %${param.name}.addr, align ${this.getAlignment(llvmType)}`);
+      // Track param type in localVarTypes (but use .addr key for params, identifier lookup uses currentFunctionParamTypes)
     }
 
-    // Generate function body
+    // 2. Collect ALL local variable declarations from the entire body (recursive)
+    //    and emit their alloca at the entry block NOW, before any code.
+    const localVars = this.collectVarDecls(decl.body);
+    // Deduplicate by name (same name in if/else branches)
+    const seen = new Set<string>();
+    for (const { name, llvmType } of localVars) {
+      if (!seen.has(name)) {
+        seen.add(name);
+        this.emit(`%${name} = alloca ${llvmType}, align ${this.getAlignment(llvmType)}`);
+        this.hoistedVars.add(name);
+        this.localVarTypes.set(name, llvmType);
+      }
+    }
+    // ── END ALLOCA HOISTING ────────────────────────────────────────────────
+
+    // Generate function body (generateVarDecl will now only emit store, not alloca)
     for (const stmt of decl.body) {
       this.generateStatement(stmt);
     }
@@ -164,10 +365,12 @@ export class CodeGenerator {
     this.indent--;
     this.emit('}');
     this.emit('');
-    
-    // Clear parameters after function
+
+    // Clear function state
     this.currentFunctionParams.clear();
     this.currentFunctionParamTypes.clear();
+    this.hoistedVars.clear();
+    this.localVarTypes.clear();
   }
 
   private generateStatement(stmt: Statement): void {
@@ -204,9 +407,27 @@ export class CodeGenerator {
 
   private generateVarDecl(stmt: VarDecl): void {
     const llvmType = stmt.type ? this.getLLVMType(stmt.type) : 'i32';
-    this.emit(`%${stmt.name} = alloca ${llvmType}, align ${this.getAlignment(llvmType)}`);
+
+    // If this variable was already hoisted to entry, skip alloca
+    if (!this.hoistedVars.has(stmt.name)) {
+      // Fallback: emit alloca here (top-level or missed by collector)
+      this.emit(`%${stmt.name} = alloca ${llvmType}, align ${this.getAlignment(llvmType)}`);
+    }
 
     if (stmt.init) {
+      // For array types, skip zero-initialization (already zeroed by alloca on most platforms)
+      // or use store for simple non-zero scalar inits
+      if (llvmType.startsWith('[')) {
+        // Array type: only handle NumberLiteral 0 (zeroinitializer - skip, alloca gives undef but fine)
+        // Skip zero initializer for arrays - it's not a valid LLVM IR store
+        if (stmt.init.kind === ASTKind.NumberLiteral && (stmt.init as NumberLiteral).value === 0) {
+          // Zero init: skip (alloca leaves undef, but globals/explicit zeroinit handle this)
+          return;
+        }
+        // Non-zero array init: not supported, skip
+        return;
+      }
+      
       const initValue = this.generateExpression(stmt.init);
       this.emit(`store ${llvmType} ${initValue}, ptr %${stmt.name}, align ${this.getAlignment(llvmType)}`);
     }
@@ -278,8 +499,42 @@ export class CodeGenerator {
         const baseIdent = indexExpr.base as Identifier;
         const index = this.generateExpression(indexExpr.index);
         
+        // Check if base is global array
+        const global = this.globals.get(baseIdent.name);
         const elemPtrTemp = this.newTemp();
-        this.emit(`${elemPtrTemp} = getelementptr inbounds i32, ptr %${baseIdent.name}, i32 0, i32 ${index}`);
+        
+        if (global && global.type.startsWith('[')) {
+          // Global array: use @name and full array type
+          this.emit(`${elemPtrTemp} = getelementptr inbounds ${global.type}, ptr @${baseIdent.name}, i32 0, i32 ${index}`);
+          // Get element type for proper store
+          const gMatch = global.type.match(/\[.*? x (.*?)\]/);
+          const gElemType = gMatch ? gMatch[1] : 'i32';
+          const gStoreValue = this.coerceToType(value, this.getValueType(value), gElemType);
+          this.emit(`store ${gElemType} ${gStoreValue}, ptr ${elemPtrTemp}, align ${this.getAlignment(gElemType)}`);
+          return;
+        } else if (global && global.type === 'ptr') {
+          // Global pointer: load pointer then GEP with 1 index
+          const ptrVal = this.newTemp();
+          this.emit(`${ptrVal} = load ptr, ptr @${baseIdent.name}, align 8`);
+          this.emit(`${elemPtrTemp} = getelementptr inbounds i8, ptr ${ptrVal}, i32 ${index}`);
+          const valueType = this.getValueType(value);
+          this.emit(`store ${valueType} ${value}, ptr ${elemPtrTemp}, align 1`);
+          return;
+        } else {
+          // Local array: use %name with proper type GEP
+          const localType = this.localVarTypes.get(baseIdent.name);
+          if (localType && localType.startsWith('[')) {
+            this.emit(`${elemPtrTemp} = getelementptr inbounds ${localType}, ptr %${baseIdent.name}, i32 0, i32 ${index}`);
+            // Get element type for proper store
+            const match = localType.match(/\[.*? x (.*?)\]/);
+            const elementType = match ? match[1] : 'i32';
+            const storeValue = this.coerceToType(value, this.getValueType(value), elementType);
+            this.emit(`store ${elementType} ${storeValue}, ptr ${elemPtrTemp}, align ${this.getAlignment(elementType)}`);
+            return;
+          } else {
+            this.emit(`${elemPtrTemp} = getelementptr inbounds i32, ptr %${baseIdent.name}, i32 ${index}`);
+          }
+        }
         
         const valueType = this.getValueType(value);
         this.emit(`store ${valueType} ${value}, ptr ${elemPtrTemp}, align 4`);
@@ -309,7 +564,20 @@ export class CodeGenerator {
     if (stmt.value) {
       const value = this.generateExpression(stmt.value);
       const valueType = this.getValueType(value);
-      this.emit(`ret ${valueType} ${value}`);
+      
+      // Check if we need type conversion
+      if (valueType !== this.currentFunctionReturnType) {
+        // Convert i1 to i32
+        if (valueType === 'i1' && this.currentFunctionReturnType === 'i32') {
+          const temp = this.newTemp();
+          this.emit(`${temp} = zext i1 ${value} to i32`);
+          this.emit(`ret i32 ${temp}`);
+          return;
+        }
+      }
+      
+      // Use tracked function return type
+      this.emit(`ret ${this.currentFunctionReturnType} ${value}`);
     } else {
       this.emit('ret void');
     }
@@ -591,6 +859,7 @@ export class CodeGenerator {
       // Regular global - load value
       const temp = this.newTemp();
       this.emit(`${temp} = load ${global.type}, ptr @${expr.name}, align ${this.getAlignment(global.type)}`);
+      this.tempTypes.set(temp, global.type);
       return temp;
     }
     
@@ -599,12 +868,22 @@ export class CodeGenerator {
       const paramType = this.currentFunctionParamTypes.get(expr.name) || 'i32';
       const temp = this.newTemp();
       this.emit(`${temp} = load ${paramType}, ptr %${expr.name}.addr, align ${this.getAlignment(paramType)}`);
+      this.tempTypes.set(temp, paramType);
       return temp;
     }
     
     // Otherwise it's a local variable
     const temp = this.newTemp();
-    this.emit(`${temp} = load i32, ptr %${expr.name}, align 4`);
+    // Use tracked local var type if available, otherwise default to i32
+    const localType = this.localVarTypes.get(expr.name) || 'i32';
+    // For array types, return pointer (don't load)
+    if (localType.startsWith('[')) {
+      // Local array: return pointer directly (hoisted alloca)
+      this.tempTypes.set(`%${expr.name}`, localType);
+      return `%${expr.name}`;
+    }
+    this.emit(`${temp} = load ${localType}, ptr %${expr.name}, align ${this.getAlignment(localType)}`);
+    this.tempTypes.set(temp, localType);
     return temp;
   }
 
@@ -633,7 +912,13 @@ export class CodeGenerator {
     const isComparison = op.startsWith('icmp');
     const resultType = isComparison ? 'i1' : 'i32';
 
-    this.emit(`${temp} = ${op} i32 ${left}, ${right}`);
+    // Determine operand type - use tracked type of left operand if available
+    const leftType = this.getValueType(left);
+    const operandType = (leftType === 'ptr' || right === 'null') ? 'ptr' : 'i32';
+
+    this.emit(`${temp} = ${op} ${operandType} ${left}, ${right}`);
+    this.tempTypes.set(temp, resultType);
+    
     return temp;
   }
 
@@ -651,6 +936,11 @@ export class CodeGenerator {
   }
 
   private generateCallExpr(expr: CallExpr): string {
+    // Handle member expression calls: console.log(...), fs.read(...)
+    if (expr.callee.kind === ASTKind.MemberExpr) {
+      return this.generateMemberCallExpr(expr);
+    }
+
     const callee = (expr.callee as Identifier).name;
     
     // Handle built-in functions
@@ -661,16 +951,114 @@ export class CodeGenerator {
     if (callee === 'string_char_at') {
       return this.generateStringCharAt(expr.args[0], expr.args[1]);
     }
+
+    // Check if it's an imported symbol (direct import: import { add } from "math")
+    const importedSym = this.importedSymbols.get(callee);
+    if (importedSym) {
+      return this.generateImportedCall(callee, callee, importedSym, expr.args);
+    }
     
     // Regular function call
-    const args = expr.args.map(arg => {
+    const args = expr.args.map((arg, i) => {
       const value = this.generateExpression(arg);
-      const type = this.getValueType(value);
+      // Use known param type if available (for proper type matching)
+      const funcInfoForArgs = this.functions.get(callee);
+      const paramType = funcInfoForArgs && funcInfoForArgs.paramTypes[i]
+        ? funcInfoForArgs.paramTypes[i]
+        : this.getValueType(value);
+      return `${paramType} ${value}`;
+    }).join(', ');
+
+    // Look up function return type
+    const funcInfo = this.functions.get(callee);
+    const returnType = funcInfo ? funcInfo.returnType : 'i32';
+
+    if (returnType === 'void') {
+      this.emit(`call void @${callee}(${args})`);
+      return '0';
+    }
+
+    const temp = this.newTemp();
+    this.emit(`${temp} = call ${returnType} @${callee}(${args})`);
+    this.tempTypes.set(temp, returnType);
+    return temp;
+  }
+
+  // Handle calls like: console.log("hello"), fs.readFile(path)
+  private generateMemberCallExpr(expr: CallExpr): string {
+    const memberExpr = expr.callee as MemberExpr;
+    
+    // Get namespace (e.g. "console")
+    let namespaceName = '';
+    if (memberExpr.object.kind === ASTKind.Identifier) {
+      namespaceName = (memberExpr.object as Identifier).name;
+    } else {
+      // Fallback
+      return this.generateExpression(expr.callee);
+    }
+    
+    const methodName = memberExpr.member;           // e.g. "log"
+    const dotName = `${namespaceName}.${methodName}`; // e.g. "console.log"
+    const mangledName = `${namespaceName}_${methodName}`; // e.g. "console_log"
+
+    // Look up the imported symbol
+    const importedSym = this.importedSymbols.get(dotName);
+    if (importedSym) {
+      return this.generateImportedCall(dotName, mangledName, importedSym, expr.args);
+    }
+
+    // Check if it might be a method on a known type - fall back to direct call
+    const args = expr.args.map((arg, i) => {
+      const value = this.generateExpression(arg);
+      const funcInfoForArgs = this.functions.get(mangledName);
+      const paramType = funcInfoForArgs && funcInfoForArgs.paramTypes[i]
+        ? funcInfoForArgs.paramTypes[i]
+        : this.getValueType(value);
+      return `${paramType} ${value}`;
+    }).join(', ');
+
+    const funcInfo = this.functions.get(mangledName);
+    const returnType = funcInfo ? funcInfo.returnType : 'i32';
+
+    if (returnType === 'void') {
+      this.emit(`call void @${mangledName}(${args})`);
+      return '0';
+    }
+
+    const temp = this.newTemp();
+    this.emit(`${temp} = call ${returnType} @${mangledName}(${args})`);
+    this.tempTypes.set(temp, returnType);
+    return temp;
+  }
+
+  // Generate call to an imported function, emitting external decl if needed
+  private generateImportedCall(
+    localName: string,
+    mangledName: string,
+    sym: ExportedSymbol,
+    argExprs: Expression[]
+  ): string {
+    // Ensure external declaration is emitted
+    this.ensureExternalDeclaration(mangledName, sym);
+    
+    // Generate argument list using known param types
+    const paramTypes = sym.paramTypes || [];
+    const args = argExprs.map((arg, i) => {
+      const value = this.generateExpression(arg);
+      const type = paramTypes[i] ?? this.getValueType(value);
       return `${type} ${value}`;
     }).join(', ');
 
+    const returnType = sym.llvmType || 'void';
+    
+    if (returnType === 'void') {
+      this.emit(`call void @${mangledName}(${args})`);
+      return '0';
+    }
+
     const temp = this.newTemp();
-    this.emit(`${temp} = call i32 @${callee}(${args})`);
+    this.emit(`${temp} = call ${returnType} @${mangledName}(${args})`);
+    this.tempTypes.set(temp, returnType);
     return temp;
   }
 
@@ -761,15 +1149,56 @@ export class CodeGenerator {
       
       const temp = this.newTemp();
       this.emit(`${temp} = load ${elementType}, ptr ${elemPtrTemp}, align 4`);
+      
+      // Track the type of this temp variable
+      this.tempTypes.set(temp, elementType);
+      
       return temp;
     }
     
-    // Local array: %name
-    const elemPtrTemp = this.newTemp();
-    this.emit(`${elemPtrTemp} = getelementptr inbounds i32, ptr %${base}, i32 0, i32 ${index}`);
+    // Global pointer type (e.g. ptr<i8> source = 0) - load pointer then GEP
+    if (global && global.type === 'ptr') {
+      // Load the pointer value first
+      const ptrTemp = this.newTemp();
+      this.emit(`${ptrTemp} = load ptr, ptr @${base}, align 8`);
+      
+      // GEP with single index into the pointed-to data
+      const elemPtrTemp = this.newTemp();
+      this.emit(`${elemPtrTemp} = getelementptr inbounds i8, ptr ${ptrTemp}, i32 ${index}`);
+      
+      const temp = this.newTemp();
+      this.emit(`${temp} = load i8, ptr ${elemPtrTemp}, align 1`);
+      
+      // Extend i8 to i32 for use in expressions
+      const extTemp = this.newTemp();
+      this.emit(`${extTemp} = sext i8 ${temp} to i32`);
+      this.tempTypes.set(extTemp, 'i32');
+      return extTemp;
+    }
     
+    // Local array: %name - use proper element type GEP
+    const localType = this.localVarTypes.get(base);
+    const elemPtrTemp = this.newTemp();
+    
+    if (localType && localType.startsWith('[')) {
+      // Local array with known type: [N x T]
+      const match = localType.match(/\[.*? x (.*?)\]/);
+      const elementType = match ? match[1] : 'i32';
+      this.emit(`${elemPtrTemp} = getelementptr inbounds ${localType}, ptr %${base}, i32 0, i32 ${index}`);
+      const temp = this.newTemp();
+      this.emit(`${temp} = load ${elementType}, ptr ${elemPtrTemp}, align ${this.getAlignment(elementType)}`);
+      this.tempTypes.set(temp, elementType);
+      return temp;
+    }
+    
+    // Fallback: treat as i32 array
+    this.emit(`${elemPtrTemp} = getelementptr inbounds i32, ptr %${base}, i32 ${index}`);
     const temp = this.newTemp();
     this.emit(`${temp} = load i32, ptr ${elemPtrTemp}, align 4`);
+    
+    // Track type
+    this.tempTypes.set(temp, 'i32');
+    
     return temp;
   }
 
@@ -820,9 +1249,52 @@ export class CodeGenerator {
     // addressof(variable) returns pointer to variable
     if (expr.operand.kind === ASTKind.Identifier) {
       const ident = expr.operand as Identifier;
-      // Return the address directly (the %variable is already a pointer from alloca)
+      // Check if it's a global variable
+      const global = this.globals.get(ident.name);
+      if (global) {
+        return `@${ident.name}`;
+      }
+      // Check if it's a parameter
+      if (this.currentFunctionParams.has(ident.name)) {
+        return `%${ident.name}.addr`;
+      }
+      // Local variable: the %variable is already a pointer from alloca
       return `%${ident.name}`;
     }
+    
+    // addressof(arr[index]) - return pointer to array element
+    if (expr.operand.kind === ASTKind.IndexExpr) {
+      const indexExpr = expr.operand as IndexExpr;
+      if (indexExpr.base.kind === ASTKind.Identifier) {
+        const base = (indexExpr.base as Identifier).name;
+        const index = this.generateExpression(indexExpr.index);
+        
+        const global = this.globals.get(base);
+        const elemPtrTemp = this.newTemp();
+        
+        if (global && global.type.startsWith('[')) {
+          // Global array
+          this.emit(`${elemPtrTemp} = getelementptr inbounds ${global.type}, ptr @${base}, i32 0, i32 ${index}`);
+        } else if (global && global.type === 'ptr') {
+          // Global pointer: load then GEP
+          const ptrVal = this.newTemp();
+          this.emit(`${ptrVal} = load ptr, ptr @${base}, align 8`);
+          this.emit(`${elemPtrTemp} = getelementptr inbounds i8, ptr ${ptrVal}, i32 ${index}`);
+        } else {
+          // Local array: use type from localVarTypes
+          const localType = this.localVarTypes.get(base);
+          if (localType && localType.startsWith('[')) {
+            this.emit(`${elemPtrTemp} = getelementptr inbounds ${localType}, ptr %${base}, i32 0, i32 ${index}`);
+          } else {
+            this.emit(`${elemPtrTemp} = getelementptr inbounds i8, ptr %${base}, i32 ${index}`);
+          }
+        }
+        
+        this.tempTypes.set(elemPtrTemp, 'ptr');
+        return elemPtrTemp;
+      }
+    }
+    
     return 'null';
   }
 
@@ -880,11 +1352,22 @@ export class CodeGenerator {
   }
 
   private getValueType(value: string): string {
-    // Simple heuristic: if it starts with %, it's a temp variable (i32)
-    // if it's a number, it's i32
-    if (value.startsWith('%') || /^\d+$/.test(value)) {
+    // Check if we have tracked type for this temp variable
+    if (value.startsWith('%')) {
+      const trackedType = this.tempTypes.get(value);
+      if (trackedType) {
+        return trackedType;
+      }
+      // Default to i32 for untracked temps
       return 'i32';
     }
+    
+    // Numbers are i32
+    if (/^\d+$/.test(value)) {
+      return 'i32';
+    }
+    
+    // Default
     return 'i32';
   }
 
@@ -908,6 +1391,31 @@ export class CodeGenerator {
     // Default to first struct if available
     const firstStruct = Array.from(this.structs.keys())[0];
     return firstStruct || 'Unknown';
+  }
+
+  // Coerce a value from srcType to destType, emitting conversion instructions as needed
+  // Returns the new value (possibly a new temp)
+  private coerceToType(value: string, srcType: string, destType: string): string {
+    if (srcType === destType) return value;
+    // i32 -> i8: truncate
+    if (srcType === 'i32' && destType === 'i8') {
+      // If value is a numeric literal, just return truncated constant
+      if (/^-?\d+$/.test(value)) {
+        return value; // LLVM will accept i8 immediate literals written as i32 values in trunc
+      }
+      const temp = this.newTemp();
+      this.emit(`${temp} = trunc i32 ${value} to i8`);
+      this.tempTypes.set(temp, 'i8');
+      return temp;
+    }
+    // i8 -> i32: sign extend
+    if (srcType === 'i8' && destType === 'i32') {
+      const temp = this.newTemp();
+      this.emit(`${temp} = sext i8 ${value} to i32`);
+      this.tempTypes.set(temp, 'i32');
+      return temp;
+    }
+    return value;
   }
 
   private escapeString(str: string): string {
