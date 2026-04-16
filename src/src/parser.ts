@@ -290,7 +290,7 @@ export class Parser {
     this.consume(TokenKind.Colon, "Expected ':' return type annotation");
     const returnType = this.parseType();
     let body: Statement[] = [];
-    if (isDeclare) this.consume(TokenKind.Semicolon, "Expected ';' after declare function");
+    if (isDeclare || ffiLib) this.consume(TokenKind.Semicolon, "Expected ';' after external function declaration");
     else {
       this.consume(TokenKind.LBrace, "Expected '{'");
       body = this.parseBlock();

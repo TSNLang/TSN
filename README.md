@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.13.0--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.13.1--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -22,12 +22,13 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.13.0-indev: The OOP & Ownership Milestone
+## 🚀 Version 0.13.1-indev: The FFI & OOP Refinement
 
-In version 0.13.0, TSN has reached major milestones in its type system and modern memory model:
-1.  **Ownership & Value Semantics**: Completely replaced traditional Reference Counting with an **Ownership model** (inspired by Mojo/Val), providing memory safety without runtime overhead.
-2.  **Full OOP Support**: Implemented comprehensive inheritance, polymorphism via **VTables**, and **Interfaces**.
-3.  **Unified Architecture**: A single compiler written in a subset of TSN itself, paving the way for full self-hosting.
+In this version, TSN has reached major milestones in its type system and modern memory model:
+1.  **FFI Enhancement**: Improved support for Foreign Function Interface, allowing seamless declaration and calling of C functions with `@ffi.lib()`.
+2.  **Ownership & Value Semantics**: Completely replaced traditional Reference Counting with an **Ownership model** (inspired by Mojo/Val), providing memory safety without runtime overhead.
+3.  **Full OOP Support**: Implemented comprehensive inheritance, polymorphism via **VTables**, and **Interfaces**.
+4.  **Unified Architecture**: A single compiler written in a subset of TSN itself, paving the way for full self-hosting.
 
 ---
 
