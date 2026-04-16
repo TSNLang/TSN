@@ -40,6 +40,10 @@ export class CodeGenerator {
   private structDecls: Map<string, StructDecl> = new Map();
   private interfaceDecls: Map<string, InterfaceDecl> = new Map();
   private vTables: Map<string, VTableInfo> = new Map();
+  private genericClasses: Map<string, ClassDecl> = new Map();
+  private genericInterfaces: Map<string, InterfaceDecl> = new Map();
+  private genericFunctions: Map<string, FunctionDecl> = new Map();
+  private instantiatedNames: Set<string> = new Set();
   private globals: Map<string, GlobalInfo> = new Map();
   private functions: Map<string, FunctionInfo> = new Map();
   private typeAliases: Map<string, TypeAnnotation> = new Map();
@@ -111,6 +115,10 @@ export class CodeGenerator {
     else if (decl.kind === ASTKind.EnumDecl) this.processEnum(decl as EnumDecl);
     else if (decl.kind === ASTKind.InterfaceDecl) {
       const i = decl as InterfaceDecl;
+      if (i.typeParameters && i.typeParameters.length > 0) {
+        this.genericInterfaces.set(i.name, i);
+        return;
+      }
       this.interfaceDecls.set(i.name, i);
       this.buildInterfaceVTable(i);
     }
@@ -120,6 +128,10 @@ export class CodeGenerator {
       this.scopeStack.pop();
     } else if (decl.kind === ASTKind.ClassDecl) {
       const c = decl as ClassDecl;
+      if (c.typeParameters && c.typeParameters.length > 0) {
+        this.genericClasses.set(c.name, c);
+        return;
+      }
       this.classDecls.set(c.name, c);
       this.buildVTable(c); // Xây dựng VTable
       this.scopeStack.push(c.name);
@@ -139,9 +151,18 @@ export class CodeGenerator {
       }
       this.scopeStack.pop();
     } else if (decl.kind === ASTKind.StructDecl) {
-      this.structDecls.set((decl as StructDecl).name, decl as StructDecl);
+      const s = decl as StructDecl;
+      if (s.typeParameters && s.typeParameters.length > 0) {
+          // Struct generics handled similarly if needed
+          return;
+      }
+      this.structDecls.set(s.name, s);
     } else if (decl.kind === ASTKind.FunctionDecl) {
       const fn = decl as FunctionDecl;
+      if (fn.typeParameters && fn.typeParameters.length > 0) {
+        this.genericFunctions.set(fn.name, fn);
+        return;
+      }
       const mName = this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare);
       const rt = this.getLLVMType(fn.returnType), pts = fn.params.map(p => this.getLLVMType(p.type));
       this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts, isExternal: !!fn.ffiLib || fn.isDeclare } as any);
@@ -668,22 +689,27 @@ export class CodeGenerator {
   }
 
   private generateNew(e: NewExpr): string {
-    const st = this.structs.get(e.className);
+    let className = e.className;
+    if (e.genericArgs && e.genericArgs.length > 0) {
+        className = this.instantiateClass(e.className, e.genericArgs);
+    }
+
+    const st = this.structs.get(className);
     if (!st) return 'null';
     // 1. Alloc memory
-    const size = this.getTypeSize(`%${e.className}`);
+    const size = this.getTypeSize(`%${className}`);
     const ptr = this.newTemp();
     this.ensureExternalDeclaration('memory_alloc', { name: 'memory_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] });
     this.emit(`${ptr} = call ptr @memory_alloc(i32 ${size})`);
-    this.tempTypes.set(ptr, `%${e.className}`);
+    this.tempTypes.set(ptr, `%${className}`);
     
     // 1.5 Initialize VTable pointer
     const vtablePtr = this.newTemp();
-    this.emit(`${vtablePtr} = getelementptr inbounds %${e.className}, ptr ${ptr}, i32 0, i32 1`);
-    this.emit(`store ptr @_VTable.${e.className}, ptr ${vtablePtr}, align 8`);
+    this.emit(`${vtablePtr} = getelementptr inbounds %${className}, ptr ${ptr}, i32 0, i32 1`);
+    this.emit(`store ptr @_VTable.${className}, ptr ${vtablePtr}, align 8`);
     
     // 2. Call constructor
-    const scopedCtor = `${e.className}.constructor`;
+    const scopedCtor = `${className}.constructor`;
     const info = this.functions.get(scopedCtor);
     if (info) {
       const args = e.args.map(a => this.generateExpression(a));
@@ -773,7 +799,11 @@ export class CodeGenerator {
         }
     }
 
-    const name = (e.callee as Identifier).name, mangled = this.resolveMangledName(name);
+    let name = (e.callee as Identifier).name;
+    if (e.genericArgs && e.genericArgs.length > 0) {
+        name = this.instantiateFunction(name, e.genericArgs);
+    }
+    const mangled = this.resolveMangledName(name);
     const imported = this.importedSymbols.get(name);
     if (imported) return this.generateImportedCall(name, name, imported, e.args);
     const info = this.functions.get(mangled) || this.functions.get(name);
@@ -791,6 +821,18 @@ export class CodeGenerator {
 
   private generateMemberCallExpr(e: CallExpr): string {
     const m = e.callee as MemberExpr;
+    
+    // Handle imported symbols (e.g., console.log)
+    if (m.object.kind === ASTKind.Identifier) {
+        const objName = (m.object as Identifier).name;
+        const fullName = `${objName}.${m.member}`;
+        const imported = this.importedSymbols.get(fullName);
+        if (imported) {
+            const mangledName = `${objName}_${m.member}`;
+            return this.generateImportedCall(fullName, mangledName, imported, e.args);
+        }
+    }
+
     const obj = this.generateExpression(m.object);
     const objLLVMType = this.tempTypes.get(obj) || 'ptr';
     
@@ -936,9 +978,24 @@ export class CodeGenerator {
     return 'null';
   }
 
+  private resolveTypeName(t: TypeAnnotation): string {
+    let name = t.name;
+    if (t.genericArgs && t.genericArgs.length > 0) {
+        if (this.genericClasses.has(name)) {
+            name = this.instantiateClass(name, t.genericArgs);
+        } else if (this.genericInterfaces.has(name)) {
+            name = this.instantiateInterface(name, t.genericArgs);
+        }
+    }
+    return name;
+  }
+
   private getLLVMType(t: TypeAnnotation): string {
-    if (t.isPointer) return 'ptr'; if (t.isArray) return `[${t.arraySize || 0} x ${this.getLLVMTypeByName(t.name)}]`;
-    return this.getLLVMTypeByName(t.name);
+    if (t.isPointer) return 'ptr';
+    if (t.isArray) return `[${t.arraySize || 0} x ${this.getLLVMTypeByName(t.name)}]`;
+    
+    let name = this.resolveTypeName(t);
+    return this.getLLVMTypeByName(name);
   }
 
   private getLLVMTypeByName(n: string): string {
@@ -1036,7 +1093,8 @@ export class CodeGenerator {
 
       // 2. Thêm các phương thức từ Interfaces
       if (c.implements) {
-          for (const ifName of c.implements) {
+          for (const ifType of c.implements) {
+              const ifName = this.resolveTypeName(ifType);
               const iface = this.interfaceDecls.get(ifName);
               if (iface) {
                   for (const m of iface.methods) {
@@ -1101,5 +1159,120 @@ export class CodeGenerator {
       const methodNames = i.methods.map(m => m.name);
       // Interfaces don't have mangled implementations, just a layout
       this.vTables.set(i.name, { className: i.name, methodNames, mangledNames: [] });
+  }
+
+  private instantiateClass(className: string, args: TypeAnnotation[]): string {
+    const mangledName = className + "_" + args.map(a => a.name).join("_");
+    if (this.instantiatedNames.has(mangledName)) return mangledName;
+
+    const baseDecl = this.genericClasses.get(className);
+    if (!baseDecl) return className;
+
+    this.instantiatedNames.add(mangledName);
+
+    // Deep clone and replace type parameters
+    const typeMap = new Map<string, TypeAnnotation>();
+    baseDecl.typeParameters?.forEach((p, i) => typeMap.set(p, args[i]));
+
+    const instantiatedDecl: ClassDecl = this.cloneAndReplace(baseDecl, typeMap) as ClassDecl;
+    instantiatedDecl.name = mangledName;
+    instantiatedDecl.typeParameters = [];
+
+    // Add to decls and generate
+    this.classDecls.set(mangledName, instantiatedDecl);
+    this.buildVTable(instantiatedDecl);
+    
+    const oldVTable = this.output.length;
+    this.generateClassStruct(instantiatedDecl);
+    const vinfo = this.vTables.get(mangledName)!;
+    this.generateVTable(vinfo);
+    
+    // Register methods
+    this.scopeStack.push(mangledName);
+    if (instantiatedDecl.constructorDecl) {
+        const mName = this.mangleName('constructor', instantiatedDecl.constructorDecl.params);
+        const pts = ['ptr', ...instantiatedDecl.constructorDecl.params.map(p => this.getLLVMType(p.type))];
+        this.functions.set(`${mangledName}.constructor`, { name: mName, returnType: 'void', paramTypes: pts });
+    }
+    for (const m of instantiatedDecl.methods) {
+        const mName = this.mangleName(m.name, m.params);
+        const rt = this.getLLVMType(m.returnType);
+        const pts = ['ptr', ...m.params.map(p => this.getLLVMType(p.type))];
+        this.functions.set(`${mangledName}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
+    }
+    this.scopeStack.pop();
+
+    // Generate methods
+    this.generateClassMethods(instantiatedDecl);
+
+    return mangledName;
+  }
+
+  private instantiateFunction(fnName: string, args: TypeAnnotation[]): string {
+    const mangledName = fnName + "_" + args.map(a => a.name).join("_");
+    if (this.instantiatedNames.has(mangledName)) return mangledName;
+
+    const baseDecl = this.genericFunctions.get(fnName);
+    if (!baseDecl) return fnName;
+
+    this.instantiatedNames.add(mangledName);
+
+    const typeMap = new Map<string, TypeAnnotation>();
+    baseDecl.typeParameters?.forEach((p, i) => typeMap.set(p, args[i]));
+
+    const instantiatedDecl: FunctionDecl = this.cloneAndReplace(baseDecl, typeMap) as FunctionDecl;
+    instantiatedDecl.name = mangledName;
+    instantiatedDecl.typeParameters = [];
+
+    const mName = this.mangleName(instantiatedDecl.name, instantiatedDecl.params);
+    const rt = this.getLLVMType(instantiatedDecl.returnType);
+    const pts = instantiatedDecl.params.map(p => this.getLLVMType(p.type));
+    this.functions.set(mangledName, { name: mName, returnType: rt, paramTypes: pts });
+
+    this.generateFunction(instantiatedDecl);
+
+    return mangledName;
+  }
+
+  private instantiateInterface(ifName: string, args: TypeAnnotation[]): string {
+    const mangledName = ifName + "_" + args.map(a => a.name).join("_");
+    if (this.instantiatedNames.has(mangledName)) return mangledName;
+
+    const baseDecl = this.genericInterfaces.get(ifName);
+    if (!baseDecl) return ifName;
+
+    this.instantiatedNames.add(mangledName);
+
+    const typeMap = new Map<string, TypeAnnotation>();
+    baseDecl.typeParameters?.forEach((p, i) => typeMap.set(p, args[i]));
+
+    const instantiatedDecl: InterfaceDecl = this.cloneAndReplace(baseDecl, typeMap) as InterfaceDecl;
+    instantiatedDecl.name = mangledName;
+    instantiatedDecl.typeParameters = [];
+
+    // Add to decls and generate
+    this.interfaceDecls.set(mangledName, instantiatedDecl);
+    this.buildInterfaceVTable(instantiatedDecl);
+    this.generateInterface(instantiatedDecl);
+
+    return mangledName;
+  }
+
+
+  private cloneAndReplace(node: any, typeMap: Map<string, TypeAnnotation>): any {
+      if (!node || typeof node !== 'object') return node;
+      if (Array.isArray(node)) return node.map(n => this.cloneAndReplace(n, typeMap));
+
+      // If it's a TypeAnnotation, check if it's a generic parameter
+      if (node.name && typeof node.name === 'string' && typeMap.has(node.name) && node.isPointer === false && node.isArray === false) {
+          const replacement = typeMap.get(node.name)!;
+          return { ...node, name: replacement.name, isPointer: replacement.isPointer, isArray: replacement.isArray, arraySize: replacement.arraySize, genericArgs: replacement.genericArgs };
+      }
+
+      const newNode: any = { ...node };
+      for (const key in newNode) {
+          newNode[key] = this.cloneAndReplace(newNode[key], typeMap);
+      }
+      return newNode;
   }
 }

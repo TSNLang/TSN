@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.13.1--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.14.0--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -22,13 +22,13 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.13.1-indev: The FFI & OOP Refinement
+## 🚀 Version 0.14.0-indev: Generic Interfaces & Advanced Type Logic
 
-In this version, TSN has reached major milestones in its type system and modern memory model:
-1.  **FFI Enhancement**: Improved support for Foreign Function Interface, allowing seamless declaration and calling of C functions with `@ffi.lib()`.
-2.  **Ownership & Value Semantics**: Completely replaced traditional Reference Counting with an **Ownership model** (inspired by Mojo/Val), providing memory safety without runtime overhead.
-3.  **Full OOP Support**: Implemented comprehensive inheritance, polymorphism via **VTables**, and **Interfaces**.
-4.  **Unified Architecture**: A single compiler written in a subset of TSN itself, paving the way for full self-hosting.
+In this version, TSN steps into the territory of advanced type systems:
+1.  **Generic Interfaces**: Full support for monomorphization of interfaces (e.g., `interface Wrapper<T>`), allowing for highly reusable polymorphic code.
+2.  **Generic Implements**: Classes and structs can now implement generic interfaces with concrete types.
+3.  **Namespace Call Improvements**: Refined handling of standard library calls through namespaces (e.g., `console.log`).
+4.  **Infrastructure Polish**: Improved internal type resolution and instantiation logic for future self-hosting.
 
 ---
 
@@ -102,17 +102,12 @@ TSN employs a state-of-the-art memory management system:
 
 ## 🗺️ Roadmap (Current Status)
 
-### 🚧 Current Phase: OOP & Memory Safety (v0.13.0)
-- [x] Ownership & Move Semantics.
-- [x] Class/Struct Inheritance.
-- [x] Virtual Methods & VTables.
-- [x] Interface Implementation.
-- [x] Super constructor/method calls.
-
-### 📅 Next: Standard Library & Advanced Features
-- [ ] **Generics**: Support for parameterized types like `List<T>`.
-- [ ] **Standard Library**: Expanded `std:io`, `std:fs`, `std:net`.
-- [ ] **Self-Hosting**: Completing the process of TSN compiling itself to a native binary.
+### 🚧 Current Phase: Generics & Standard Library (v0.14.0)
+- [x] Generic Interfaces (Monomorphization).
+- [x] Generic `implements` support for Class/Struct.
+- [ ] Generic Classes & Functions.
+- [ ] Standard Library: Formalizing `std:collections`, `std:io`.
+- [ ] Self-Hosting: Completing the process of TSN compiling itself to a native binary.
 
 ---
 

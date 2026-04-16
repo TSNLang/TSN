@@ -1,4 +1,4 @@
-import { Token, TokenKind, ASTKind, Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ExprStmt, Parameter, InterfaceField, TypeAnnotation, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ImportDecl, ExportDecl, ImportSpecifier, TypeAliasDecl, EnumDecl, EnumMember, NamespaceDecl, ClassDecl, ClassField, ClassMethod, NewExpr, ThisExpr } from './types.ts';
+import { Token, TokenKind, ASTKind, Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ExprStmt, Parameter, InterfaceField, InterfaceMethod, TypeAnnotation, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ImportDecl, ExportDecl, ImportSpecifier, TypeAliasDecl, EnumDecl, EnumMember, NamespaceDecl, ClassDecl, StructDecl, ClassField, ClassMethod, NewExpr, ThisExpr } from './types.ts';
 import { Reporter } from './diagnostics.ts';
 
 export class Parser {
@@ -85,6 +85,12 @@ export class Parser {
   private parseInterface(): InterfaceDecl {
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected interface name').text;
+    
+    let typeParameters: string[] | undefined;
+    if (this.match(TokenKind.Less)) {
+      typeParameters = this.parseTypeParameters();
+    }
+
     this.consume(TokenKind.LBrace, "Expected '{'");
     const fields: InterfaceField[] = [];
     const methods: InterfaceMethod[] = [];
@@ -115,7 +121,7 @@ export class Parser {
         }
       }
     this.consume(TokenKind.RBrace, "Expected '}'");
-    return { kind: ASTKind.InterfaceDecl, name, fields, methods, line: token.line, column: token.column };
+    return { kind: ASTKind.InterfaceDecl, name, typeParameters, fields, methods, line: token.line, column: token.column };
   }
 
   private parseTypeAlias(): TypeAliasDecl {
@@ -161,16 +167,21 @@ export class Parser {
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected class name').text;
     
+    let typeParameters: string[] | undefined;
+    if (this.match(TokenKind.Less)) {
+      typeParameters = this.parseTypeParameters();
+    }
+
     let baseClassName: string | undefined;
     if (this.match(TokenKind.Extends)) {
       baseClassName = this.consume(TokenKind.Identifier, 'Expected base class name').text;
     }
 
-    let implementsInterfaces: string[] | undefined;
+    let implementsInterfaces: TypeAnnotation[] | undefined;
     if (this.match(TokenKind.Implements)) {
       implementsInterfaces = [];
       do {
-        implementsInterfaces.push(this.consume(TokenKind.Identifier, 'Expected interface name').text);
+        implementsInterfaces.push(this.parseType());
       } while (this.match(TokenKind.Comma));
     }
 
@@ -234,23 +245,28 @@ export class Parser {
       }
     }
     this.consume(TokenKind.RBrace, "Expected '}'");
-    return { kind: ASTKind.ClassDecl, name, baseClassName, implements: implementsInterfaces, fields, methods, constructorDecl, line: token.line, column: token.column };
+    return { kind: ASTKind.ClassDecl, name, typeParameters, baseClassName, implements: implementsInterfaces, fields, methods, constructorDecl, line: token.line, column: token.column };
   }
 
   private parseStruct(): StructDecl {
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected struct name').text;
     
+    let typeParameters: string[] | undefined;
+    if (this.match(TokenKind.Less)) {
+      typeParameters = this.parseTypeParameters();
+    }
+
     let baseStructName: string | undefined;
     if (this.match(TokenKind.Extends)) {
       baseStructName = this.consume(TokenKind.Identifier, 'Expected base struct name').text;
     }
 
-    let implementsInterfaces: string[] | undefined;
+    let implementsInterfaces: TypeAnnotation[] | undefined;
     if (this.match(TokenKind.Implements)) {
       implementsInterfaces = [];
       do {
-        implementsInterfaces.push(this.consume(TokenKind.Identifier, 'Expected interface name').text);
+        implementsInterfaces.push(this.parseType());
       } while (this.match(TokenKind.Comma));
     }
 
@@ -264,7 +280,7 @@ export class Parser {
       fields.push({ name: fieldName, type: fieldType });
     }
     this.consume(TokenKind.RBrace, "Expected '}'");
-    return { kind: ASTKind.StructDecl, name, baseStructName, implements: implementsInterfaces, fields, line: token.line, column: token.column };
+    return { kind: ASTKind.StructDecl, name, typeParameters, baseStructName, implements: implementsInterfaces, fields, line: token.line, column: token.column };
   }
 
   private parseMethodParams(): Parameter[] {
@@ -286,6 +302,12 @@ export class Parser {
     this.consume(TokenKind.Function, "Expected 'function'");
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected function name').text;
+    
+    let typeParameters: string[] | undefined;
+    if (this.match(TokenKind.Less)) {
+      typeParameters = this.parseTypeParameters();
+    }
+
     const params = this.parseMethodParams();
     this.consume(TokenKind.Colon, "Expected ':' return type annotation");
     const returnType = this.parseType();
@@ -296,7 +318,7 @@ export class Parser {
       body = this.parseBlock();
       this.consume(TokenKind.RBrace, "Expected '}'");
     }
-    return { kind: ASTKind.FunctionDecl, name, params, returnType, body, isDeclare, ffiLib, line: token.line, column: token.column };
+    return { kind: ASTKind.FunctionDecl, name, typeParameters, params, returnType, body, isDeclare, ffiLib, line: token.line, column: token.column };
   }
 
   private parseBlock(): Statement[] {
@@ -512,6 +534,35 @@ export class Parser {
   private parsePostfix(): Expression {
     let expr = this.parsePrimary();
     while (true) {
+      if (this.check(TokenKind.Less)) {
+          // Potential generic call: foo<i32>(...)
+          // We look ahead to see if it's followed by types and then a '('
+          const snapshot = this.pos;
+          try {
+              this.advance(); // consume '<'
+              const gArgs: TypeAnnotation[] = [];
+              do {
+                  gArgs.push(this.parseType());
+              } while (this.match(TokenKind.Comma));
+              this.consume(TokenKind.Greater, "Expected '>'");
+              
+              if (this.match(TokenKind.LParen)) {
+                  const args: Expression[] = [];
+                  if (!this.check(TokenKind.RParen)) {
+                    do { args.push(this.parseExpression()); } while (this.match(TokenKind.Comma));
+                  }
+                  this.consume(TokenKind.RParen, "Expected ')' after arguments");
+                  expr = { kind: ASTKind.CallExpr, callee: expr, genericArgs: gArgs, args, line: expr.line, column: expr.column };
+                  continue;
+              } else {
+                  // Not a call, backtrack
+                  this.pos = snapshot;
+              }
+          } catch (e) {
+              this.pos = snapshot;
+          }
+      }
+
       if (this.match(TokenKind.LParen)) {
         const args: Expression[] = [];
         if (!this.check(TokenKind.RParen)) {
@@ -542,13 +593,23 @@ export class Parser {
     if (this.match(TokenKind.Super)) return { kind: ASTKind.SuperExpr, line: token.line, column: token.column };
     if (this.match(TokenKind.New)) {
       const cName = this.consume(TokenKind.Identifier, 'Expected class name after new').text;
+      
+      let genericArgs: TypeAnnotation[] | undefined;
+      if (this.match(TokenKind.Less)) {
+          genericArgs = [];
+          do {
+              genericArgs.push(this.parseType());
+          } while (this.match(TokenKind.Comma));
+          this.consume(TokenKind.Greater, "Expected '>' after generic arguments");
+      }
+
       this.consume(TokenKind.LParen, "Expected '('");
       const args: Expression[] = [];
       if (!this.check(TokenKind.RParen)) {
         do { args.push(this.parseExpression()); } while (this.match(TokenKind.Comma));
       }
       this.consume(TokenKind.RParen, "Expected ')'");
-      return { kind: ASTKind.NewExpr, className: cName, args, line: token.line, column: token.column };
+      return { kind: ASTKind.NewExpr, className: cName, genericArgs, args, line: token.line, column: token.column };
     }
     if (this.match(TokenKind.Addressof)) {
       this.consume(TokenKind.LParen, "Expected '('");
@@ -568,6 +629,16 @@ export class Parser {
   private parseType(): TypeAnnotation {
     let name = this.consume(TokenKind.Identifier, 'Expected type name').text;
     let isPointer = false, isArray = false, arraySize: number | undefined;
+    let genericArgs: TypeAnnotation[] | undefined;
+
+    if (this.match(TokenKind.Less)) {
+        genericArgs = [];
+        do {
+            genericArgs.push(this.parseType());
+        } while (this.match(TokenKind.Comma));
+        this.consume(TokenKind.Greater, "Expected '>' after generic arguments");
+    }
+
     if (name === 'ptr' && this.match(TokenKind.Less)) {
       isPointer = true;
       name = this.consume(TokenKind.Identifier, 'Expected inner type name for ptr<T>').text;
@@ -578,7 +649,16 @@ export class Parser {
       if (this.check(TokenKind.Number)) arraySize = parseInt(this.advance().text);
       this.consume(TokenKind.RBracket, "Expected ']' for array type");
     }
-    return { name, isPointer, isArray, arraySize };
+    return { name, isPointer, isArray, arraySize, genericArgs };
+  }
+
+  private parseTypeParameters(): string[] {
+    const params: string[] = [];
+    do {
+        params.push(this.consume(TokenKind.Identifier, 'Expected type parameter name').text);
+    } while (this.match(TokenKind.Comma));
+    this.consume(TokenKind.Greater, "Expected '>' after type parameters");
+    return params;
   }
 
   private match(...kinds: TokenKind[]): boolean {

@@ -177,6 +177,7 @@ export interface UnaryExpr extends ASTNode {
 export interface CallExpr extends ASTNode {
   kind: ASTKind.CallExpr;
   callee: Expression;
+  genericArgs?: TypeAnnotation[];
   args: Expression[];
 }
 
@@ -287,6 +288,7 @@ export interface Parameter {
 export interface FunctionDecl extends ASTNode {
   kind: ASTKind.FunctionDecl;
   name: string;
+  typeParameters?: string[];
   params: Parameter[];
   returnType: TypeAnnotation;
   body: Statement[];
@@ -300,6 +302,7 @@ export interface InterfaceField {
 }
 
 export interface InterfaceMethod extends ASTNode {
+  kind: ASTKind.ClassMethod; // Reuse for simplicity or use a dedicated one
   name: string;
   params: Parameter[];
   returnType: TypeAnnotation;
@@ -308,6 +311,7 @@ export interface InterfaceMethod extends ASTNode {
 export interface InterfaceDecl extends ASTNode {
   kind: ASTKind.InterfaceDecl;
   name: string;
+  typeParameters?: string[];
   fields: InterfaceField[];
   methods: InterfaceMethod[];
 }
@@ -356,8 +360,9 @@ export interface ExportDecl extends ASTNode {
 export interface StructDecl extends ASTNode {
   kind: ASTKind.StructDecl;
   name: string;
+  typeParameters?: string[];
   baseStructName?: string;
-  implements?: string[];
+  implements?: TypeAnnotation[];
   fields: InterfaceField[]; // Reuse InterfaceField for simplicity
 }
 
@@ -397,8 +402,9 @@ export interface ClassMethod extends ClassMember {
 export interface ClassDecl extends ASTNode {
   kind: ASTKind.ClassDecl;
   name: string;
+  typeParameters?: string[];
   baseClassName?: string;
-  implements?: string[];
+  implements?: TypeAnnotation[];
   fields: ClassField[];
   methods: ClassMethod[];
   constructorDecl?: ClassMethod;
@@ -407,6 +413,7 @@ export interface ClassDecl extends ASTNode {
 export interface NewExpr extends ASTNode {
   kind: ASTKind.NewExpr;
   className: string;
+  genericArgs?: TypeAnnotation[];
   args: Expression[];
 }
 
