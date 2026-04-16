@@ -1,41 +1,29 @@
-# Build artifacts
-build/
+# Executables
 *.exe
 *.obj
 *.ll
-*.o
-*.a
-*.lib
-*.dll
-*.so
-*.dylib
+*.meta
+
+# Node.js
+node_modules/
+npm-debug.log
+
+# Deno
+.deno/
 
 # IDE
-.vs/
 .vscode/
-*.suo
-*.user
-*.sln.docstates
+.idea/
 
-# CMake
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-Makefile
+# Compiler Build artifacts
+dist/
+build/
 
-# Temporary files
-*.tmp
-*.log
-*.swp
-*~
-.DS_Store
-
-# Output files
-a.exe
-a.out
-output.txt
-*.txtfile*
-test.txt
-wrapper_test.txt
-write_test.txt
-hello.txt
+# Temporary test files
+test_*.ts
+test_*.tsn
+!test_class.ts
+!test_struct_vs_class.ts
+!test_namespace.ts
+!test_enum.ts
+!test_ts.ts

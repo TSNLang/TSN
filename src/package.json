@@ -1,0 +1,13 @@
+{
+  "name": "tsn-compiler",
+  "version": "0.11.0",
+  "description": "TSN compiler implemented in TypeScript with Node standard APIs",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "compile:node": "node src/main.ts",
+    "compile:bun": "bun src/main.ts",
+    "compile:deno": "deno run --allow-read --allow-write --allow-run src/main.ts"
+  },
+  "dependencies": {}
+}

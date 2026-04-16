@@ -1,6 +1,0 @@
-// Module B - imports from A (circular!)
-import { funcA } from "./circular_a.tsn";
-
-export function funcB(): i32 {
-    return funcA() + 2;
-}

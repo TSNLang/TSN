@@ -1,7 +1,0 @@
-// Test import statement parsing
-import * as console from "std:console";
-import { add, multiply as mul } from "math";
-
-function main(): i32 {
-    return 42;
-}

@@ -1,5 +1,0 @@
-import * as console from 'std:console';
-
-function main() {
-    console.log("hello from tsn mvp");
-}

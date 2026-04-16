@@ -1,8 +1,0 @@
-import * as ffi from "std:ffi";
-
-@ffi.lib("kernel32")
-declare function GetStdHandle(nStdHandle: i32): ptr<void>;
-
-function main() {
-    console.log("ffi decl parsed");
-}

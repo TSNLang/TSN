@@ -1,94 +1,147 @@
-# TSN Compiler v3.0 - Written in TSN
+# TSN Compiler - TypeScript Implementation
 
-Đây là TSN compiler được viết hoàn toàn bằng TSN, không phụ thuộc vào C++.
+Compiler TSN được viết bằng TypeScript và dùng **Node standard APIs** để có thể chạy trên nhiều runtime tương thích như **Node**, **Bun**, và **Deno**.
 
-## Kiến trúc
+## Mục tiêu
 
-```
+- Compiler đơn giản, dễ hiểu, dễ maintain
+- Ưu tiên TypeScript compatibility và clean architecture
+- Generate LLVM IR từ TSN source code
+- Trì hoãn self-hosting cho tới khi compiler đủ mature
+
+## Cấu trúc
+
+```text
 src/
-├── Types.tsn      - Type definitions và constants
-├── Lexer.tsn      - Lexical analyzer (tokenizer)
-├── Parser.tsn     - Syntax analyzer (AST builder)
-├── Codegen.tsn    - LLVM IR code generator
-├── Main.tsn       - Entry point với file I/O
-└── Compiler.tsn   - All-in-one version (dễ compile)
+├── src/
+│   ├── lexer.ts           # Tokenizer
+│   ├── parser.ts          # AST parser
+│   ├── codegen.ts         # LLVM IR generator
+│   ├── module-resolver.ts # Module metadata loader/resolver
+│   ├── types.ts           # Type definitions
+│   └── main.ts            # CLI entry point
+├── concat-modules.ts      # Helper for concatenating TSN modules
+├── deno.json              # Optional Deno convenience tasks
+├── package.json
+├── tsconfig.json
+├── tsn_runtime.c
+└── README.md
 ```
 
-## Trạng thái hiện tại
+## Runtime policy
 
-### ✅ Đã hoàn thành:
-- Kiến trúc modular với 5 modules riêng biệt
-- Type definitions đầy đủ (Token, ASTNode, constants)
-- Lexer cơ bản (tokenization)
-- Parser cơ bản (AST generation)
-- Codegen skeleton (LLVM IR generation)
-- Main entry point với FFI cho file I/O
+Compiler không nên phụ thuộc vào Deno-specific hay Bun-specific APIs.
 
-### 🚧 Đang phát triển:
-- Lexer: Cần thêm keyword matching
-- Parser: Cần implement đầy đủ expressions và statements
-- Codegen: Cần implement đầy đủ code generation
-- String handling: Cần xử lý string literals và operations
+Nguyên tắc hiện tại:
 
-### 📋 Kế hoạch tiếp theo:
-1. Hoàn thiện Lexer với keyword matching
-2. Hoàn thiện Parser với full expression parsing
-3. Hoàn thiện Codegen với complete LLVM IR generation
-4. Test với simple programs
-5. Self-host: TSN compiler compile chính nó!
+- dùng `node:*` standard modules khi cần file system, path, hoặc process APIs
+- giữ CLI chạy được trên mọi runtime hỗ trợ Node compatibility
+- xem `deno.json` như convenience config, không phải canonical runtime definition
 
-## Compile
+## Sử dụng
 
-### Bước 1: Compile bằng TypeScript compiler
+### Node
+
 ```bash
-deno run --allow-read --allow-write compiler-ts/src/main.ts src/Compiler.tsn src/Compiler.ll
+node src/main.ts input.tsn output.ll
 ```
 
-### Bước 2: Compile LLVM IR thành executable
+### Bun
+
 ```bash
-clang src/Compiler.ll -o src/compiler_v1.exe
+bun src/main.ts input.tsn output.ll
 ```
 
-### Bước 3: Run
+### Deno
+
 ```bash
-./src/compiler_v1.exe
+deno run --allow-read --allow-write --allow-run src/main.ts input.tsn output.ll
 ```
 
-## Ưu điểm của kiến trúc mới
+### Dùng npm-style scripts
 
-1. **Không phụ thuộc C++**: Hoàn toàn viết bằng TSN
-2. **Modular**: Dễ maintain và extend
-3. **Self-hosting ready**: Sẵn sàng để tự compile
-4. **Clean code**: Không có legacy code từ C++
-5. **Incremental development**: Có thể phát triển từng module
+```bash
+npm run compile:node -- input.tsn output.ll
+```
 
-## So sánh với bootstrap compiler
+```bash
+npm run compile:bun -- input.tsn output.ll
+```
 
-| Feature | Bootstrap Compiler | TSN Compiler v3.0 |
-|---------|-------------------|-------------------|
-| Language | TSN | TSN |
-| Architecture | Monolithic | Modular |
-| Lines of code | ~1063 | ~500 (growing) |
-| Maintainability | Medium | High |
-| Extensibility | Low | High |
-| Self-hosting | ✅ Yes | 🚧 In progress |
+```bash
+npm run compile:deno -- input.tsn output.ll
+```
 
-## Mục tiêu cuối cùng
+## Features
 
-Tạo một TSN compiler hoàn chỉnh, viết bằng TSN, có thể:
-1. Compile chính nó (self-hosting)
-2. Compile bất kỳ TSN program nào
-3. Generate optimized LLVM IR
-4. Hỗ trợ đầy đủ TSN features
-5. Có error reporting tốt
-6. Có documentation đầy đủ
+### ✅ Đã có
 
-## Đóng góp
+- Lexer: tokenize source code
+- Parser: build AST
+- Codegen: generate LLVM IR
+- Basic types: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `bool`, `void`
+- Pointer types: `ptr<T>`
+- Array types: `T[N]`
+- Struct-like types: `interface`
+- Control flow: `if`, `else`, `while`, `for`, `break`, `continue`
+- Operators: arithmetic, comparison, logical
+- Literals: numbers, strings, booleans, null
+- Addressof: `addressof(variable)`
+- FFI declarations và `declare function`
 
-Compiler này đang được phát triển tích cực. Mỗi module có thể được improve độc lập.
+### 🚧 Đang phát triển
 
----
+- TypeScript compatibility coverage rộng hơn
+- Module system hoàn thiện hơn
+- Diagnostics tốt hơn
+- TSN-specific extensions rõ ràng hơn
 
-**Status**: 🚧 Work in Progress  
-**Version**: 3.0.0-alpha  
-**Last Updated**: 2026-04-13
+## Example
+
+```typescript
+interface ASTNode {
+    kind: i32;
+    value: i32;
+}
+
+function test(): i32 {
+    let nodes: ASTNode[3];
+    let idx: i32 = 0;
+
+    nodes[idx].kind = 42;
+    nodes[idx].value = 100;
+
+    return nodes[0].kind;
+}
+
+function main(): i32 {
+    return test();
+}
+```
+
+Compile và chạy:
+
+```bash
+node src/main.ts input.tsn output.ll
+clang output.ll -o program.exe
+./program.exe
+```
+
+## Development notes
+
+- Canonical compiler source nằm trong `src/`
+- Khi sửa compiler behavior, ưu tiên giữ code portable giữa Node, Bun, và Deno
+- Tránh re-introduce runtime-specific APIs nếu có lựa chọn `node:*` tương đương
+- Nếu thêm docs hay scripts mới, mô tả Deno như optional runtime chứ không phải runtime mặc định
+
+## Roadmap
+
+1. Mở rộng TypeScript compatibility
+2. Ổn định LLVM IR generation
+3. Hoàn thiện module/import workflow
+4. Cải thiện diagnostics
+5. Quay lại self-hosting ở giai đoạn phù hợp hơn
+
+## License
+
+MIT

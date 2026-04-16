@@ -1,7 +1,0 @@
-import * as console from "std:console";
-
-function main() {
-    let s = "hello";
-    let len = string_length(s);
-    console.log("String test");
-}

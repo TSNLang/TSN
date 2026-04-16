@@ -1,9 +1,0 @@
-// Test binary expressions with main
-function main(): i32 {
-    let a = 2 + 3;
-    let b = 10 - 4;
-    let c = 5 * 6;
-    let d = 20 / 4;
-    let e = 2 + 3 * 4;
-    return e;
-}
