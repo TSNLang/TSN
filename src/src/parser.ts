@@ -87,15 +87,35 @@ export class Parser {
     const name = this.consume(TokenKind.Identifier, 'Expected interface name').text;
     this.consume(TokenKind.LBrace, "Expected '{'");
     const fields: InterfaceField[] = [];
+    const methods: InterfaceMethod[] = [];
     while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
-      const fieldName = this.consume(TokenKind.Identifier, 'Expected field name').text;
-      this.consume(TokenKind.Colon, "Expected ':'");
-      const fieldType = this.parseType();
-      this.consume(TokenKind.Semicolon, "Expected ';'");
-      fields.push({ name: fieldName, type: fieldType });
-    }
+      const startToken = this.peek();
+        const memberName = this.consume(TokenKind.Identifier, 'Expected member name').text;
+        
+        if (this.check(TokenKind.LParen)) {
+          // Method signature
+          const mParams = this.parseMethodParams();
+          this.consume(TokenKind.Colon, "Expected ':'");
+          const mRet = this.parseType();
+          this.consume(TokenKind.Semicolon, "Expected ';'");
+          methods.push({
+            kind: ASTKind.ClassMethod as any,
+            name: memberName,
+            params: mParams,
+            returnType: mRet,
+            line: startToken.line,
+            column: startToken.column
+          });
+        } else {
+          // Field
+          this.consume(TokenKind.Colon, "Expected ':'");
+          const fieldType = this.parseType();
+          this.consume(TokenKind.Semicolon, "Expected ';'");
+          fields.push({ name: memberName, type: fieldType });
+        }
+      }
     this.consume(TokenKind.RBrace, "Expected '}'");
-    return { kind: ASTKind.InterfaceDecl, name, fields, line: token.line, column: token.column };
+    return { kind: ASTKind.InterfaceDecl, name, fields, methods, line: token.line, column: token.column };
   }
 
   private parseTypeAlias(): TypeAliasDecl {
@@ -140,6 +160,20 @@ export class Parser {
   private parseClass(): ClassDecl {
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected class name').text;
+    
+    let baseClassName: string | undefined;
+    if (this.match(TokenKind.Extends)) {
+      baseClassName = this.consume(TokenKind.Identifier, 'Expected base class name').text;
+    }
+
+    let implementsInterfaces: string[] | undefined;
+    if (this.match(TokenKind.Implements)) {
+      implementsInterfaces = [];
+      do {
+        implementsInterfaces.push(this.consume(TokenKind.Identifier, 'Expected interface name').text);
+      } while (this.match(TokenKind.Comma));
+    }
+
     this.consume(TokenKind.LBrace, "Expected '{'");
     const fields: ClassField[] = [];
     const methods: ClassMethod[] = [];
@@ -200,12 +234,26 @@ export class Parser {
       }
     }
     this.consume(TokenKind.RBrace, "Expected '}'");
-    return { kind: ASTKind.ClassDecl, name, fields, methods, constructorDecl, line: token.line, column: token.column };
+    return { kind: ASTKind.ClassDecl, name, baseClassName, implements: implementsInterfaces, fields, methods, constructorDecl, line: token.line, column: token.column };
   }
 
   private parseStruct(): StructDecl {
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected struct name').text;
+    
+    let baseStructName: string | undefined;
+    if (this.match(TokenKind.Extends)) {
+      baseStructName = this.consume(TokenKind.Identifier, 'Expected base struct name').text;
+    }
+
+    let implementsInterfaces: string[] | undefined;
+    if (this.match(TokenKind.Implements)) {
+      implementsInterfaces = [];
+      do {
+        implementsInterfaces.push(this.consume(TokenKind.Identifier, 'Expected interface name').text);
+      } while (this.match(TokenKind.Comma));
+    }
+
     this.consume(TokenKind.LBrace, "Expected '{'");
     const fields: InterfaceField[] = [];
     while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
@@ -216,7 +264,7 @@ export class Parser {
       fields.push({ name: fieldName, type: fieldType });
     }
     this.consume(TokenKind.RBrace, "Expected '}'");
-    return { kind: ASTKind.StructDecl, name, fields, line: token.line, column: token.column };
+    return { kind: ASTKind.StructDecl, name, baseStructName, implements: implementsInterfaces, fields, line: token.line, column: token.column };
   }
 
   private parseMethodParams(): Parameter[] {
@@ -491,6 +539,7 @@ export class Parser {
     if (this.match(TokenKind.False)) return { kind: ASTKind.BoolLiteral, value: false, line: token.line, column: token.column };
     if (this.match(TokenKind.Null)) return { kind: ASTKind.NullLiteral, line: token.line, column: token.column };
     if (this.match(TokenKind.This)) return { kind: ASTKind.ThisExpr, line: token.line, column: token.column };
+    if (this.match(TokenKind.Super)) return { kind: ASTKind.SuperExpr, line: token.line, column: token.column };
     if (this.match(TokenKind.New)) {
       const cName = this.consume(TokenKind.Identifier, 'Expected class name after new').text;
       this.consume(TokenKind.LParen, "Expected '('");

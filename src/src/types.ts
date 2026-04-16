@@ -18,6 +18,7 @@ export enum TokenKind {
   Constructor = 'CONSTRUCTOR',
   Public = 'PUBLIC',
   Private = 'PRIVATE',
+  Super = 'SUPER',
   If = 'IF',
   Else = 'ELSE',
   While = 'WHILE',
@@ -36,6 +37,8 @@ export enum TokenKind {
   As = 'AS',
   Type = 'TYPE',
   Struct = 'STRUCT',
+  Extends = 'EXTENDS',
+  Implements = 'IMPLEMENTS',
   
   // Operators
   Plus = '+',
@@ -97,6 +100,7 @@ export enum ASTKind {
   AddressofExpr = 'AddressofExpr',
   NewExpr = 'NewExpr',
   ThisExpr = 'ThisExpr',
+  SuperExpr = 'SuperExpr',
   
   // Statements
   VarDecl = 'VarDecl',
@@ -206,7 +210,8 @@ export type Expression =
   | MemberExpr
   | AddressofExpr
   | NewExpr
-  | ThisExpr;
+  | ThisExpr
+  | SuperExpr;
 
 // Statements
 export interface VarDecl extends ASTNode {
@@ -294,10 +299,17 @@ export interface InterfaceField {
   type: TypeAnnotation;
 }
 
+export interface InterfaceMethod extends ASTNode {
+  name: string;
+  params: Parameter[];
+  returnType: TypeAnnotation;
+}
+
 export interface InterfaceDecl extends ASTNode {
   kind: ASTKind.InterfaceDecl;
   name: string;
   fields: InterfaceField[];
+  methods: InterfaceMethod[];
 }
 
 export interface TypeAliasDecl extends ASTNode {
@@ -344,6 +356,8 @@ export interface ExportDecl extends ASTNode {
 export interface StructDecl extends ASTNode {
   kind: ASTKind.StructDecl;
   name: string;
+  baseStructName?: string;
+  implements?: string[];
   fields: InterfaceField[]; // Reuse InterfaceField for simplicity
 }
 
@@ -383,6 +397,8 @@ export interface ClassMethod extends ClassMember {
 export interface ClassDecl extends ASTNode {
   kind: ASTKind.ClassDecl;
   name: string;
+  baseClassName?: string;
+  implements?: string[];
   fields: ClassField[];
   methods: ClassMethod[];
   constructorDecl?: ClassMethod;
@@ -396,4 +412,8 @@ export interface NewExpr extends ASTNode {
 
 export interface ThisExpr extends ASTNode {
   kind: ASTKind.ThisExpr;
+}
+
+export interface SuperExpr extends ASTNode {
+  kind: ASTKind.SuperExpr;
 }

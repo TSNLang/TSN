@@ -170,10 +170,12 @@ export class Lexer {
       'enum': TokenKind.Enum, 'namespace': TokenKind.Namespace,
       'class': TokenKind.Class, 'this': TokenKind.This, 'new': TokenKind.New,
       'constructor': TokenKind.Constructor, 'public': TokenKind.Public, 'private': TokenKind.Private,
+      'super': TokenKind.Super,
       'declare': TokenKind.Declare, 'null': TokenKind.Null, 'true': TokenKind.True,
       'false': TokenKind.False, 'addressof': TokenKind.Addressof, 'import': TokenKind.Import,
       'export': TokenKind.Export, 'from': TokenKind.From, 'as': TokenKind.As, 'type': TokenKind.Type,
-      'struct': TokenKind.Struct,
+      'struct': TokenKind.Struct, 'extends': TokenKind.Extends,
+      'implements': TokenKind.Implements,
     };
     return keywords[text] || TokenKind.Identifier;
   }

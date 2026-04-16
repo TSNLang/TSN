@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.11.0--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.13.0--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -22,35 +22,35 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.11.0-indev: The Unified Path
+## 🚀 Version 0.13.0-indev: The OOP & Ownership Milestone
 
-In version 0.11.0, we have moved away from the dual-compiler architecture. **TSN and its compiler are now one.** 
-
-The compiler is written in a subset of TypeScript that is also valid TSN code. This allows the compiler to:
-1.  **Bootstrapping**: Run on any Node-standard compatible runtime (Node.js, Deno, Bun) during development.
-2.  **Self-Hosting**: Compile itself into a standalone, highly-optimized native executable.
-3.  **Parallel Development**: Language features and compiler improvements are developed simultaneously within the same codebase.
+In version 0.13.0, TSN has reached major milestones in its type system and modern memory model:
+1.  **Ownership & Value Semantics**: Completely replaced traditional Reference Counting with an **Ownership model** (inspired by Mojo/Val), providing memory safety without runtime overhead.
+2.  **Full OOP Support**: Implemented comprehensive inheritance, polymorphism via **VTables**, and **Interfaces**.
+3.  **Unified Architecture**: A single compiler written in a subset of TSN itself, paving the way for full self-hosting.
 
 ---
 
 ## 💪 Core Language Features
 
-### 🛡️ Memory Management (ARC & ORC)
-TSN implements a modern memory management system inspired by **Nim**, **Swift**, and **C++**:
--   **ARC (Automatic Reference Counting)**: Deterministic allocation/deallocation without GC pauses.
--   **ORC (Owned Reference Counting)**: Advanced cycle detection and ownership tracking to ensure memory safety without the overhead of a tracing garbage collector.
+### 🛡️ Memory Management (Ownership Model)
+TSN employs a state-of-the-art memory management system:
+-   **`struct` (Value Type)**: Stack-allocated, using **Copy Semantics**.
+-   **`class` (Reference Type)**: Heap-allocated, using **Move Semantics** (Destructive move). Memory is automatically `free`'d as soon as the owner goes out of scope (RAII).
+-   **Automated Borrowing**: Automatically handles reference borrowing for function calls, keeping the syntax clean like TypeScript while remaining as safe as Rust.
 
 ### ✨ Type System & OOP
--   **Native Types**: `i8`, `i32`, `i64`, `f32`, `f64`, `ptr<T>`, `bool`.
--   **Classes & Objects**: Full OOP support with constructors, methods, and member access, compiled to efficient native structs.
--   **Namespaces**: Nested namespaces for clean code organization.
--   **Type Aliases & Enums**: Familiar TypeScript-style declarations.
+-   **Native Types**: `i8`, `i16`, `i32`, `i64`, `ptr<T>`, `bool`, `string`.
+-   **Inheritance**: Full support for `extends` in both classes and structs (Field flattening).
+-   **Polymorphism**: Virtual methods and **VTables** for dynamic dispatch.
+-   **Interfaces**: Define contracts with `interface` and implement them with `implements`.
+-   **Super**: Support for `super()` constructor chaining and `super.method()` static dispatch.
 -   **FFI (Foreign Function Interface)**: Seamlessly call C/C++ libraries and system APIs using `@ffi.lib()`.
 
 ### ⚡ Performance
--   Compiles to **LLVM IR**, benefiting from world-class optimizations.
--   No runtime overhead from a heavy VM or JIT.
--   Small binary sizes (typically < 100KB for simple programs).
+-   Compiles directly to **LLVM IR**, benefiting from world-class optimizations.
+-   No VM overhead or Garbage Collector pauses.
+-   Execution speed comparable to C++/Rust.
 
 ---
 
@@ -62,10 +62,10 @@ TSN implements a modern memory management system inspired by **Nim**, **Swift**,
 │   ├── src/
 │   │   ├── lexer.ts    - Lexical Analysis
 │   │   ├── parser.ts   - AST Generation
-│   │   ├── codegen.ts  - LLVM IR Generation
-│   │   └── types.ts    - Type Definitions
+│   │   ├── codegen.ts  - LLVM IR Generation & OOP Logic
+│   │   └── types.ts    - AST & Token Definitions
 │   └── main.ts         - Entry point
-├── docs/               - Language Documentation
+├── docs/               - Language Documentation (Ownership Model, etc.)
 ├── examples/           - Example TSN Programs
 └── resources/          - Brand Assets
 ```
@@ -75,59 +75,49 @@ TSN implements a modern memory management system inspired by **Nim**, **Swift**,
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Deno** or **Node.js** (for bootstrapping the compiler)
-- **Clang/LLVM** 14+ (for final native compilation)
+- **Deno** (Recommended for running the bootstrap compiler)
+- **Clang/LLVM** 14+ (For final native code generation)
 
 ### Compile and Run
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/TSNLang/TSN.git
-    cd TSN
-    ```
-
-2.  **Compile a TSN program (e.g., test_class.ts)**:
+1.  **Compile a TSN program (e.g., test_inheritance.ts)**:
     ```bash
     # Using the bootstrap compiler (Deno)
-    deno run --allow-read --allow-write src/src/main.ts examples/test_class.ts -o test_class.ll
+    deno run --allow-read --allow-write src/src/main.ts test_inheritance.ts
     ```
 
-3.  **Build the native executable**:
+2.  **Build the native executable**:
     ```bash
-    # Link with the TSN runtime
-    clang test_class.ll src/tsn_runtime.c -o test_class.exe
+    # Link with the TSN C runtime
+    clang test_inheritance.ll src/tsn_runtime.c -o test_inheritance.exe
     ```
 
-4.  **Run**:
+3.  **Run**:
     ```bash
-    ./test_class.exe
+    ./test_inheritance.exe
     ```
 
 ---
 
-## �️ Roadmap (0.11.x - 1.0)
+## 🗺️ Roadmap (Current Status)
 
-### 🚧 Current Phase: Self-Hosting & OOP Optimization
-- [x] Basic Class & Method implementation.
-- [x] Name Mangling for Namespaces and Classes.
-- [x] Integrated Diagnostics system.
-- [ ] **Inheritance & VTables**: Full polymorphism support.
-- [ ] **ARC Implementation**: Automatic memory management in Codegen.
+### 🚧 Current Phase: OOP & Memory Safety (v0.13.0)
+- [x] Ownership & Move Semantics.
+- [x] Class/Struct Inheritance.
+- [x] Virtual Methods & VTables.
+- [x] Interface Implementation.
+- [x] Super constructor/method calls.
 
-### 📅 Next: Standard Library & Ecosystem
-- [ ] `std:io`, `std:fs`, `std:process` (Node.js compatible APIs).
-- [ ] **Generics**: `List<T>`, `Map<K, V>`.
-- [ ] **Package Manager**: Simple dependency management.
+### 📅 Next: Standard Library & Advanced Features
+- [ ] **Generics**: Support for parameterized types like `List<T>`.
+- [ ] **Standard Library**: Expanded `std:io`, `std:fs`, `std:net`.
+- [ ] **Self-Hosting**: Completing the process of TSN compiling itself to a native binary.
 
 ---
 
 ## 🤝 Contributing
 
-TSN is an open-source project by **Sao Tin Developer**. We welcome all contributions, whether it's fixing bugs, adding features to the compiler, or improving documentation.
-
-1.  Fork the repo.
-2.  Create your feature branch.
-3.  Submit a Pull Request.
+TSN is an open-source project by **Sao Tin Developers**. We welcome all contributions, from bug fixes and compiler features to documentation improvements.
 
 ---
 
