@@ -1,0 +1,31 @@
+export class Optional<T> {
+    private hasValue: bool;
+    private value: T;
+
+    constructor(v: T, exists: bool) {
+        this.value = v;
+        this.hasValue = exists;
+    }
+
+    isSome(): bool {
+        return this.hasValue;
+    }
+
+    isNone(): bool {
+        return !this.hasValue;
+    }
+
+    unwrap(): T {
+        // TODO: Panic if none
+        return this.value;
+    }
+}
+
+export function Some<T>(v: T): Optional<T> {
+    return new Optional<T>(v, true);
+}
+
+export function None<T>(): Optional<T> {
+    let dummy: T;
+    return new Optional<T>(dummy, false);
+}

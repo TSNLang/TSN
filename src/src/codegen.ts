@@ -61,6 +61,8 @@ export class CodeGenerator {
   private localVarTypes: Map<string, string> = new Map();
   private importedSymbols: Map<string, ExportedSymbol> = new Map();
   private externalDecls: string[] = [];
+  private currentOutput: string[] | null = null;
+  private globalBuffer: string[] = [];
   private exportedSymbols: ExportedSymbol[] = [];
 
   constructor(moduleResolver?: ModuleResolver) {
@@ -74,6 +76,7 @@ export class CodeGenerator {
   generate(program: Program): string {
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
     this.externalDecls = []; this.exportedSymbols = [];
+    this.globalBuffer = []; this.currentOutput = null;
 
     // PRE-SCAN: Collect all signatures
     for (const decl of program.declarations) this.preScanDeclaration(decl);
@@ -106,6 +109,7 @@ export class CodeGenerator {
     this.output.splice(stringLiteralMarkerIdx, 2, ...strLines, '');
 
     if (this.externalDecls.length > 0) this.output.unshift(...this.externalDecls, '');
+    if (this.globalBuffer.length > 0) this.output.unshift(...this.globalBuffer, '');
     return this.output.join('\n');
   }
 
@@ -290,7 +294,14 @@ export class CodeGenerator {
     const exports = this.moduleResolver.resolveModule(decl.source);
     if (!exports) return;
     const imported = this.moduleResolver.getImportedSymbols(decl, exports);
-    for (const [name, sym] of imported) this.importedSymbols.set(name, sym);
+    for (const [name, sym] of imported) {
+        this.importedSymbols.set(name, sym);
+        if (sym.kind === 'class' && sym.ast) {
+            this.genericClasses.set(name, sym.ast);
+        } else if (sym.kind === 'function' && sym.ast && sym.ast.typeParameters && sym.ast.typeParameters.length > 0) {
+            this.genericFunctions.set(name, sym.ast);
+        }
+    }
   }
 
   private processEnum(decl: EnumDecl): void {
@@ -376,6 +387,12 @@ export class CodeGenerator {
 
     if (decl.isDeclare || decl.ffiLib) { this.emit(`declare ${rt} @${mName}(${paramsStr})`); return; }
 
+    const oldRet = this.currentFunctionReturnType;
+    const oldParams = new Set(this.currentFunctionParams);
+    const oldParamTypes = new Map(this.currentFunctionParamTypes);
+    const oldHoisted = new Set(this.hoistedVars);
+    const oldLocalVarTypes = new Map(this.localVarTypes);
+
     this.currentFunctionParams.clear(); this.currentFunctionParamTypes.clear();
     this.currentFunctionReturnType = rt; this.hoistedVars.clear(); this.localVarTypes.clear();
 
@@ -426,6 +443,12 @@ export class CodeGenerator {
       else this.emit(`ret ${rt} 0`);
     }
     this.indent--; this.emit('}'); this.emit('');
+
+    this.currentFunctionReturnType = oldRet;
+    this.currentFunctionParams = oldParams;
+    this.currentFunctionParamTypes = oldParamTypes;
+    this.hoistedVars = oldHoisted;
+    this.localVarTypes = oldLocalVarTypes;
   }
 
   private collectVarDecls(stmts: Statement[]): { name: string; llvmType: string }[] {
@@ -446,6 +469,26 @@ export class CodeGenerator {
            const id = (v.init as Identifier).name;
            const it = this.localVarTypes.get(id) || (this.currentFunctionParams.has(id) ? this.currentFunctionParamTypes.get(id) : 'i32');
            if (it) lt = it;
+        } else if (v.init && v.init.kind === ASTKind.CallExpr) {
+           const ce = v.init as CallExpr;
+           if (ce.callee.kind === ASTKind.Identifier) {
+               const name = (ce.callee as Identifier).name;
+               const info = this.functions.get(this.resolveMangledName(name)) || this.functions.get(name);
+               if (info) lt = info.returnType;
+           } else if (ce.callee.kind === ASTKind.MemberExpr) {
+               const m = ce.callee as MemberExpr;
+               if (m.object.kind === ASTKind.Identifier) {
+                  const fullName = `${(m.object as Identifier).name}.${m.member}`;
+                  const imported = this.importedSymbols.get(fullName);
+                  if (imported) {
+                      if (ce.genericArgs && ce.genericArgs.length > 0 && imported.ast) {
+                          const instName = this.instantiateFunction(fullName, ce.genericArgs);
+                          const info = this.functions.get(instName);
+                          if (info) lt = info.returnType;
+                      } else lt = imported.llvmType || 'i32';
+                  }
+               }
+           }
         }
         
         // Final fallback: if it's a class but inferred as 'ptr', we want to keep it as 'ptr'
@@ -773,8 +816,28 @@ export class CodeGenerator {
 
   private generateUnaryExpr(e: UnaryExpr): string {
     const v = this.generateExpression(e.operand), t = this.newTemp();
-    if (e.operator === '-') this.emit(`${t} = sub i32 0, ${v}`);
-    else this.emit(`${t} = xor i1 ${this.coerceToType(v, this.getValueType(v), 'i1')}, true`);
+    if (e.operator === '-') {
+        this.emit(`${t} = sub i32 0, ${v}`);
+        this.tempTypes.set(t, 'i32');
+    } else {
+        this.emit(`${t} = xor i1 ${this.coerceToType(v, this.getValueType(v), 'i1')}, true`);
+        this.tempTypes.set(t, 'i1');
+    }
+    return t;
+  }
+
+  private generateInternalCall(name: string, args: Expression[]): string {
+    const info = this.functions.get(name);
+    const aStr = args.map((arg, i) => {
+      const v = this.generateExpression(arg), t = info && info.paramTypes[i] ? info.paramTypes[i] : this.getValueType(v);
+      return `${t} ${this.coerceToType(v, this.getValueType(v), t)}`;
+    }).join(', ');
+    const rt = info ? info.returnType : 'i32';
+    const actualName = info ? info.name : name;
+    if (rt === 'void') { this.emit(`call void @${actualName}(${aStr})`); return '0'; }
+    const t = this.newTemp();
+    this.emit(`${t} = call ${rt} @${actualName}(${aStr})`);
+    this.tempTypes.set(t, rt);
     return t;
   }
 
@@ -822,12 +885,18 @@ export class CodeGenerator {
   private generateMemberCallExpr(e: CallExpr): string {
     const m = e.callee as MemberExpr;
     
-    // Handle imported symbols (e.g., console.log)
+    // Handle imported symbols (e.g., console.log, option.Some)
     if (m.object.kind === ASTKind.Identifier) {
         const objName = (m.object as Identifier).name;
         const fullName = `${objName}.${m.member}`;
         const imported = this.importedSymbols.get(fullName);
         if (imported) {
+            if (e.genericArgs && e.genericArgs.length > 0 && imported.ast && imported.ast.typeParameters) {
+                // Monomorphize imported generic function
+                this.genericFunctions.set(fullName, imported.ast);
+                const instName = this.instantiateFunction(fullName, e.genericArgs);
+                return this.generateInternalCall(instName, e.args);
+            }
             const mangledName = `${objName}_${m.member}`;
             return this.generateImportedCall(fullName, mangledName, imported, e.args);
         }
@@ -1072,7 +1141,7 @@ export class CodeGenerator {
   private escapeString(s: string): string { return s.replace(/\\/g, '\\\\').replace(/\n/g, '\\0A').replace(/\t/g, '\\09').replace(/"/g, '\\"'); }
   private newTemp(): string { return `%${this.tempCounter++}`; }
   private newLabel(p: string): string { return `${p}.${this.labelCounter++}`; }
-  private emit(l: string): void { this.output.push('  '.repeat(this.indent) + l); }
+  private emit(l: string): void { (this.currentOutput ?? this.output).push('  '.repeat(this.indent) + l); }
 
   private buildVTable(c: ClassDecl): void {
       if (this.vTables.has(c.name)) return;
@@ -1170,6 +1239,9 @@ export class CodeGenerator {
 
     this.instantiatedNames.add(mangledName);
 
+    const oldOutput = this.currentOutput;
+    this.currentOutput = this.globalBuffer;
+
     // Deep clone and replace type parameters
     const typeMap = new Map<string, TypeAnnotation>();
     baseDecl.typeParameters?.forEach((p, i) => typeMap.set(p, args[i]));
@@ -1205,6 +1277,7 @@ export class CodeGenerator {
     // Generate methods
     this.generateClassMethods(instantiatedDecl);
 
+    this.currentOutput = oldOutput;
     return mangledName;
   }
 
@@ -1229,7 +1302,10 @@ export class CodeGenerator {
     const pts = instantiatedDecl.params.map(p => this.getLLVMType(p.type));
     this.functions.set(mangledName, { name: mName, returnType: rt, paramTypes: pts });
 
+    const oldOutput = this.currentOutput;
+    this.currentOutput = this.globalBuffer;
     this.generateFunction(instantiatedDecl);
+    this.currentOutput = oldOutput;
 
     return mangledName;
   }
@@ -1250,10 +1326,13 @@ export class CodeGenerator {
     instantiatedDecl.name = mangledName;
     instantiatedDecl.typeParameters = [];
 
+    const oldOutput = this.currentOutput;
+    this.currentOutput = this.globalBuffer;
     // Add to decls and generate
     this.interfaceDecls.set(mangledName, instantiatedDecl);
     this.buildInterfaceVTable(instantiatedDecl);
     this.generateInterface(instantiatedDecl);
+    this.currentOutput = oldOutput;
 
     return mangledName;
   }

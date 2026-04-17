@@ -702,7 +702,9 @@ export class Parser {
   private parseImport(): ImportDecl {
     const token = this.previous();
     let namespace: string | undefined;
+    let defaultImport: string | undefined;
     const specifiers: ImportSpecifier[] = [];
+
     if (this.match(TokenKind.Star)) {
       this.consume(TokenKind.As, "Expected 'as' after '*");
       namespace = this.consume(TokenKind.Identifier, 'Expected namespace name').text;
@@ -714,11 +716,24 @@ export class Parser {
         specifiers.push({ imported, local });
       } while (this.match(TokenKind.Comma));
       this.consume(TokenKind.RBrace, "Expected '}'");
+    } else if (this.check(TokenKind.Identifier)) {
+      defaultImport = this.advance().text;
+      if (this.match(TokenKind.Comma)) {
+        this.consume(TokenKind.LBrace, "Expected '{'");
+        do {
+          const imported = this.consume(TokenKind.Identifier, 'Expected import name').text;
+          let local = imported;
+          if (this.match(TokenKind.As)) local = this.consume(TokenKind.Identifier, 'Expected local name').text;
+          specifiers.push({ imported, local });
+        } while (this.match(TokenKind.Comma));
+        this.consume(TokenKind.RBrace, "Expected '}'");
+      }
     }
+
     this.consume(TokenKind.From, "Expected 'from'");
     const source = this.consume(TokenKind.String, 'Expected module path').text;
     this.consume(TokenKind.Semicolon, "Expected ';'");
-    return { kind: ASTKind.ImportDecl, specifiers, namespace, source, line: token.line, column: token.column };
+    return { kind: ASTKind.ImportDecl, specifiers, namespace, defaultImport, source, line: token.line, column: token.column };
   }
 
   private parseExport(): ExportDecl {

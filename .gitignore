@@ -27,3 +27,10 @@ test_*.tsn
 !test_namespace.ts
 !test_enum.ts
 !test_ts.ts
+
+# Logs
+*.log
+
+# Standard Library
+!src/std/
+!test_option.tsn

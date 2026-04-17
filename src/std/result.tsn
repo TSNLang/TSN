@@ -1,0 +1,38 @@
+export class Result<T, E> {
+    private ok: bool;
+    private value: T;
+    private error: E;
+
+    constructor(v: T, e: E, isOk: bool) {
+        this.value = v;
+        this.error = e;
+        this.ok = isOk;
+    }
+
+    isOk(): bool {
+        return this.ok;
+    }
+
+    isErr(): bool {
+        return !this.ok;
+    }
+
+    unwrap(): T {
+        // TODO: Panic if err
+        return this.value;
+    }
+
+    unwrapErr(): E {
+        return this.error;
+    }
+}
+
+export function Ok<T, E>(v: T): Result<T, E> {
+    let dummyE: E;
+    return new Result<T, E>(v, dummyE, true);
+}
+
+export function Err<T, E>(e: E): Result<T, E> {
+    let dummyT: T;
+    return new Result<T, E>(dummyT, e, false);
+}

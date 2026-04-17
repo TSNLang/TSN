@@ -3,15 +3,19 @@
 
 import { readFileSync } from 'node:fs';
 
-import { ImportDecl, ExportDecl, FunctionDecl, VarDecl, InterfaceDecl, ASTKind, TypeAnnotation } from './types.ts';
+import { ImportDecl, ExportDecl, FunctionDecl, VarDecl, InterfaceDecl, ClassDecl, ASTKind, TypeAnnotation } from './types.ts';
+import { Lexer } from './lexer.ts';
+import { Parser } from './parser.ts';
+import { Reporter } from './diagnostics.ts';
 
 // Represents an exported symbol from a module
 export interface ExportedSymbol {
   name: string;            // Symbol name
-  kind: 'function' | 'const' | 'let' | 'interface';
+  kind: 'function' | 'const' | 'let' | 'interface' | 'class';
   llvmType?: string;       // LLVM type for functions: return type
   paramTypes?: string[];   // Parameter types for functions
   varType?: string;        // Variable type
+  ast?: any;               // Full AST node (for classes/generics)
 }
 
 // Represents a compiled module's exports
@@ -30,8 +34,9 @@ const STD_MODULES: Record<string, ExportedSymbol[]> = {
     { name: 'warn',  kind: 'function', llvmType: 'void', paramTypes: ['ptr'] },
   ],
   'std:process': [
-    { name: 'exit', kind: 'function', llvmType: 'void', paramTypes: ['i32'] },
-    { name: 'args', kind: 'function', llvmType: 'ptr', paramTypes: [] },
+    { name: 'exit',  kind: 'function', llvmType: 'void', paramTypes: ['i32'] },
+    { name: 'args',  kind: 'function', llvmType: 'ptr',  paramTypes: [] },
+    { name: 'close', kind: 'function', llvmType: 'void', paramTypes: ['i32'] },
   ],
   'std:fs': [
     { name: 'readFile',  kind: 'function', llvmType: 'ptr', paramTypes: ['ptr'] },
@@ -79,8 +84,18 @@ export class ModuleResolver {
     moduleExports: ModuleExports
   ): Map<string, ExportedSymbol> {
     const result = new Map<string, ExportedSymbol>();
+    const namespace = importDecl.namespace;
 
-    if (importDecl.namespace) {
+    // Handle default import: import Optional from 'std:option'
+    if (importDecl.defaultImport) {
+        const symName = importDecl.defaultImport;
+        const sym = moduleExports.symbols.find(s => s.name === symName);
+        if (sym) {
+            result.set(symName, sym);
+        }
+    }
+
+    if (namespace) {
       for (const sym of moduleExports.symbols) {
         result.set(`${importDecl.namespace}.${sym.name}`, sym);
       }
@@ -121,20 +136,53 @@ export class ModuleResolver {
   }
 
   private resolveStdModule(modulePath: string): ModuleExports | null {
-    const symbols = STD_MODULES[modulePath];
-    if (!symbols) {
-      console.error(`Unknown standard module: ${modulePath}`);
-      return null;
+    if (STD_MODULES[modulePath]) {
+        return {
+          modulePath,
+          llFilePath: '',
+          symbols: STD_MODULES[modulePath],
+        };
     }
 
-    const exports: ModuleExports = {
-      modulePath,
-      llFilePath: '',
-      symbols,
-    };
-
-    this.moduleCache.set(modulePath, exports);
-    return exports;
+    // Attempt to resolve as a TSN standard module in src/std/
+    const stdName = modulePath.substring(4); // remove 'std:'
+    const stdPath = `src/std/${stdName}.tsn`;
+    
+    try {
+        const content = readFileSync(stdPath, 'utf8');
+        const lexer = new Lexer(content);
+        const tokens = lexer.tokenize();
+        const reporter = new Reporter(content, stdPath);
+        const parser = new Parser(tokens, reporter);
+        const program = parser.parse();
+        
+        const symbols: ExportedSymbol[] = [];
+        for (let decl of program.declarations) {
+            if (decl.kind === ASTKind.ExportDecl) {
+                decl = (decl as ExportDecl).declaration;
+            }
+            
+            if (decl.kind === ASTKind.ClassDecl) {
+                const c = decl as ClassDecl;
+                symbols.push({ name: c.name, kind: 'class', ast: c });
+            } else if (decl.kind === ASTKind.FunctionDecl) {
+                const f = decl as FunctionDecl;
+                symbols.push({ name: f.name, kind: 'function', ast: f });
+            }
+        }
+        
+        const exports: ModuleExports = {
+          modulePath: stdPath,
+          llFilePath: '',
+          symbols,
+        };
+        
+        this.moduleCache.set(modulePath, exports);
+        return exports;
+    } catch (e) {
+      console.error(`Failed to resolve standard module: ${modulePath} at ${stdPath}:`, e);
+      return null;
+    }
   }
 
   private resolveFileModule(modulePath: string): ModuleExports | null {

@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.14.0--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.14.1--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -22,13 +22,13 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.14.0-indev: Generic Interfaces & Advanced Type Logic
+## 🚀 Version 0.14.1-indev: Standard Library & Generic Types
 
-In this version, TSN steps into the territory of advanced type systems:
-1.  **Generic Interfaces**: Full support for monomorphization of interfaces (e.g., `interface Wrapper<T>`), allowing for highly reusable polymorphic code.
-2.  **Generic Implements**: Classes and structs can now implement generic interfaces with concrete types.
-3.  **Namespace Call Improvements**: Refined handling of standard library calls through namespaces (e.g., `console.log`).
-4.  **Infrastructure Polish**: Improved internal type resolution and instantiation logic for future self-hosting.
+In this version, TSN expands its generic power and standard library:
+1.  **Generic Classes & Functions**: Full support for monomorphization of classes and functions, enabling powerful generic abstractions.
+2.  **Standard Library Additions**: Initial implementation of `Option<T>` and `Result<T, E>` in the standard library for safer error handling and optional values.
+3.  **Enhanced Module Resolution**: Improved handling of external and standard library imports, ensuring correct monomorphization across module boundaries.
+4.  **Namespace Call Improvements**: Refined handling of standard library calls through namespaces.
 
 ---
 
@@ -102,10 +102,11 @@ TSN employs a state-of-the-art memory management system:
 
 ## 🗺️ Roadmap (Current Status)
 
-### 🚧 Current Phase: Generics & Standard Library (v0.14.0)
+### 🚧 Current Phase: Generics & Standard Library (v0.14.1)
 - [x] Generic Interfaces (Monomorphization).
 - [x] Generic `implements` support for Class/Struct.
-- [ ] Generic Classes & Functions.
+- [x] Generic Classes & Functions.
+- [x] Standard Library: Initial `Option<T>`, `Result<T, E>`.
 - [ ] Standard Library: Formalizing `std:collections`, `std:io`.
 - [ ] Self-Hosting: Completing the process of TSN compiling itself to a native binary.
 

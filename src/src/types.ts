@@ -349,6 +349,7 @@ export interface ImportDecl extends ASTNode {
   kind: ASTKind.ImportDecl;
   specifiers: ImportSpecifier[];  // For: import { foo, bar as baz } from "module"
   namespace?: string;              // For: import * as name from "module"
+  defaultImport?: string;          // For: import Name from "module"
   source: string;                  // Module path
 }
 
