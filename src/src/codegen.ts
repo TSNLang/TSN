@@ -103,8 +103,8 @@ export class CodeGenerator {
     const strLines: string[] = ['; String literals'];
     for (const [globalName, value] of this.stringLiterals) {
       const escaped = this.escapeString(value);
-      const len = value.length + 1;
-      strLines.push(`${globalName} = private unnamed_addr constant [${len} x i8] c"${escaped}\\00", align 1`);
+      const byteLen = new TextEncoder().encode(value).length + 1;
+      strLines.push(`${globalName} = private unnamed_addr constant [${byteLen} x i8] c"${escaped}\\00", align 1`);
     }
     this.output.splice(stringLiteralMarkerIdx, 2, ...strLines, '');
 
@@ -397,7 +397,11 @@ export class CodeGenerator {
     this.currentFunctionReturnType = rt; this.hoistedVars.clear(); this.localVarTypes.clear();
 
     if (isMethod) { this.currentFunctionParams.add('this'); this.currentFunctionParamTypes.set('this', 'ptr'); }
-    for (const p of decl.params) { this.currentFunctionParams.add(p.name); this.currentFunctionParamTypes.set(p.name, this.getLLVMType(p.type)); }
+    for (const p of decl.params) { 
+      this.currentFunctionParams.add(p.name); 
+      const pt = p.type.name === 'string' ? 'string' : this.getLLVMType(p.type);
+      this.currentFunctionParamTypes.set(p.name, pt); 
+    }
 
     this.emit(`define ${rt} @${mName}(${paramsStr}) {`);
     this.emit('entry:'); this.indent++;
@@ -418,7 +422,8 @@ export class CodeGenerator {
       if (!seen.has(name)) {
         seen.add(name);
         const isClass = this.isClassType(llvmType);
-        const allocaType = isClass ? 'ptr' : llvmType;
+        const isString = llvmType === 'string';
+        const allocaType = (isClass || isString) ? 'ptr' : llvmType;
         this.emit(`%${name} = alloca ${allocaType}, align ${this.getAlignment(allocaType)}`);
         this.hoistedVars.add(name); this.localVarTypes.set(name, llvmType);
       }
@@ -462,9 +467,12 @@ export class CodeGenerator {
       case ASTKind.VarDecl: {
         const v = s as VarDecl;
         let lt = 'i32';
-        if (v.type) lt = this.getLLVMType(v.type);
+        if (v.type) {
+            if (v.type.name === 'string') lt = 'string';
+            else lt = this.getLLVMType(v.type);
+        }
         else if (v.init && v.init.kind === ASTKind.NewExpr) lt = `%${(v.init as NewExpr).className}`;
-        else if (v.init && v.init.kind === ASTKind.StringLiteral) lt = 'ptr';
+        else if (v.init && v.init.kind === ASTKind.StringLiteral) lt = 'string';
         else if (v.init && v.init.kind === ASTKind.Identifier) {
            const id = (v.init as Identifier).name;
            const it = this.localVarTypes.get(id) || (this.currentFunctionParams.has(id) ? this.currentFunctionParamTypes.get(id) : 'i32');
@@ -519,11 +527,12 @@ export class CodeGenerator {
   }
 
   private generateVarDecl(s: VarDecl): void {
-    let t = this.localVarTypes.get(s.name) || (s.type ? this.getLLVMType(s.type) : 'i32');
+    let t = this.localVarTypes.get(s.name) || (s.type ? (s.type.name === 'string' ? 'string' : this.getLLVMType(s.type)) : 'i32');
     
-    // If it's a class type, we alloca 'ptr' but keep track of the class name for type safety
+    // If it's a class type or string, we alloca 'ptr'
     const isClass = this.isClassType(t);
-    const allocaType = isClass ? 'ptr' : t;
+    const isString = t === 'string';
+    const allocaType = (isClass || isString) ? 'ptr' : t;
 
     if (!this.hoistedVars.has(s.name)) {
         this.emit(`%${s.name} = alloca ${allocaType}, align ${this.getAlignment(allocaType)}`);
@@ -768,8 +777,10 @@ export class CodeGenerator {
 
   private generateStringLiteral(e: StringLiteral): string {
     const name = `@.str.${this.stringCounter++}`; this.stringLiterals.set(name, e.value);
-    const t = this.newTemp(); this.emit(`${t} = getelementptr inbounds [${e.value.length + 1} x i8], ptr ${name}, i32 0, i32 0`);
-    this.tempTypes.set(t, 'ptr'); return t;
+    const t = this.newTemp();
+    const byteLen = new TextEncoder().encode(e.value).length + 1;
+    this.emit(`${t} = getelementptr inbounds [${byteLen} x i8], ptr ${name}, i32 0, i32 0`);
+    this.tempTypes.set(t, 'string'); return t;
   }
 
   private generateIdentifier(e: Identifier): string {
@@ -793,12 +804,10 @@ export class CodeGenerator {
         return `%${e.name}`;
     }
     
-    if (this.isClassType(lt)) {
-        const t = this.newTemp(); this.emit(`${t} = load ptr, ptr %${e.name}, align 8`);
-        this.tempTypes.set(t, lt); return t;
-    }
-
-    const t = this.newTemp(); this.emit(`${t} = load ${lt}, ptr %${e.name}, align ${this.getAlignment(lt)}`);
+    const isString = lt === 'string';
+    const loadType = (this.isClassType(lt) || isString) ? 'ptr' : lt;
+    const t = this.newTemp(); 
+    this.emit(`${t} = load ${loadType}, ptr %${e.name}, align ${this.getAlignment(loadType)}`);
     this.tempTypes.set(t, lt); return t;
   }
 
@@ -903,7 +912,28 @@ export class CodeGenerator {
     }
 
     const obj = this.generateExpression(m.object);
-    const objLLVMType = this.tempTypes.get(obj) || 'ptr';
+    const objType = this.tempTypes.get(obj) || 'ptr';
+    
+    // Built-in string methods
+    if (objType === 'string') {
+        const stringMethods: Record<string, { func: string, rt: string, pts: string[] }> = {
+            'includes':   { func: 'string_includes',   rt: 'i1',  pts: ['ptr', 'ptr'] },
+            'indexOf':    { func: 'string_indexOf',    rt: 'i32', pts: ['ptr', 'ptr'] },
+            'startsWith': { func: 'string_startsWith', rt: 'i1',  pts: ['ptr', 'ptr'] },
+            'endsWith':   { func: 'string_endsWith',   rt: 'i1',  pts: ['ptr', 'ptr'] },
+        };
+
+        const method = stringMethods[m.member];
+        if (method) {
+            this.ensureExternalDeclaration(method.func, { name: method.func, kind: 'function', llvmType: method.rt, paramTypes: method.pts } as any);
+            const search = this.generateExpression(e.args[0]);
+            const searchType = this.getValueType(search);
+            const t = this.newTemp();
+            this.emit(`${t} = call ${method.rt} @${method.func}(ptr ${obj}, ptr ${this.coerceToType(search, searchType, 'ptr')})`);
+            this.tempTypes.set(t, method.rt);
+            return t;
+        }
+    }
     
     let stName = 'Unknown';
     let isVirtual = false;
@@ -1016,9 +1046,28 @@ export class CodeGenerator {
       if (en && en.has(e.member)) return en.get(e.member)!.toString();
     }
     const obj = this.generateExpression(e.object);
-    const objLLVMType = this.tempTypes.get(obj) || 'ptr';
+    const objType = this.tempTypes.get(obj) || 'ptr';
+
+    // Built-in string properties
+    if (objType === 'string') {
+        if (e.member === 'length') {
+            this.ensureExternalDeclaration('string_length', { name: 'string_length', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+            const t = this.newTemp();
+            this.emit(`${t} = call i32 @string_length(ptr ${obj})`);
+            this.tempTypes.set(t, 'i32');
+            return t;
+        }
+        if (e.member === 'byteLength') {
+            this.ensureExternalDeclaration('string_byteLength', { name: 'string_byteLength', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+            const t = this.newTemp();
+            this.emit(`${t} = call i32 @string_byteLength(ptr ${obj})`);
+            this.tempTypes.set(t, 'i32');
+            return t;
+        }
+    }
+
     const stName = (e.object.kind === ASTKind.ThisExpr) ? this.currentClassName! : 
-                   (objLLVMType.startsWith('%') ? objLLVMType.substring(1) : this.guessStructTypeByVal(obj));
+                   (objType.startsWith('%') ? objType.substring(1) : this.guessStructTypeByVal(obj));
     
     const structInfo = this.structs.get(stName);
     if (!structInfo) {
@@ -1073,7 +1122,7 @@ export class CodeGenerator {
     if (map[n]) return map[n];
     if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return 'ptr';
     if (this.structDecls.has(n)) return `%${n}`;
-    return 'i32';
+    return (n === 'string') ? 'ptr' : 'i32';
   }
 
   private isClassType(llvmType: string): boolean {

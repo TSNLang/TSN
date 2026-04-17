@@ -1,0 +1,37 @@
+import * as console from "std:console";
+
+function main(): void {
+    let s = "Chào thế giới! 🌍";
+    console.log(s);
+
+    console.log("indexOf 'thế':");
+    print_i32(s.indexOf("thế"));
+
+    console.log("indexOf '🌍':");
+    print_i32(s.indexOf("🌍"));
+
+    console.log("indexOf 'khong co':");
+    print_i32(s.indexOf("khong co"));
+
+    if (s.startsWith("Chào")) {
+        console.log("startsWith 'Chào': true");
+    }
+
+    if (s.startsWith("thế")) {
+        console.log("startsWith 'thế': true");
+    } else {
+        console.log("startsWith 'thế': false");
+    }
+
+    if (s.endsWith("🌍")) {
+        console.log("endsWith '🌍': true");
+    }
+
+    if (s.endsWith("giới!")) {
+        console.log("endsWith 'giới!': true");
+    } else {
+        console.log("endsWith 'giới!': false");
+    }
+}
+
+declare function print_i32(n: i32): void;

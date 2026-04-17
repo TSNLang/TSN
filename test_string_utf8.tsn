@@ -1,0 +1,29 @@
+import * as console from "std:console";
+import * as string from "std:string";
+
+function main(): void {
+    let s = "Chào thế giới! 🌍";
+    console.log(s);
+    
+    console.log("Character length:");
+    let len = s.length;
+    print_i32(len);
+    
+    console.log("Byte length:");
+    let bLen = s.byteLength;
+    print_i32(bLen);
+    
+    console.log("Char code at 0 (C):");
+    print_i32(string.charCodeAt(s, 0));
+    
+    console.log("Char code at 1 (h):");
+    print_i32(string.charCodeAt(s, 1));
+    
+    console.log("Char code at 2 (à):");
+    print_i32(string.charCodeAt(s, 2));
+
+    console.log("Char code at 15 (🌍):");
+    print_i32(string.charCodeAt(s, 15));
+}
+
+declare function print_i32(n: i32): void;

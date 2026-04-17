@@ -49,11 +49,16 @@ const STD_MODULES: Record<string, ExportedSymbol[]> = {
     { name: 'copy',  kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'ptr', 'i32'] },
   ],
   'std:string': [
-    { name: 'length',  kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] },
-    { name: 'charAt',  kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'i32'] },
-    { name: 'concat',  kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'ptr'] },
-    { name: 'compare', kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr'] },
-    { name: 'substr',  kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'i32', 'i32'] },
+    { name: 'length',      kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] },
+    { name: 'byteLength',  kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] },
+    { name: 'charCodeAt',  kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'i32'] },
+    { name: 'concat',      kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'ptr'] },
+    { name: 'compare',     kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr'] },
+    { name: 'substr',      kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'i32', 'i32'] },
+    { name: 'includes',    kind: 'function', llvmType: 'i1',  paramTypes: ['ptr', 'ptr'] },
+    { name: 'indexOf',     kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr'] },
+    { name: 'startsWith',  kind: 'function', llvmType: 'i1',  paramTypes: ['ptr', 'ptr'] },
+    { name: 'endsWith',    kind: 'function', llvmType: 'i1',  paramTypes: ['ptr', 'ptr'] },
   ],
 };
 
