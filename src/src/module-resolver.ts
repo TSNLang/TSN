@@ -8,6 +8,28 @@ import { Lexer } from './lexer.ts';
 import { Parser } from './parser.ts';
 import { Reporter } from './diagnostics.ts';
 
+function toLLVMTypeName(type: TypeAnnotation): string {
+  if (type.isPointer) return `ptr<${toLLVMNamedBaseType(type.name)}>`;
+  if (type.name === 'string') return 'ptr';
+  return toLLVMNamedBaseType(type.name);
+}
+
+function toLLVMNamedBaseType(name: string): string {
+  const map: Record<string, string> = {
+    i8: 'i8', i16: 'i16', i32: 'i32', i64: 'i64', i128: 'i128',
+    u8: 'i8', u16: 'i16', u32: 'i32', u64: 'i64', u128: 'i128',
+    u1: 'i1', bool: 'i1', boolean: 'i1',
+    f16: 'half', half: 'half', bfloat: 'bfloat',
+    f32: 'float', float: 'float',
+    f64: 'double', double: 'double',
+    number: 'double',
+    void: 'void', string: 'ptr',
+    null: 'i8', undefined: 'i8',
+  };
+
+  return map[name] || (name === 'string' ? 'ptr' : 'i32');
+}
+
 // Represents an exported symbol from a module
 export interface ExportedSymbol {
   name: string;            // Symbol name
@@ -168,7 +190,13 @@ export class ModuleResolver {
                 symbols.push({ name: c.name, kind: 'class', ast: c });
             } else if (decl.kind === ASTKind.FunctionDecl) {
                 const f = decl as FunctionDecl;
-                symbols.push({ name: f.name, kind: 'function', ast: f });
+                symbols.push({
+                  name: f.name,
+                  kind: 'function',
+                  llvmType: toLLVMTypeName(f.returnType),
+                  paramTypes: f.params.map((p) => toLLVMTypeName(p.type)),
+                  ast: f,
+                });
             }
         }
         

@@ -12,12 +12,22 @@ declare function WriteFile(
     overlapped: ptr<void>
 ): i32;
 
+@target_os("linux")
+@ffi.lib("c")
+declare function write(fd: i32, buffer: ptr<void>, count: i32): i32;
+
 @target_os("windows")
 export function log(message: string): void {
     let handle: ptr<void> = GetStdHandle(-11);
     let written: i32 = 0;
     WriteFile(handle, message, message.byteLength, addressof(written), 0);
     WriteFile(handle, "\n", 1, addressof(written), 0);
+}
+
+@target_os("linux")
+export function log(message: string): void {
+    write(1, message, message.byteLength);
+    write(1, "\n", 1);
 }
 
 @target_os("windows")
@@ -28,10 +38,22 @@ export function warn(message: string): void {
     WriteFile(handle, "\n", 1, addressof(written), 0);
 }
 
+@target_os("linux")
+export function warn(message: string): void {
+    write(1, message, message.byteLength);
+    write(1, "\n", 1);
+}
+
 @target_os("windows")
 export function error(message: string): void {
     let handle: ptr<void> = GetStdHandle(-12);
     let written: i32 = 0;
     WriteFile(handle, message, message.byteLength, addressof(written), 0);
     WriteFile(handle, "\n", 1, addressof(written), 0);
+}
+
+@target_os("linux")
+export function error(message: string): void {
+    write(2, message, message.byteLength);
+    write(2, "\n", 1);
 }

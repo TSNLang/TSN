@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.15.6--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.16.2--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -22,11 +22,11 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.16.1-indev: TSN stdlib `std:console` on Windows
+## 🚀 Version 0.16.2-indev: TSN stdlib `std:console` on Windows and Linux
 
-TSN 0.16.1 begins replacing small parts of the C runtime with real TSN standard library modules.
+TSN 0.16.2 continues replacing small parts of the C runtime with real TSN standard library modules.
 
-The first migrated piece is `std:console` on Windows. `console.log(...)`, `console.warn(...)`, and `console.error(...)` are now implemented in [src/std/console.tsn](src/std/console.tsn) via Win32 FFI instead of the older hardcoded compiler mapping.
+The first migrated piece is `std:console`. `console.log(...)`, `console.warn(...)`, and `console.error(...)` are now implemented in [src/std/console.tsn](src/std/console.tsn) instead of the older hardcoded compiler mapping.
 
 ```ts
 import * as console from "std:console";
@@ -40,55 +40,13 @@ function main(): void {
 
 Current scope:
 
-- Windows only
+- Windows and Linux
 - `std:console` implemented as TSN stdlib source
 - `console.log(...)` writes to stdout
 - `console.warn(...)` writes to stdout
 - `console.error(...)` writes to stderr
-- implemented via Win32 `GetStdHandle` + `WriteFile`
-
-## 🚀 Version 0.16.0-indev: `@target_os()`
-
-TSN 0.16.0 starts a roadmap focused on FFI, decorators, gradually replacing parts of the C runtime, and rewriting the standard library in TSN itself.
-
-First new decorator:
-
-```ts
-@target_os("windows")
-function win_only(): void {
-    // compiled only on Windows
-}
-
-@target_os("windows")
-declare function MessageBoxA(hwnd: ptr<void>, text: string): i32;
-
-@target_os("linux", "macos", "bsd", "android")
-declare function write(fd: i32, buf: ptr<u8>, len: i32): i32;
-
-@target_os("windows", "linux")
-function dual_target(): void {}
-```
-
-Supported values: `windows`, `linux`, `macos`, `bsd`, `android`, `posix`.
-
-`posix` is a common target name for POSIX / IEEE 1003 operating systems such as `linux`, `macos`, `bsd`, and `android`.
-
-`@target_os(...)` supports one or more values. If any value matches the current host OS, the compiler includes the function in the generated LLVM IR, including `declare function`.
-
-## 🚀 Version 0.15.6-indev: Safe Nullability
-
-TSN now supports memory-safe `null` and `undefined` handling using Tagged Unions:
-
-1.  **Strict Null Checks**: Types are non-nullable by default. Use `T | null` or `T | undefined` for optional values.
-2.  **Tagged Implementation**: `null` and `undefined` are implemented as safe unit types within the union struct.
-3.  **Automatic Protection**: The compiler manages memory layout and tag checking, preventing common null-pointer exceptions at the native level.
-
-## 🚀 Version 0.15.5-indev: Safe Union Types
-
-TSN supports memory-safe Union types (Tagged Unions):
-
-1.  **Union Definition**: Combine multiple types using the pipe operator, e.g., `type Result = string | i32`.
-2.  **Tagged Implementation**: Unions are implemented as `{ i32, [MaxLen x i8] }`, ensuring type safety at runtime.
+- Windows uses Win32 `GetStdHandle` + `WriteFile`
+- Linux uses POSIX `write(1, ...)` and `write(2, ...)`
 
 ---
 

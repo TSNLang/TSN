@@ -66,6 +66,17 @@ export class Parser {
       }
     }
 
+    if (this.match(TokenKind.Export)) {
+      const token = this.previous();
+      const declaration = this.parseDecoratedDeclaration(ffiLib, isUnsafe, targetOS);
+      if (!declaration) throw this.error('Expected declaration after export');
+      return { kind: ASTKind.ExportDecl, declaration, line: token.line, column: token.column };
+    }
+
+    return this.parseDecoratedDeclaration(ffiLib, isUnsafe, targetOS);
+  }
+
+  private parseDecoratedDeclaration(ffiLib?: string, isUnsafe: boolean = false, targetOS?: string[]): Declaration | null {
     if (this.match(TokenKind.Const)) return this.parseTopLevelConst();
     if (this.match(TokenKind.Let)) return this.parseTopLevelLet();
     if (this.match(TokenKind.Interface)) return this.parseInterface();
