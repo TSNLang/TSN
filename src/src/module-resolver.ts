@@ -3,7 +3,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { ImportDecl, ExportDecl, FunctionDecl, VarDecl, InterfaceDecl, ClassDecl, ASTKind, TypeAnnotation } from './types.ts';
+import { ImportDecl, ExportDecl, FunctionDecl, VarDecl, InterfaceDecl, ClassDecl, ASTKind, TypeAnnotation, Program } from './types.ts';
 import { Lexer } from './lexer.ts';
 import { Parser } from './parser.ts';
 import { Reporter } from './diagnostics.ts';
@@ -23,16 +23,12 @@ export interface ModuleExports {
   modulePath: string;      // Original source path
   llFilePath: string;      // Compiled .ll file path
   symbols: ExportedSymbol[];
+  program?: Program;
 }
 
 // Standard library module definitions
-// These are hardcoded since they map to C runtime functions
+// These remain hardcoded until they are moved into TSN stdlib modules
 const STD_MODULES: Record<string, ExportedSymbol[]> = {
-  'std:console': [
-    { name: 'log',   kind: 'function', llvmType: 'void', paramTypes: ['ptr'] },
-    { name: 'error', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] },
-    { name: 'warn',  kind: 'function', llvmType: 'void', paramTypes: ['ptr'] },
-  ],
   'std:process': [
     { name: 'exit',  kind: 'function', llvmType: 'void', paramTypes: ['i32'] },
     { name: 'args',  kind: 'function', llvmType: 'ptr',  paramTypes: [] },
@@ -180,6 +176,7 @@ export class ModuleResolver {
           modulePath: stdPath,
           llFilePath: '',
           symbols,
+          program,
         };
         
         this.moduleCache.set(modulePath, exports);

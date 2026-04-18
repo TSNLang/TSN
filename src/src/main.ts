@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 import { Lexer } from './lexer.ts';
@@ -7,6 +8,8 @@ import { Parser } from './parser.ts';
 import { CodeGenerator } from './codegen.ts';
 import { ModuleResolver } from './module-resolver.ts';
 import { Reporter } from './diagnostics.ts';
+
+const RUNTIME_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', 'tsn_runtime.c');
 
 // Compile a single .tsn file, returning the LLVM IR string and exported symbols.
 function compileFile(inputFile: string, outputFile: string, baseDir: string): boolean {
@@ -43,7 +46,8 @@ function compileFile(inputFile: string, outputFile: string, baseDir: string): bo
     console.log('⚙️  Code generation...');
     const resolver = new ModuleResolver(baseDir);
     const codegen = new CodeGenerator(resolver);
-    const llvmIR = codegen.generate(ast);
+    const linkedAst = codegen.includeImportedModulePrograms(ast);
+    const llvmIR = codegen.generate(linkedAst);
     console.log(`   ✓ ${llvmIR.split('\n').length} lines of LLVM IR`);
 
     // Write output .ll
@@ -71,12 +75,13 @@ function printUsage() {
   console.error('Usage:');
   console.error('  Single file:    tsn-compiler <input.tsn> [output.ll]');
   console.error('  Multiple files: tsn-compiler <file1.tsn> <file2.tsn> ... -o <output.ll>');
-  console.error('  With linking:   tsn-compiler <file1.tsn> <file2.tsn> --link -o <output.exe>');
+  console.error('  With linking:   tsn-compiler <file1.tsn> <file2.tsn> ... --link -o <output.exe>');
   console.error('');
   console.error('Examples:');
   console.error('  node src/src/main.ts hello.tsn hello.ll');
   console.error('  bun src/src/main.ts hello.tsn hello.ll');
   console.error('  deno run --allow-read --allow-write --allow-run src/src/main.ts hello.tsn hello.ll');
+  console.error('  deno run --allow-read --allow-write --allow-run src/src/main.ts hello.tsn --link -o hello.exe');
 }
 
 function main() {
@@ -113,21 +118,49 @@ function main() {
 
   if (inputFiles.length === 1) {
     const inputFile = inputFiles[0];
+    const requestedOutput = outputFile;
+
     if (!outputFile) {
       outputFile = inputFile.replace(/\.(tsn|ts)$/, '.ll');
       if (outputFile === inputFile) outputFile += '.ll';
     }
 
+    let llOutputFile = outputFile;
+    if (doLink && outputFile.endsWith('.exe')) {
+      llOutputFile = outputFile.replace(/\.exe$/, '.ll');
+    }
+
     const baseDir = dirname(inputFile);
-    const ok = compileFile(inputFile, outputFile, baseDir);
+    const ok = compileFile(inputFile, llOutputFile, baseDir);
 
     if (ok) {
-      console.log('');
-      console.log('✨ Compilation successful!');
-      console.log('');
-      console.log('Next steps:');
-      console.log(`  1. Compile to executable: clang ${outputFile} -o program.exe`);
-      console.log('  2. Run: ./program.exe');
+      if (doLink) {
+        const exeFile = requestedOutput
+          ? (requestedOutput.endsWith('.exe') ? requestedOutput : requestedOutput.replace(/\.ll$/, '.exe'))
+          : inputFile.replace(/\.(tsn|ts)$/, '.exe');
+        console.log('');
+        console.log(`🔧 Linking: clang ${llOutputFile} ${RUNTIME_FILE} -o ${exeFile}`);
+
+        const result = spawnSync('clang', [llOutputFile, RUNTIME_FILE, '-o', exeFile], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        if (result.status === 0) {
+          console.log(`✅ Linked: ${exeFile}`);
+        } else {
+          console.error('❌ Linking failed:');
+          console.error(result.stderr || result.error?.message || 'Unknown linker error');
+          process.exit(1);
+        }
+      } else {
+        console.log('');
+        console.log('✨ Compilation successful!');
+        console.log('');
+        console.log('Next steps:');
+        console.log(`  1. Compile to executable: clang ${llOutputFile} ${RUNTIME_FILE} -o program.exe`);
+        console.log('  2. Run: ./program.exe');
+      }
     } else {
       process.exit(1);
     }
@@ -173,9 +206,9 @@ function main() {
     }
 
     console.log('');
-    console.log(`🔧 Linking: clang ${llFiles.join(' ')} -o ${outputFile}`);
+    console.log(`🔧 Linking: clang ${llFiles.join(' ')} ${RUNTIME_FILE} -o ${outputFile}`);
 
-    const result = spawnSync('clang', [...llFiles, '-o', outputFile], {
+    const result = spawnSync('clang', [...llFiles, RUNTIME_FILE, '-o', outputFile], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -190,7 +223,7 @@ function main() {
   } else {
     console.log('');
     console.log('To link manually:');
-    console.log(`  clang ${llFiles.join(' ')} -o program.exe`);
+    console.log(`  clang ${llFiles.join(' ')} ${RUNTIME_FILE} -o program.exe`);
   }
 }
 

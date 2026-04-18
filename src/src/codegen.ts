@@ -1,5 +1,5 @@
 import { Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, ExprStmt, BreakStmt, ContinueStmt, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ASTKind, TypeAnnotation, ImportDecl, ExportDecl, EnumDecl, NamespaceDecl, Parameter, ClassDecl, ClassField, ClassMethod, NewExpr, ThisExpr } from './types.ts';
-import { ModuleResolver, ExportedSymbol } from './module-resolver.ts';
+import { ModuleResolver, ExportedSymbol, ModuleExports } from './module-resolver.ts';
 
 interface StructInfo {
   name: string;
@@ -63,6 +63,8 @@ export class CodeGenerator {
   private hoistedVars: Set<string> = new Set();
   private localVarTypes: Map<string, string> = new Map();
   private importedSymbols: Map<string, ExportedSymbol> = new Map();
+  private importedModules: Map<string, ModuleExports> = new Map();
+  private includedModulePaths: Set<string> = new Set();
   private externalDecls: string[] = [];
   private currentOutput: string[] | null = null;
   private globalBuffer: string[] = [];
@@ -124,6 +126,7 @@ export class CodeGenerator {
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
     this.externalDecls = []; this.exportedSymbols = [];
     this.globalBuffer = []; this.currentOutput = null;
+    this.importedSymbols.clear(); this.importedModules.clear(); this.includedModulePaths.clear();
 
     // PRE-SCAN: Collect all signatures
     for (const decl of program.declarations) this.preScanDeclaration(decl);
@@ -152,6 +155,10 @@ export class CodeGenerator {
       const escaped = this.escapeString(value);
       const byteLen = new TextEncoder().encode(value).length + 1;
       strLines.push(`${globalName} = private unnamed_addr constant [${byteLen} x i8] c"${escaped}\\00", align 1`);
+    }
+    if (this.hostOS === 'windows' && !this.stringLiterals.has('@.str.console_newline')) {
+      this.stringLiterals.set('@.str.console_newline', '\r\n');
+      strLines.push(`@.str.console_newline = private unnamed_addr constant [3 x i8] c"\\0D\\0A\\00", align 1`);
     }
     this.output.splice(stringLiteralMarkerIdx, 2, ...strLines, '');
 
@@ -341,6 +348,7 @@ export class CodeGenerator {
   private processImport(decl: ImportDecl): void {
     const exports = this.moduleResolver.resolveModule(decl.source);
     if (!exports) return;
+    this.importedModules.set(decl.source, exports);
     const imported = this.moduleResolver.getImportedSymbols(decl, exports);
     for (const [name, sym] of imported) {
         this.importedSymbols.set(name, sym);
@@ -398,8 +406,9 @@ export class CodeGenerator {
   private ensureExternalDeclaration(mangled: string, sym: ExportedSymbol): void {
     if (this.externalDecls.some(l => l.includes(`@${mangled}(`))) return;
     if (sym.kind === 'function') {
-      const params = (sym.paramTypes || []).join(', ');
-      this.externalDecls.push(`declare ${sym.llvmType} @${mangled}(${params})`);
+      const params = (sym.paramTypes || []).map(p => this.toLLVMType(p)).join(', ');
+      const rt = this.toLLVMType(sym.llvmType || 'void');
+      this.externalDecls.push(`declare ${rt} @${mangled}(${params})`);
     }
   }
 
@@ -432,10 +441,10 @@ export class CodeGenerator {
 
     const mName = this.mangleName(decl.name, decl.params, !!decl.ffiLib || decl.isDeclare);
     const rt = this.getLLVMType(decl.returnType);
-    let paramsStr = decl.params.map(p => `${this.getLLVMType(p.type)} %${p.name}`).join(', ');
+    let paramsStr = decl.params.map(p => `${this.toLLVMType(this.getLLVMType(p.type))} %${p.name}`).join(', ');
     if (isMethod) paramsStr = `ptr %this${paramsStr ? ', ' + paramsStr : ''}`;
 
-    if (decl.isDeclare || decl.ffiLib) { this.emit(`declare ${rt} @${mName}(${paramsStr})`); return; }
+    if (decl.isDeclare || decl.ffiLib) { this.emit(`declare ${this.toLLVMType(rt)} @${mName}(${paramsStr})`); return; }
 
     const oldRet = this.currentFunctionReturnType, oldParams = this.currentFunctionParams, oldParamTypes = this.currentFunctionParamTypes;
     const oldHoisted = this.hoistedVars, oldLocalVarTypes = this.localVarTypes;
@@ -476,9 +485,10 @@ export class CodeGenerator {
         const isManaged = llvmType.startsWith('ptr<');
         const isRaw = llvmType.startsWith('rawPtr<');
         const isString = llvmType === 'string';
+        const isOwningManaged = isManaged && !llvmType.startsWith('ptr<void>');
         const allocaType = (isClass || isManaged || isRaw || isString) ? 'ptr' : llvmType;
         this.emit(`%${name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
-        if (isClass || isManaged) { 
+        if (isClass || isOwningManaged) { 
             this.emit(`store ptr null, ptr %${name}, align 8`);
             this.cleanupStack[this.cleanupStack.length - 1].add(name);
         }
@@ -585,11 +595,12 @@ export class CodeGenerator {
     const isManaged = t.startsWith('ptr<');
     const isRaw = t.startsWith('rawPtr<');
     const isString = t === 'string';
+    const isOwningManaged = isManaged && !t.startsWith('ptr<void>');
     const allocaType = (isClass || isManaged || isRaw || isString) ? 'ptr' : t;
 
     if (!this.hoistedVars.has(s.name)) {
         this.emit(`%${s.name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
-        if (isManaged || isClass) {
+        if (isOwningManaged || isClass) {
             this.emit(`store ptr null, ptr %${s.name}, align 8`);
             this.cleanupStack[this.cleanupStack.length - 1].add(s.name);
         }
@@ -858,7 +869,7 @@ export class CodeGenerator {
     }
     if (this.currentFunctionParams.has(e.name)) {
       const pt = this.currentFunctionParamTypes.get(e.name)!;
-      const t = this.newTemp(); this.emit(`${t} = load ${pt}, ptr %${e.name}.addr, align ${this.getAlignment(pt)}`);
+      const t = this.newTemp(); this.emit(`${t} = load ${this.toLLVMType(pt)}, ptr %${e.name}.addr, align ${this.getAlignment(pt)}`);
       this.tempTypes.set(t, pt); return t;
     }
     const lt = this.localVarTypes.get(e.name) || 'i32';
@@ -935,13 +946,14 @@ export class CodeGenerator {
     const info = this.functions.get(name);
     const aStr = args.map((arg, i) => {
       const v = this.generateExpression(arg), t = info && info.paramTypes[i] ? info.paramTypes[i] : this.getValueType(v);
-      return `${t} ${this.coerceToType(v, this.getValueType(v), t)}`;
+      return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
     }).join(', ');
     const rt = info ? info.returnType : 'i32';
+    const llvmRt = this.toLLVMType(rt);
     const actualName = info ? info.name : name;
-    if (rt === 'void') { this.emit(`call void @${actualName}(${aStr})`); return '0'; }
+    if (llvmRt === 'void') { this.emit(`call void @${actualName}(${aStr})`); return '0'; }
     const t = this.newTemp();
-    this.emit(`${t} = call ${rt} @${actualName}(${aStr})`);
+    this.emit(`${t} = call ${llvmRt} @${actualName}(${aStr})`);
     this.tempTypes.set(t, rt);
     return t;
   }
@@ -980,11 +992,12 @@ export class CodeGenerator {
     
     const args = e.args.map((arg, i) => {
       const v = this.generateExpression(arg), t = info && info.paramTypes[i] ? info.paramTypes[i] : this.getValueType(v);
-      return `${t} ${this.coerceToType(v, this.getValueType(v), t)}`;
+      return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
     }).join(', ');
     const rt = info ? info.returnType : 'i32';
-    if (rt === 'void') { this.emit(`call void @${actualName}(${args})`); return '0'; }
-    const t = this.newTemp(); this.emit(`${t} = call ${rt} @${actualName}(${args})`); this.tempTypes.set(t, rt); return t;
+    const llvmRt = this.toLLVMType(rt);
+    if (llvmRt === 'void') { this.emit(`call void @${actualName}(${args})`); return '0'; }
+    const t = this.newTemp(); this.emit(`${t} = call ${llvmRt} @${actualName}(${args})`); this.tempTypes.set(t, rt); return t;
   }
 
   private generateMemberCallExpr(e: CallExpr): string {
@@ -1070,7 +1083,7 @@ export class CodeGenerator {
         }
         isVirtual = false; // Super calls are static
     } else {
-        stName = objLLVMType.startsWith('%') ? objLLVMType.substring(1) : this.guessStructTypeByVal(obj);
+        stName = objType.startsWith('%') ? objType.substring(1) : this.guessStructTypeByVal(obj);
         isVirtual = this.classDecls.has(stName) || this.interfaceDecls.has(stName);
     }
 
@@ -1101,17 +1114,18 @@ export class CodeGenerator {
                 // 3. Prepare arguments
                 const args = e.args.map((arg, i) => {
                     const v = this.generateExpression(arg), t = info && info.paramTypes[i + 1] ? info.paramTypes[i + 1] : this.getValueType(v);
-                    return `${t} ${this.coerceToType(v, this.getValueType(v), t)}`;
+                    return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
                 }).join(', ');
                 const aStr = [`ptr ${obj}`, ...args.length ? [args] : []].join(', ');
+                const llvmRt = this.toLLVMType(rt);
                 
                 // 4. Call function pointer
-                if (rt === 'void') {
+                if (llvmRt === 'void') {
                     this.emit(`call void ${fnPtr}(${aStr})`);
                     return '0';
                 } else {
                     const t = this.newTemp();
-                    this.emit(`${t} = call ${rt} ${fnPtr}(${aStr})`);
+                    this.emit(`${t} = call ${llvmRt} ${fnPtr}(${aStr})`);
                     this.tempTypes.set(t, rt);
                     return t;
                 }
@@ -1124,24 +1138,63 @@ export class CodeGenerator {
     const info = this.functions.get(mangled) || this.functions.get(dotName);
     const args = e.args.map((arg, i) => {
       const v = this.generateExpression(arg), t = info && info.paramTypes[i + 1] ? info.paramTypes[i + 1] : this.getValueType(v);
-      return `${t} ${this.coerceToType(v, this.getValueType(v), t)}`;
+      return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
     }).join(', ');
     const rt = info ? info.returnType : 'i32';
+    const llvmRt = this.toLLVMType(rt);
     const actualName = (info && (info as any).isExternal) ? (info as any).name : mangled;
     const aStr = [`ptr ${obj}`, ...args.length ? [args] : []].join(', ');
-    if (rt === 'void') { this.emit(`call void @${actualName}(${aStr})`); return '0'; }
-    const t = this.newTemp(); this.emit(`${t} = call ${rt} @${actualName}(${aStr})`); this.tempTypes.set(t, rt); return t;
+    if (llvmRt === 'void') { this.emit(`call void @${actualName}(${aStr})`); return '0'; }
+    const t = this.newTemp(); this.emit(`${t} = call ${llvmRt} @${actualName}(${aStr})`); this.tempTypes.set(t, rt); return t;
+  }
+
+  private emitWindowsConsoleLog(args: Expression[]): boolean {
+    if (this.hostOS !== 'windows' || args.length !== 1 || args[0].kind !== ASTKind.StringLiteral) {
+      return false;
+    }
+
+    const literal = args[0] as StringLiteral;
+    const textPtr = this.generateExpression(literal);
+    const textLen = new TextEncoder().encode(literal.value).length;
+    const newlineName = '@.str.console_newline';
+    this.stringLiterals.set(newlineName, '\r\n');
+
+    this.ensureExternalDeclaration('GetStdHandle', { name: 'GetStdHandle', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] } as any);
+    this.ensureExternalDeclaration('WriteFile', { name: 'WriteFile', kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr', 'i32', 'ptr', 'ptr'] } as any);
+
+    const handle = this.newTemp();
+    this.emit(`${handle} = call ptr @GetStdHandle(i32 -11)`);
+
+    const writtenPtr = this.newTemp();
+    this.emit(`${writtenPtr} = alloca i32, align 4`);
+    this.emit(`store i32 0, ptr ${writtenPtr}, align 4`);
+
+    const newlinePtr = this.newTemp();
+    this.emit(`${newlinePtr} = getelementptr inbounds [3 x i8], ptr ${newlineName}, i32 0, i32 0`);
+
+    const writeTextResult = this.newTemp();
+    this.emit(`${writeTextResult} = call i32 @WriteFile(ptr ${handle}, ptr ${textPtr}, i32 ${textLen}, ptr ${writtenPtr}, ptr null)`);
+
+    const writeNewlineResult = this.newTemp();
+    this.emit(`${writeNewlineResult} = call i32 @WriteFile(ptr ${handle}, ptr ${newlinePtr}, i32 2, ptr ${writtenPtr}, ptr null)`);
+
+    return true;
   }
 
   private generateImportedCall(local: string, mangled: string, sym: ExportedSymbol, args: Expression[]): string {
+    if (sym.ast && sym.kind === 'function') {
+      return this.generateInternalCall(sym.name, args);
+    }
+
     this.ensureExternalDeclaration(mangled, sym);
     const pts = sym.paramTypes || [], aStr = args.map((arg, i) => {
       const v = this.generateExpression(arg), t = pts[i] ?? this.getValueType(v);
-      return `${t} ${this.coerceToType(v, this.getValueType(v), t)}`;
+      return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
     }).join(', ');
     const rt = sym.llvmType || 'void';
-    if (rt === 'void') { this.emit(`call void @${mangled}(${aStr})`); return '0'; }
-    const t = this.newTemp(); this.emit(`${t} = call ${rt} @${mangled}(${aStr})`); this.tempTypes.set(t, rt); return t;
+    const llvmRt = this.toLLVMType(rt);
+    if (llvmRt === 'void') { this.emit(`call void @${mangled}(${aStr})`); return '0'; }
+    const t = this.newTemp(); this.emit(`${t} = call ${llvmRt} @${mangled}(${aStr})`); this.tempTypes.set(t, rt); return t;
   }
 
   private generateIndexExpr(e: IndexExpr): string {
@@ -1279,6 +1332,7 @@ export class CodeGenerator {
     }
     if (t.isArray) return `[${t.arraySize || 0} x ${this.getLLVMTypeByName(t.name)}]`;
     
+    const name = this.resolveTypeName(t);
     if (name === 'string') return 'ptr';
     return this.getLLVMTypeByName(name);
   }
@@ -1412,6 +1466,7 @@ export class CodeGenerator {
 
     private coerceToType(v: string, src: string, dest: string): string {
     const s = this.toLLVMType(src), d = this.toLLVMType(dest);
+    if (d === 'ptr' && (v === '0' || src === 'undefined')) return 'null';
     if (s === d) return v;
 
     if (this.unionDefinitions.has(d)) {
@@ -1686,5 +1741,29 @@ export class CodeGenerator {
           newNode[key] = this.cloneAndReplace(newNode[key], typeMap);
       }
       return newNode;
+  }
+
+  includeImportedModulePrograms(program: Program): Program {
+    const declarations: Declaration[] = [];
+    const included = new Set<string>();
+
+    const visitProgram = (current: Program, keepImports: boolean) => {
+      for (const decl of current.declarations) {
+        if (decl.kind === ASTKind.ImportDecl) {
+          const importDecl = decl as ImportDecl;
+          if (keepImports) declarations.push(decl);
+          const moduleExports = this.moduleResolver.resolveModule(importDecl.source);
+          if (moduleExports?.program && !included.has(moduleExports.modulePath)) {
+            included.add(moduleExports.modulePath);
+            visitProgram(moduleExports.program, false);
+          }
+          continue;
+        }
+        declarations.push(decl);
+      }
+    };
+
+    visitProgram(program, true);
+    return { ...program, declarations };
   }
 }

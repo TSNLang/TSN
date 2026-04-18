@@ -1,0 +1,37 @@
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function GetStdHandle(nStdHandle: i32): ptr<void>;
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function WriteFile(
+    handle: ptr<void>,
+    buffer: ptr<void>,
+    bytesToWrite: i32,
+    bytesWritten: ptr<i32>,
+    overlapped: ptr<void>
+): i32;
+
+@target_os("windows")
+export function log(message: string): void {
+    let handle: ptr<void> = GetStdHandle(-11);
+    let written: i32 = 0;
+    WriteFile(handle, message, message.byteLength, addressof(written), 0);
+    WriteFile(handle, "\n", 1, addressof(written), 0);
+}
+
+@target_os("windows")
+export function warn(message: string): void {
+    let handle: ptr<void> = GetStdHandle(-11);
+    let written: i32 = 0;
+    WriteFile(handle, message, message.byteLength, addressof(written), 0);
+    WriteFile(handle, "\n", 1, addressof(written), 0);
+}
+
+@target_os("windows")
+export function error(message: string): void {
+    let handle: ptr<void> = GetStdHandle(-12);
+    let written: i32 = 0;
+    WriteFile(handle, message, message.byteLength, addressof(written), 0);
+    WriteFile(handle, "\n", 1, addressof(written), 0);
+}
