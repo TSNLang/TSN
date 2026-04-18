@@ -32,7 +32,9 @@ test_*.tsn
 *.log
 
 # Standard Library
+!src/std/
 !test_option.tsn
 !test_string_utf8.tsn
 !test_string_includes.tsn
 !test_string_search.tsn
+!test_ptr.tsn

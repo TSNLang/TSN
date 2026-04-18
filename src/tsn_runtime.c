@@ -149,13 +149,17 @@ void tsn_decRef(void* p) {
     }
 }
 
-void* memory_alloc(int size) {
+void* class_alloc(int size) {
     void* p = malloc(size);
     if (p) {
         int* refCount = (int*)p;
-        *refCount = 1; // Khởi tạo RC = 1
+        *refCount = 1; 
     }
     return p;
+}
+
+void* tsn_malloc(int size) {
+    return malloc(size);
 }
 
 void memory_free(void* ptr) {

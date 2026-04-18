@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.15.0--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.15.1--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -22,14 +22,17 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.15.0-indev: Data Types & UTF-8 Strings
+## 🚀 Version 0.15.1-indev: Smart Pointers (ptr<T>)
 
-In this version, TSN focuses on refining the fundamental data types, starting with a robust String implementation:
-1.  **UTF-8 Strings**: Strings are now natively UTF-8 encoded, ensuring modern text compatibility.
-2.  **TypeScript-like String API**: Initial implementation of string properties and methods (e.g., `.length`) to match TypeScript's elegance.
-3.  **Built-in String Type**: Moving from raw pointers to a structured `string` type for better safety and member access.
+TSN introduces a safer and more ergonomic way to handle heap memory:
+1.  **Managed Pointers `ptr<T>`**: Behave like C++ `unique_ptr` with automatic scope-based memory management (RAII).
+2.  **Auto-Allocation**: Declare `let p: ptr<i32> = 10` and the compiler automatically handles heap allocation and initialization.
+3.  **The `.get()` Accessor**: Pure syntactic sugar to retrieve the value from a managed pointer.
+4.  **Automatic Cleanup**: No more manual `free()`. The compiler ensures memory is released as soon as the owner goes out of scope.
 
 ---
+
+## 🚀 Version 0.15.0-indev: Data Types & UTF-8 Strings
 
 ## 🚀 Version 0.14.1-indev: Standard Library & Generic Types
 
@@ -111,10 +114,11 @@ TSN employs a state-of-the-art memory management system:
 ## 🗺️ Roadmap (Current Status)
 
 ### 🚧 Current Phase: Data Types & Performance (v0.15.x)
-- [ ] UTF-8 String implementation (Built-in struct/class).
-- [ ] String API: `.length`, `.charAt()`, `.concat()`.
+- [x] UTF-8 String implementation (Built-in struct/class).
+- [x] String API: `.length`, `.includes()`, `.indexOf()`, etc.
+- [ ] Managed Pointers `ptr<T>` with RAII (Manual/Auto boxing).
+- [ ] The `.get()` accessor for pointers.
 - [ ] Array improvements & Generic Collections.
-- [ ] Floating point support (`f32`, `f64`).
 
 ### ✅ Completed: Generics & Standard Library (v0.14.x)
 - [x] Generic Interfaces & Implements.

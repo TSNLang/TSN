@@ -35,6 +35,7 @@ export class CodeGenerator {
   private tempCounter: number = 0;
   private labelCounter: number = 0;
   private stringCounter: number = 0;
+  private cleanupStack: Set<string>[] = [new Set()];
   private structs: Map<string, StructInfo & { base?: string }> = new Map();
   private classDecls: Map<string, ClassDecl> = new Map();
   private structDecls: Map<string, StructDecl> = new Map();
@@ -67,6 +68,17 @@ export class CodeGenerator {
 
   constructor(moduleResolver?: ModuleResolver) {
     this.moduleResolver = moduleResolver ?? new ModuleResolver('.');
+  }
+
+  private emitCleanup(): void {
+    const currentScope = this.cleanupStack[this.cleanupStack.length - 1];
+    if (currentScope.size === 0) return;
+    this.ensureExternalDeclaration('memory_free', { name: 'free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+    for (const varName of currentScope) {
+      const ptr = this.newTemp();
+      this.emit(`${ptr} = load ptr, ptr %${varName}, align 8`);
+      this.emit(`call void @memory_free(ptr ${ptr})`);
+    }
   }
 
   getExportedSymbols(): ExportedSymbol[] {
@@ -395,6 +407,7 @@ export class CodeGenerator {
 
     this.currentFunctionParams.clear(); this.currentFunctionParamTypes.clear();
     this.currentFunctionReturnType = rt; this.hoistedVars.clear(); this.localVarTypes.clear();
+    this.cleanupStack.push(new Set());
 
     if (isMethod) { this.currentFunctionParams.add('this'); this.currentFunctionParamTypes.set('this', 'ptr'); }
     for (const p of decl.params) { 
@@ -422,9 +435,14 @@ export class CodeGenerator {
       if (!seen.has(name)) {
         seen.add(name);
         const isClass = this.isClassType(llvmType);
+        const isManaged = llvmType.startsWith('ptr<');
         const isString = llvmType === 'string';
-        const allocaType = (isClass || isString) ? 'ptr' : llvmType;
-        this.emit(`%${name} = alloca ${allocaType}, align ${this.getAlignment(allocaType)}`);
+        const allocaType = (isClass || isManaged || isString) ? 'ptr' : llvmType;
+        this.emit(`%${name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
+        if (isClass || isManaged) {
+            this.emit(`store ptr null, ptr %${name}, align 8`);
+            this.cleanupStack[this.cleanupStack.length - 1].add(name);
+        }
         this.hoistedVars.add(name); this.localVarTypes.set(name, llvmType);
       }
     }
@@ -432,23 +450,13 @@ export class CodeGenerator {
     for (const s of decl.body) this.generateStatement(s);
 
     if (decl.body.length === 0 || decl.body[decl.body.length - 1].kind !== ASTKind.ReturnStmt) {
-      // Ownership: Cleanup local Heap objects before return
-      const currentLocals = Array.from(this.localVarTypes.entries());
-      if (currentLocals.some(([_, lt]) => this.isClassType(lt))) {
-        this.ensureExternalDeclaration('memory_free', { name: 'free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });
-        for (const [name, lt] of currentLocals) {
-            if (this.isClassType(lt)) {
-                const v = this.newTemp();
-                this.emit(`${v} = load ptr, ptr %${name}, align 8`);
-                this.emit(`call void @memory_free(ptr ${v})`);
-            }
-        }
-      }
+      this.emitCleanup();
       if (rt === 'void') this.emit('ret void');
       else this.emit(`ret ${rt} 0`);
     }
     this.indent--; this.emit('}'); this.emit('');
 
+    this.cleanupStack.pop();
     this.currentFunctionReturnType = oldRet;
     this.currentFunctionParams = oldParams;
     this.currentFunctionParamTypes = oldParamTypes;
@@ -468,8 +476,7 @@ export class CodeGenerator {
         const v = s as VarDecl;
         let lt = 'i32';
         if (v.type) {
-            if (v.type.name === 'string') lt = 'string';
-            else lt = this.getLLVMType(v.type);
+            lt = this.getLLVMType(v.type);
         }
         else if (v.init && v.init.kind === ASTKind.NewExpr) lt = `%${(v.init as NewExpr).className}`;
         else if (v.init && v.init.kind === ASTKind.StringLiteral) lt = 'string';
@@ -499,11 +506,8 @@ export class CodeGenerator {
            }
         }
         
-        // Final fallback: if it's a class but inferred as 'ptr', we want to keep it as 'ptr'
-        // If it's a struct, it must be the struct type %Name
-        
         out.push({ name: v.name, llvmType: lt });
-        this.localVarTypes.set(v.name, lt); // Store early for inference
+        this.localVarTypes.set(v.name, lt);
         break;
       }
       case ASTKind.IfStmt: { const i = s as IfStmt; for (const c of i.thenBranch) this.collectVarDeclsFromStmt(c, out); if (i.elseBranch) for (const c of i.elseBranch) this.collectVarDeclsFromStmt(c, out); break; }
@@ -526,20 +530,29 @@ export class CodeGenerator {
     }
   }
 
+  private toLLVMType(t: string): string {
+    if (this.isPointerType(t)) return 'ptr';
+    return t;
+  }
+
   private generateVarDecl(s: VarDecl): void {
-    let t = this.localVarTypes.get(s.name) || (s.type ? (s.type.name === 'string' ? 'string' : this.getLLVMType(s.type)) : 'i32');
+    let t = this.localVarTypes.get(s.name) || (s.type ? this.getLLVMType(s.type) : 'i32');
     
-    // If it's a class type or string, we alloca 'ptr'
     const isClass = this.isClassType(t);
+    const isManaged = t.startsWith('ptr<');
     const isString = t === 'string';
-    const allocaType = (isClass || isString) ? 'ptr' : t;
+    const allocaType = (isClass || isManaged || isString) ? 'ptr' : t;
 
     if (!this.hoistedVars.has(s.name)) {
-        this.emit(`%${s.name} = alloca ${allocaType}, align ${this.getAlignment(allocaType)}`);
+        this.emit(`%${s.name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
+        if (isManaged || isClass) {
+            this.emit(`store ptr null, ptr %${s.name}, align 8`);
+            this.cleanupStack[this.cleanupStack.length - 1].add(s.name);
+        }
+        this.hoistedVars.add(s.name);
         this.localVarTypes.set(s.name, t);
     }
     
-    // Initializer for structs (zero init)
     if (!s.init && this.isStructType(t)) {
         const stName = t.startsWith('%') ? t.substring(1) : t;
         const structInfo = this.structs.get(stName)!;
@@ -553,7 +566,9 @@ export class CodeGenerator {
       const val = this.generateExpression(s.init);
       const vt = this.getValueType(val);
       
-      if (this.isStructType(t)) {
+      if (isManaged && this.toLLVMType(vt) === this.toLLVMType(this.getPointerInnerType(t))) {
+          this.generateAutoAllocation(`%${s.name}`, val, this.getPointerInnerType(t));
+      } else if (this.isStructType(t)) {
           const stName = t.startsWith('%') ? t.substring(1) : t;
           const structInfo = this.structs.get(stName)!;
           const size = structInfo.fields.length * 8;
@@ -592,32 +607,31 @@ export class CodeGenerator {
       const id = (s.target as Identifier).name, global = this.globals.get(id);
       const lt = this.localVarTypes.get(id) || 'i32';
       
-      // Ownership/Value Semantics:
+      if (lt.startsWith('ptr<') && this.toLLVMType(vt) === this.toLLVMType(this.getPointerInnerType(lt))) {
+          this.generateManagedAssignment(id, val, this.getPointerInnerType(lt));
+          return;
+      }
+
       if (this.isStructType(lt)) {
-          // Assignment of Struct = COPY via memcpy
           const structInfo = this.structs.get(lt.substring(1))!;
-          const size = structInfo.fields.length * 4; 
+          const size = this.getTypeSize(lt); 
           this.emit(`call void @llvm.memcpy.p0.p0.i64(ptr %${id}, ptr ${val}, i64 ${size}, i1 false)`);
           this.ensureExternalDeclaration('llvm.memcpy.p0.p0.i64', { name: 'memcpy', kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'ptr', 'i64', 'i1'] } as any);
       } else if (this.isClassType(lt)) {
-          // Assignment of Class = MOVE
-          // 1. If destination already has an object, we must free it (Ownership rule)
           const oldVal = this.newTemp();
           this.emit(`${oldVal} = load ptr, ptr %${id}, align 8`);
           this.ensureExternalDeclaration('memory_free', { name: 'free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });
           this.emit(`call void @memory_free(ptr ${oldVal})`);
-          // 2. Perform the move (copy the pointer)
-          this.emit(`store ${lt} ${val}, ptr %${id}, align 8`);
-          // 3. Mark source as null (destructive move)
+          this.emit(`store ${this.toLLVMType(lt)} ${val}, ptr %${id}, align 8`);
           if (s.value.kind === ASTKind.Identifier) {
               const srcId = (s.value as Identifier).name;
               this.emit(`store ptr null, ptr %${srcId}, align 8`);
           }
       } else {
-          // Primitive types
-          if (global) this.emit(`store ${vt} ${val}, ptr @${global.name}, align 4`);
-          else if (this.currentFunctionParams.has(id)) this.emit(`store ${vt} ${val}, ptr %${id}.addr, align 4`);
-          else this.emit(`store ${vt} ${val}, ptr %${id}, align ${this.getAlignment(lt)}`);
+          const lType = this.toLLVMType(lt);
+          if (global) this.emit(`store ${lType} ${this.coerceToType(val, vt, lType)}, ptr @${global.name}, align 4`);
+          else if (this.currentFunctionParams.has(id)) this.emit(`store ${lType} ${this.coerceToType(val, vt, lType)}, ptr %${id}.addr, align 4`);
+          else this.emit(`store ${lType} ${this.coerceToType(val, vt, lType)}, ptr %${id}, align ${this.getAlignment(lt)}`);
       }
       return;
     }
@@ -629,18 +643,7 @@ export class CodeGenerator {
       finalVal = this.generateExpression(s.value);
     }
 
-    // Ownership: Cleanup local Heap objects
-    const currentLocals = Array.from(this.localVarTypes.entries());
-    if (currentLocals.some(([_, lt]) => this.isClassType(lt))) {
-        this.ensureExternalDeclaration('memory_free', { name: 'free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });
-        for (const [name, lt] of currentLocals) {
-            if (this.isClassType(lt)) {
-                const v = this.newTemp();
-                this.emit(`${v} = load ptr, ptr %${name}, align 8`);
-                this.emit(`call void @memory_free(ptr ${v})`);
-            }
-        }
-    }
+    this.emitCleanup();
 
     if (finalVal) {
       this.emit(`ret ${this.currentFunctionReturnType} ${this.coerceToType(finalVal, this.getValueType(finalVal), this.currentFunctionReturnType)}`);
@@ -751,8 +754,8 @@ export class CodeGenerator {
     // 1. Alloc memory
     const size = this.getTypeSize(`%${className}`);
     const ptr = this.newTemp();
-    this.ensureExternalDeclaration('memory_alloc', { name: 'memory_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] });
-    this.emit(`${ptr} = call ptr @memory_alloc(i32 ${size})`);
+    this.ensureExternalDeclaration('class_alloc', { name: 'class_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] });
+    this.emit(`${ptr} = call ptr @class_alloc(i32 ${size})`);
     this.tempTypes.set(ptr, `%${className}`);
     
     // 1.5 Initialize VTable pointer
@@ -805,9 +808,10 @@ export class CodeGenerator {
     }
     
     const isString = lt === 'string';
-    const loadType = (this.isClassType(lt) || isString) ? 'ptr' : lt;
+    const isManaged = lt.startsWith('ptr<');
+    const loadType = (this.isClassType(lt) || isString || isManaged) ? 'ptr' : lt;
     const t = this.newTemp(); 
-    this.emit(`${t} = load ${loadType}, ptr %${e.name}, align ${this.getAlignment(loadType)}`);
+    this.emit(`${t} = load ${this.toLLVMType(loadType)}, ptr %${e.name}, align ${this.getAlignment(loadType)}`);
     this.tempTypes.set(t, lt); return t;
   }
 
@@ -1066,6 +1070,16 @@ export class CodeGenerator {
         }
     }
 
+    // Built-in pointer properties
+    if (this.isPointerType(objType) && e.member === 'get') {
+        const innerType = this.getPointerInnerType(objType);
+        const llvmInnerType = this.toLLVMType(innerType);
+        const t = this.newTemp();
+        this.emit(`${t} = load ${llvmInnerType}, ptr ${obj}, align ${this.getAlignment(innerType)}`);
+        this.tempTypes.set(t, innerType);
+        return t;
+    }
+
     const stName = (e.object.kind === ASTKind.ThisExpr) ? this.currentClassName! : 
                    (objType.startsWith('%') ? objType.substring(1) : this.guessStructTypeByVal(obj));
     
@@ -1109,10 +1123,11 @@ export class CodeGenerator {
   }
 
   private getLLVMType(t: TypeAnnotation): string {
-    if (t.isPointer) return 'ptr';
+    if (t.isPointer) return `ptr<${this.getLLVMTypeByName(t.name)}>`;
     if (t.isArray) return `[${t.arraySize || 0} x ${this.getLLVMTypeByName(t.name)}]`;
     
     let name = this.resolveTypeName(t);
+    if (name === 'string') return 'string';
     return this.getLLVMTypeByName(name);
   }
 
@@ -1135,10 +1150,49 @@ export class CodeGenerator {
     return this.structDecls.has(name);
   }
 
-  private getAlignment(t: string): number { return t.startsWith('i64') || t === 'ptr' || t === 'double' ? 8 : 4; }
+  private isPointerType(t: string): boolean {
+    return t === 'ptr' || (t.startsWith('ptr<') && t.endsWith('>')) || t === 'string';
+  }
+
+  private getPointerInnerType(t: string): string {
+    if (t.startsWith('ptr<') && t.endsWith('>')) {
+        return t.substring(4, t.length - 1);
+    }
+    return 'i8';
+  }
+
+  private toLLVMType(t: string): string {
+    if (this.isPointerType(t)) return 'ptr';
+    return t;
+  }
+
+  private generateAutoAllocation(targetPtr: string, val: string, innerType: string): string {
+    const size = this.getTypeSize(innerType);
+    const heapPtr = this.newTemp();
+    this.ensureExternalDeclaration('tsn_malloc', { name: 'tsn_malloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] });
+    this.emit(`${heapPtr} = call ptr @tsn_malloc(i32 ${size})`);
+    
+    // Store value into heap memory
+    this.emit(`store ${this.toLLVMType(innerType)} ${val}, ptr ${heapPtr}, align ${this.getAlignment(innerType)}`);
+    
+    // Store heap pointer into local variable
+    this.emit(`store ptr ${heapPtr}, ptr ${targetPtr}, align 8`);
+    
+    return heapPtr;
+  }
+
+  private generateManagedAssignment(id: string, newVal: string, innerType: string): void {
+      const oldPtr = this.newTemp();
+      this.emit(`${oldPtr} = load ptr, ptr %${id}, align 8`);
+      this.ensureExternalDeclaration('memory_free', { name: 'memory_free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });
+      this.emit(`call void @memory_free(ptr ${oldPtr})`);
+      this.generateAutoAllocation(`%${id}`, newVal, innerType);
+  }
+
+  private getAlignment(t: string): number { return t.startsWith('i64') || this.isPointerType(t) || t === 'double' ? 8 : 4; }
   
   private getTypeSize(t: string): number {
-    if (t === 'i64' || t === 'ptr' || t === 'double') return 8;
+    if (t === 'i64' || this.isPointerType(t) || t === 'double') return 8;
     if (t === 'i32' || t === 'f32') return 4;
     if (t === 'i16') return 2;
     if (t === 'i8' || t === 'i1') return 1;

@@ -639,11 +639,12 @@ export class Parser {
         this.consume(TokenKind.Greater, "Expected '>' after generic arguments");
     }
 
-    if (name === 'ptr' && this.match(TokenKind.Less)) {
+    if (name === 'ptr' && genericArgs && genericArgs.length === 1) {
       isPointer = true;
-      name = this.consume(TokenKind.Identifier, 'Expected inner type name for ptr<T>').text;
-      this.consume(TokenKind.Greater, "Expected '>' for ptr<T>");
+      name = genericArgs[0].name;
+      genericArgs = undefined;
     }
+    
     if (this.match(TokenKind.LBracket)) {
       isArray = true;
       if (this.check(TokenKind.Number)) arraySize = parseInt(this.advance().text);
