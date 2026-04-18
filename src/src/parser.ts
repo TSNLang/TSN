@@ -31,6 +31,7 @@ export class Parser {
 
     let ffiLib: string | undefined;
     let isUnsafe = false;
+    let targetOS: string[] | undefined;
     while (this.match(TokenKind.At)) {
       const decoratorName = this.consume(TokenKind.Identifier, "Expected decorator name").text;
       if (decoratorName === 'ffi') {
@@ -44,6 +45,22 @@ export class Parser {
         }
       } else if (decoratorName === 'unsafe') {
         isUnsafe = true;
+      } else if (decoratorName === 'target_os') {
+        this.consume(TokenKind.LParen, "Expected '(' after 'target_os'");
+        const supported = new Set(['windows', 'linux', 'macos', 'bsd', 'android', 'posix']);
+        const values: string[] = [];
+        do {
+          if (!this.check(TokenKind.String)) {
+            this.error("Expected string literal for target_os");
+            break;
+          }
+          const value = this.advance().text;
+          if (!supported.has(value)) this.error(`Unsupported target OS: ${value}`);
+          else if (!values.includes(value)) values.push(value);
+        } while (this.match(TokenKind.Comma));
+        if (values.length === 0) this.error("Expected at least one target_os value");
+        else targetOS = values;
+        this.consume(TokenKind.RParen, "Expected ')'");
       } else {
         this.error(`Unknown decorator: @${decoratorName}`);
       }
@@ -59,7 +76,7 @@ export class Parser {
     if (this.match(TokenKind.Struct)) return this.parseStruct();
 
     const isDeclare = this.match(TokenKind.Declare);
-    if (this.check(TokenKind.Function)) return this.parseFunction(isDeclare, ffiLib, isUnsafe);
+    if (this.check(TokenKind.Function)) return this.parseFunction(isDeclare, ffiLib, isUnsafe, targetOS);
 
     this.error('Expected declaration (function, class, let, const, interface, etc.)');
     return null;
@@ -311,7 +328,7 @@ export class Parser {
     return params;
   }
 
-  private parseFunction(isDeclare: boolean, ffiLib?: string, isUnsafe: boolean = false): FunctionDecl {
+  private parseFunction(isDeclare: boolean, ffiLib?: string, isUnsafe: boolean = false, targetOS?: string): FunctionDecl {
     this.consume(TokenKind.Function, "Expected 'function'");
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected function name').text;
@@ -331,7 +348,7 @@ export class Parser {
       body = this.parseBlock();
       this.consume(TokenKind.RBrace, "Expected '}'");
     }
-    return { kind: ASTKind.FunctionDecl, name, typeParameters, params, returnType, body, isDeclare, ffiLib, isUnsafe, line: token.line, column: token.column };
+    return { kind: ASTKind.FunctionDecl, name, typeParameters, params, returnType, body, isDeclare, ffiLib, isUnsafe, targetOS, line: token.line, column: token.column };
   }
 
   private parseBlock(): Statement[] {

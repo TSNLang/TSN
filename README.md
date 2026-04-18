@@ -22,6 +22,34 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
+## 🚀 Version 0.16.0-indev: `@target_os()`
+
+TSN 0.16.0 starts a roadmap focused on FFI, decorators, gradually replacing parts of the C runtime, and rewriting the standard library in TSN itself.
+
+First new decorator:
+
+```ts
+@target_os("windows")
+function win_only(): void {
+    // compiled only on Windows
+}
+
+@target_os("windows")
+declare function MessageBoxA(hwnd: ptr<void>, text: string): i32;
+
+@target_os("linux", "macos", "bsd", "android")
+declare function write(fd: i32, buf: ptr<u8>, len: i32): i32;
+
+@target_os("windows", "linux")
+function dual_target(): void {}
+```
+
+Supported values: `windows`, `linux`, `macos`, `bsd`, `android`, `posix`.
+
+`posix` is a common target name for POSIX / IEEE 1003 operating systems such as `linux`, `macos`, `bsd`, and `android`.
+
+`@target_os(...)` supports one or more values. If any value matches the current host OS, the compiler includes the function in the generated LLVM IR, including `declare function`.
+
 ## 🚀 Version 0.15.6-indev: Safe Nullability
 
 TSN now supports memory-safe `null` and `undefined` handling using Tagged Unions:

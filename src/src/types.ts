@@ -320,6 +320,7 @@ export interface FunctionDecl extends ASTNode {
   isDeclare: boolean;
   ffiLib?: string; // For @ffi.lib("kernel32")
   isUnsafe?: boolean;
+  targetOS?: string[];
 }
 
 export interface InterfaceField {
@@ -457,5 +458,7 @@ export interface ThisExpr extends ASTNode {
 export interface SuperExpr extends ASTNode {
   kind: ASTKind.SuperExpr;
 }
+
+
 
 

@@ -88,6 +88,10 @@ npm run compile:deno -- input.tsn output.ll
 - Literals: numbers, strings, booleans, null
 - Addressof: `addressof(variable)`
 - FFI declarations và `declare function`
+- Decorator `@target_os(...)` cho function-level conditional compilation
+- Hỗ trợ một hoặc nhiều giá trị: `@target_os("windows")`, `@target_os("windows", "linux")`
+- Giá trị hợp lệ: `windows`, `linux`, `macos`, `bsd`, `android`, `posix`
+- `posix` hoạt động như target nhóm cho `linux`, `macos`, `bsd`, `android`
 
 ### 🚧 Đang phát triển
 

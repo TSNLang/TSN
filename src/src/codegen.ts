@@ -35,6 +35,7 @@ export class CodeGenerator {
   private tempCounter: number = 0;
   private labelCounter: number = 0;
   private stringCounter: number = 0;
+  private readonly hostOS: string;
   private cleanupStack: Set<string>[] = [new Set()];
   private structs: Map<string, StructInfo & { base?: string }> = new Map();
   private classDecls: Map<string, ClassDecl> = new Map();
@@ -71,6 +72,37 @@ export class CodeGenerator {
 
   constructor(moduleResolver?: ModuleResolver) {
     this.moduleResolver = moduleResolver ?? new ModuleResolver('.');
+    this.hostOS = this.detectHostOS();
+  }
+
+  private detectHostOS(): string {
+    switch (process.platform) {
+      case 'win32': return 'windows';
+      case 'linux': return 'linux';
+      case 'darwin': return 'macos';
+      case 'android': return 'android';
+      case 'freebsd':
+      case 'openbsd':
+      case 'netbsd':
+      case 'dragonfly':
+        return 'bsd';
+      default:
+        return process.platform;
+    }
+  }
+
+  private isPosixHost(): boolean {
+    return this.hostOS === 'linux' || this.hostOS === 'macos' || this.hostOS === 'bsd' || this.hostOS === 'android';
+  }
+
+  private isSingleTargetOSMatch(targetOS: string): boolean {
+    if (targetOS === 'posix') return this.isPosixHost();
+    return targetOS === this.hostOS;
+  }
+
+  private isTargetOSMatch(targetOS?: string[]): boolean {
+    if (!targetOS || targetOS.length === 0) return true;
+    return targetOS.some(os => this.isSingleTargetOSMatch(os));
   }
 
   private emitCleanup(): void {
@@ -178,6 +210,7 @@ export class CodeGenerator {
       this.structDecls.set(s.name, s);
     } else if (decl.kind === ASTKind.FunctionDecl) {
       const fn = decl as FunctionDecl;
+      if (!this.isTargetOSMatch(fn.targetOS)) return;
       if (fn.typeParameters && fn.typeParameters.length > 0) {
         this.genericFunctions.set(fn.name, fn);
         return;
@@ -395,6 +428,8 @@ export class CodeGenerator {
   }
 
   private generateFunction(decl: FunctionDecl, isMethod: boolean = false): void {
+    if (!this.isTargetOSMatch(decl.targetOS)) return;
+
     const mName = this.mangleName(decl.name, decl.params, !!decl.ffiLib || decl.isDeclare);
     const rt = this.getLLVMType(decl.returnType);
     let paramsStr = decl.params.map(p => `${this.getLLVMType(p.type)} %${p.name}`).join(', ');
