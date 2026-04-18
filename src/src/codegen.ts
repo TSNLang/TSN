@@ -1189,7 +1189,16 @@ export class CodeGenerator {
 
   private getLLVMTypeByName(n: string): string {
     if (this.typeAliases.has(n)) return this.getLLVMType(this.typeAliases.get(n)!);
-    const map: Record<string, string> = { 'i8': 'i8', 'i16': 'i16', 'i32': 'i32', 'i64': 'i64', 'u8': 'i8', 'u16': 'i16', 'u32': 'i32', 'u64': 'i64', 'bool': 'i1', 'void': 'void', 'number': 'i32', 'string': 'ptr', 'boolean': 'i1' };
+    const map: Record<string, string> = { 
+      'i8': 'i8', 'i16': 'i16', 'i32': 'i32', 'i64': 'i64', 'i128': 'i128',
+      'u8': 'i8', 'u16': 'i16', 'u32': 'i32', 'u64': 'i64', 'u128': 'i128',
+      'u1': 'i1', 'bool': 'i1', 'boolean': 'i1',
+      'f16': 'half', 'half': 'half', 'bfloat': 'bfloat',
+      'f32': 'float', 'float': 'float',
+      'f64': 'double', 'double': 'double',
+      'number': 'double',
+      'void': 'void', 'string': 'ptr'
+    };
     if (map[n]) return map[n];
     if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return 'ptr';
     if (this.structDecls.has(n)) return `%${n}`;
@@ -1248,12 +1257,17 @@ export class CodeGenerator {
       this.generateAutoAllocation(`%${id}`, newVal, innerType);
   }
 
-  private getAlignment(t: string): number { return t.startsWith('i64') || this.isPointerType(t) || t === 'double' ? 8 : 4; }
+  private getAlignment(t: string): number { 
+      if (t === 'i128') return 16;
+      if (t === 'i64' || this.isPointerType(t) || t === 'double') return 8;
+      return 4; 
+  }
   
   private getTypeSize(t: string): number {
+    if (t === 'i128') return 16;
     if (t === 'i64' || this.isPointerType(t) || t === 'double') return 8;
-    if (t === 'i32' || t === 'f32') return 4;
-    if (t === 'i16') return 2;
+    if (t === 'i32' || t === 'f32' || t === 'float') return 4;
+    if (t === 'i16' || t === 'f16' || t === 'half' || t === 'bfloat') return 2;
     if (t === 'i8' || t === 'i1') return 1;
     if (t.startsWith('%')) {
         const name = t.substring(1);
@@ -1265,13 +1279,15 @@ export class CodeGenerator {
 
   private getValueType(v: string): string { 
     if (v.startsWith('@')) {
-       // Check globals
        const gName = v.substring(1);
        const g = this.globals.get(gName);
        if (g) return g.type;
        return 'ptr';
     }
-    return v.startsWith('%') ? this.tempTypes.get(v) || 'i32' : 'i32'; 
+    if (v.startsWith('%')) return this.tempTypes.get(v) || 'i32';
+    if (v === 'null') return 'ptr';
+    if (/^-?\d+\.\d+$/.test(v) || /^-?\d+e[+-]?\d+$/.test(v)) return 'double';
+    return 'i32'; 
   }
   private getFieldIndex(s: string, f: string): number { 
     const info = this.structs.get(s); 
@@ -1292,9 +1308,32 @@ export class CodeGenerator {
   }
 
   private coerceToType(v: string, src: string, dest: string): string {
-    if (src === dest) return v;
-    if (src === 'i32' && dest === 'i8') { if (/^-?\d+$/.test(v)) return v; const t = this.newTemp(); this.emit(`${t} = trunc i32 ${v} to i8`); this.tempTypes.set(t, 'i8'); return t; }
-    if (src === 'i8' && dest === 'i32') { const t = this.newTemp(); this.emit(`${t} = sext i8 ${v} to i32`); this.tempTypes.set(t, 'i32'); return t; }
+    const s = this.toLLVMType(src), d = this.toLLVMType(dest);
+    if (s === d) return v;
+    
+    // Integer to Integer
+    if (s.startsWith('i') && d.startsWith('i')) {
+        const sSize = parseInt(s.substring(1)), dSize = parseInt(d.substring(1));
+        if (sSize > dSize) { const t = this.newTemp(); this.emit(`${t} = trunc ${s} ${v} to ${d}`); this.tempTypes.set(t, d); return t; }
+        if (sSize < dSize) { const t = this.newTemp(); this.emit(`${t} = sext ${s} ${v} to ${d}`); this.tempTypes.set(t, d); return t; }
+    }
+    
+    // Float to Float
+    if ((s === 'float' || s === 'double' || s === 'half') && (d === 'float' || d === 'double' || d === 'half')) {
+        if (s === 'half' || (s === 'float' && d === 'double')) { const t = this.newTemp(); this.emit(`${t} = fpext ${s} ${v} to ${d}`); this.tempTypes.set(t, d); return t; }
+        const t = this.newTemp(); this.emit(`${t} = fptrunc ${s} ${v} to ${d}`); this.tempTypes.set(t, d); return t;
+    }
+
+    // Integer to Float
+    if (s.startsWith('i') && (d === 'float' || d === 'double')) {
+        const t = this.newTemp(); this.emit(`${t} = sitofp ${s} ${v} to ${d}`); this.tempTypes.set(t, d); return t;
+    }
+    
+    // Float to Integer
+    if ((s === 'float' || s === 'double') && d.startsWith('i')) {
+        const t = this.newTemp(); this.emit(`${t} = fptosi ${s} ${v} to ${d}`); this.tempTypes.set(t, d); return t;
+    }
+
     if (src === 'i32' && dest === 'i1') { const t = this.newTemp(); this.emit(`${t} = icmp ne i32 ${v}, 0`); this.tempTypes.set(t, 'i1'); return t; }
     if (src === 'i1' && dest === 'i32') { const t = this.newTemp(); this.emit(`${t} = zext i1 ${v} to i32`); this.tempTypes.set(t, 'i32'); return t; }
     return v;

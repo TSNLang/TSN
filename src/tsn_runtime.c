@@ -218,3 +218,11 @@ int string_char_at(const char* str, int index) {
 void print_i32(int n) {
     printf("%d\n", n);
 }
+
+void print_f32(float n) {
+    printf("%f\n", n);
+}
+
+void print_f64(double n) {
+    printf("%lf\n", n);
+}

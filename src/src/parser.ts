@@ -597,7 +597,7 @@ export class Parser {
 
   private parsePrimary(): Expression {
     const token = this.peek();
-    if (this.match(TokenKind.Number)) return { kind: ASTKind.NumberLiteral, value: parseInt(this.previous().text), line: token.line, column: token.column };
+    if (this.match(TokenKind.Number)) return { kind: ASTKind.NumberLiteral, value: parseFloat(this.previous().text), line: token.line, column: token.column };
     if (this.match(TokenKind.String)) return { kind: ASTKind.StringLiteral, value: this.previous().text, line: token.line, column: token.column };
     if (this.match(TokenKind.True)) return { kind: ASTKind.BoolLiteral, value: true, line: token.line, column: token.column };
     if (this.match(TokenKind.False)) return { kind: ASTKind.BoolLiteral, value: false, line: token.line, column: token.column };

@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.15.2--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.15.3--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -22,14 +22,14 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.15.2-indev: Unsafe Context & Raw Pointers
+## 🚀 Version 0.15.3-indev: Comprehensive Number Types
 
-TSN provides low-level control when needed, but with clear boundaries:
+TSN aligns its type system with LLVM's raw power while maintaining TS compatibility:
 
-1.  **Raw Pointers `rawPtr<T>`**: C-style pointers with no safety checks or automatic management.
-2.  **Unsafe Decorator `@unsafe`**: A mandatory marker for functions or blocks that use raw pointers, making high-risk code explicitly visible.
-3.  **The `.address()` Property**: A cleaner syntax to obtain the memory address of a variable, replacing the traditional address-of operator in specific contexts.
-4.  **No RAII for Raw Pointers**: Use `rawPtr<T>` when you need maximum performance or manual memory layout control.
+1.  **Full Integer Range**: Support from 8-bit to 128-bit integers (`i8`, `i16`, `i32`, `i64`, `i128`) and their unsigned counterparts (`u8` to `u128`).
+2.  **Boolean Unification**: `bool`, `boolean`, and `u1` are unified into a single 1-bit type.
+3.  **Floating Point Excellence**: Native support for `f16` (half), `bfloat`, `f32` (float), and `f64` (double).
+4.  **The `number` Alias**: In line with TypeScript, the `number` type is now a default alias for `f64`, providing high-precision floating point math by default.
 
 ---
 

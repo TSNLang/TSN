@@ -1,0 +1,39 @@
+import * as console from "std:console";
+
+function test_integers(): void {
+    let a: i8 = 10;
+    let b: i16 = 200;
+    
+    console.log("Testing Integers (i8, i16):");
+    print_i32(a);
+    print_i32(b);
+}
+
+function test_floats(): void {
+    let x: number = 3.14159; // number is double
+    let y: f32 = 2.5;
+    
+    console.log("Testing Floats (number/f64, f32):");
+    print_f64(x);
+    print_f32(y);
+}
+
+function test_bool_alias(): void {
+    let b1: bool = true;
+    let b2: boolean = false;
+    let b3: u1 = true;
+    
+    console.log("Testing Boolean Aliases (bool, boolean, u1):");
+    if (b1) { console.log("bool works"); }
+    if (b3) { console.log("u1 works"); }
+}
+
+function main(): void {
+    test_integers();
+    test_floats();
+    test_bool_alias();
+}
+
+declare function print_i32(n: i32): void;
+declare function print_f32(n: f32): void;
+declare function print_f64(n: f64): void;

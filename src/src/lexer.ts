@@ -97,6 +97,33 @@ export class Lexer {
       text += this.current();
       this.advance();
     }
+
+    if (this.pos < this.source.length && this.current() === '.' && this.isDigit(this.peek())) {
+      text += '.';
+      this.advance();
+      while (this.pos < this.source.length && this.isDigit(this.current())) {
+        text += this.current();
+        this.advance();
+      }
+    }
+
+    // Optional scientific notation: 1.2e+10
+    if (this.pos < this.source.length && (this.current() === 'e' || this.current() === 'E')) {
+      const next = this.peek();
+      if (this.isDigit(next) || next === '+' || next === '-') {
+          text += this.current(); // 'e'
+          this.advance();
+          if (this.current() === '+' || this.current() === '-') {
+              text += this.current();
+              this.advance();
+          }
+          while (this.pos < this.source.length && this.isDigit(this.current())) {
+            text += this.current();
+            this.advance();
+          }
+      }
+    }
+
     return { kind: TokenKind.Number, text, line, column, length: this.pos - start };
   }
 
