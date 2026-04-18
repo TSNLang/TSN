@@ -22,6 +22,31 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
+## 🚀 Version 0.16.1-indev: TSN stdlib `std:console` on Windows
+
+TSN 0.16.1 begins replacing small parts of the C runtime with real TSN standard library modules.
+
+The first migrated piece is `std:console` on Windows. `console.log(...)`, `console.warn(...)`, and `console.error(...)` are now implemented in [src/std/console.tsn](src/std/console.tsn) via Win32 FFI instead of the older hardcoded compiler mapping.
+
+```ts
+import * as console from "std:console";
+
+function main(): void {
+    console.log("stdout message");
+    console.warn("stdout warning");
+    console.error("stderr message");
+}
+```
+
+Current scope:
+
+- Windows only
+- `std:console` implemented as TSN stdlib source
+- `console.log(...)` writes to stdout
+- `console.warn(...)` writes to stdout
+- `console.error(...)` writes to stderr
+- implemented via Win32 `GetStdHandle` + `WriteFile`
+
 ## 🚀 Version 0.16.0-indev: `@target_os()`
 
 TSN 0.16.0 starts a roadmap focused on FFI, decorators, gradually replacing parts of the C runtime, and rewriting the standard library in TSN itself.

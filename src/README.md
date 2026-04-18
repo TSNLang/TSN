@@ -92,6 +92,9 @@ npm run compile:deno -- input.tsn output.ll
 - Hỗ trợ một hoặc nhiều giá trị: `@target_os("windows")`, `@target_os("windows", "linux")`
 - Giá trị hợp lệ: `windows`, `linux`, `macos`, `bsd`, `android`, `posix`
 - `posix` hoạt động như target nhóm cho `linux`, `macos`, `bsd`, `android`
+- `std:console` trên Windows đã được chuyển sang TSN stdlib thật tại [src/std/console.tsn](std/console.tsn)
+- `console.log(...)` và `console.warn(...)` ghi ra stdout qua Win32 console APIs
+- `console.error(...)` ghi ra stderr qua Win32 console APIs
 
 ### 🚧 Đang phát triển
 
