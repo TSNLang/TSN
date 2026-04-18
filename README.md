@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.16.2--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.16.3--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -21,6 +21,26 @@
 **TSN** is a systems programming language that maintains the elegant syntax of TypeScript while compiling directly to native code via **LLVM IR**.
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
+
+## 🚀 Version 0.16.3-indev: simpler `std:process.exit()`
+
+TSN 0.16.3 continues moving runtime-facing APIs into real TSN standard library modules with a simpler Node-compatible shape.
+
+`std:process` now exposes a minimal `exit(code)` API from TSN stdlib source, so code can use the familiar Node-style form:
+
+```ts
+import * as process from "std:process";
+
+function main(): void {
+    process.exit(0);
+}
+```
+
+Current scope:
+
+- `std:process.exit(code)` available from TSN stdlib source
+- compatible with Node-style `process.exit(...)` usage
+- implemented via runtime `exit()` bridge
 
 ## 🚀 Version 0.16.2-indev: TSN stdlib `std:console` on Windows and Linux
 

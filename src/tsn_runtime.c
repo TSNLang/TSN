@@ -6,26 +6,14 @@
 #include <string.h>
 
 // ============================================================================
-// std:console
-// ============================================================================
-
-void console_log(const char* msg) {
-    printf("%s\n", msg);
-}
-
-void console_error(const char* msg) {
-    fprintf(stderr, "Error: %s\n", msg);
-}
-
-void console_warn(const char* msg) {
-    fprintf(stderr, "Warning: %s\n", msg);
-}
-
-// ============================================================================
 // std:process
 // ============================================================================
 
 void process_exit(int code) {
+    exit(code);
+}
+
+void tsn_exit(int code) {
     exit(code);
 }
 

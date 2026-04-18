@@ -51,11 +51,6 @@ export interface ModuleExports {
 // Standard library module definitions
 // These remain hardcoded until they are moved into TSN stdlib modules
 const STD_MODULES: Record<string, ExportedSymbol[]> = {
-  'std:process': [
-    { name: 'exit',  kind: 'function', llvmType: 'void', paramTypes: ['i32'] },
-    { name: 'args',  kind: 'function', llvmType: 'ptr',  paramTypes: [] },
-    { name: 'close', kind: 'function', llvmType: 'void', paramTypes: ['i32'] },
-  ],
   'std:fs': [
     { name: 'readFile',  kind: 'function', llvmType: 'ptr', paramTypes: ['ptr'] },
     { name: 'writeFile', kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr', 'i32'] },

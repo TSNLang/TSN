@@ -1,0 +1,6 @@
+@ffi.lib("c")
+declare function tsn_exit(code: i32): void;
+
+export function exit(code: i32): void {
+    tsn_exit(code);
+}
