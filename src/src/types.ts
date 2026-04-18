@@ -294,6 +294,7 @@ export interface FunctionDecl extends ASTNode {
   body: Statement[];
   isDeclare: boolean;
   ffiLib?: string; // For @ffi.lib("kernel32")
+  isUnsafe?: boolean;
 }
 
 export interface InterfaceField {
@@ -379,6 +380,7 @@ export interface Program extends ASTNode {
 export interface TypeAnnotation {
   name: string;
   isPointer: boolean;
+  isRawPointer?: boolean;
   isArray: boolean;
   arraySize?: number;
   genericArgs?: TypeAnnotation[];
@@ -398,6 +400,7 @@ export interface ClassMethod extends ClassMember {
   params: Parameter[];
   returnType: TypeAnnotation;
   body: Statement[];
+  isUnsafe?: boolean;
 }
 
 export interface ClassDecl extends ASTNode {

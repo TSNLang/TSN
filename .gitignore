@@ -38,3 +38,4 @@ test_*.tsn
 !test_string_includes.tsn
 !test_string_search.tsn
 !test_ptr.tsn
+!test_rawptr.tsn

@@ -65,6 +65,7 @@ export class CodeGenerator {
   private currentOutput: string[] | null = null;
   private globalBuffer: string[] = [];
   private exportedSymbols: ExportedSymbol[] = [];
+  private isUnsafeContext: boolean = false;
 
   constructor(moduleResolver?: ModuleResolver) {
     this.moduleResolver = moduleResolver ?? new ModuleResolver('.');
@@ -399,11 +400,11 @@ export class CodeGenerator {
 
     if (decl.isDeclare || decl.ffiLib) { this.emit(`declare ${rt} @${mName}(${paramsStr})`); return; }
 
-    const oldRet = this.currentFunctionReturnType;
-    const oldParams = new Set(this.currentFunctionParams);
-    const oldParamTypes = new Map(this.currentFunctionParamTypes);
-    const oldHoisted = new Set(this.hoistedVars);
-    const oldLocalVarTypes = new Map(this.localVarTypes);
+    const oldRet = this.currentFunctionReturnType, oldParams = this.currentFunctionParams, oldParamTypes = this.currentFunctionParamTypes;
+    const oldHoisted = this.hoistedVars, oldLocalVarTypes = this.localVarTypes;
+    const oldUnsafe = this.isUnsafeContext;
+
+    this.isUnsafeContext = !!decl.isUnsafe;
 
     this.currentFunctionParams.clear(); this.currentFunctionParamTypes.clear();
     this.currentFunctionReturnType = rt; this.hoistedVars.clear(); this.localVarTypes.clear();
@@ -436,12 +437,16 @@ export class CodeGenerator {
         seen.add(name);
         const isClass = this.isClassType(llvmType);
         const isManaged = llvmType.startsWith('ptr<');
+        const isRaw = llvmType.startsWith('rawPtr<');
         const isString = llvmType === 'string';
-        const allocaType = (isClass || isManaged || isString) ? 'ptr' : llvmType;
+        const allocaType = (isClass || isManaged || isRaw || isString) ? 'ptr' : llvmType;
         this.emit(`%${name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
-        if (isClass || isManaged) {
+        if (isClass || isManaged) { 
             this.emit(`store ptr null, ptr %${name}, align 8`);
             this.cleanupStack[this.cleanupStack.length - 1].add(name);
+        }
+        if (isRaw && !this.isUnsafeContext) {
+           throw new Error(`Usage of rawPtr<T> requires @unsafe decorator on function`);
         }
         this.hoistedVars.add(name); this.localVarTypes.set(name, llvmType);
       }
@@ -457,6 +462,7 @@ export class CodeGenerator {
     this.indent--; this.emit('}'); this.emit('');
 
     this.cleanupStack.pop();
+    this.isUnsafeContext = oldUnsafe;
     this.currentFunctionReturnType = oldRet;
     this.currentFunctionParams = oldParams;
     this.currentFunctionParamTypes = oldParamTypes;
@@ -540,8 +546,9 @@ export class CodeGenerator {
     
     const isClass = this.isClassType(t);
     const isManaged = t.startsWith('ptr<');
+    const isRaw = t.startsWith('rawPtr<');
     const isString = t === 'string';
-    const allocaType = (isClass || isManaged || isString) ? 'ptr' : t;
+    const allocaType = (isClass || isManaged || isRaw || isString) ? 'ptr' : t;
 
     if (!this.hoistedVars.has(s.name)) {
         this.emit(`%${s.name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
@@ -809,7 +816,8 @@ export class CodeGenerator {
     
     const isString = lt === 'string';
     const isManaged = lt.startsWith('ptr<');
-    const loadType = (this.isClassType(lt) || isString || isManaged) ? 'ptr' : lt;
+    const isRaw = lt.startsWith('rawPtr<');
+    const loadType = (this.isClassType(lt) || isString || isManaged || isRaw) ? 'ptr' : lt;
     const t = this.newTemp(); 
     this.emit(`${t} = load ${this.toLLVMType(loadType)}, ptr %${e.name}, align ${this.getAlignment(loadType)}`);
     this.tempTypes.set(t, lt); return t;
@@ -915,6 +923,22 @@ export class CodeGenerator {
         }
     }
 
+    // Handle .address()
+    if (m.member === 'address') {
+        if (!this.isUnsafeContext) {
+            throw new Error(`.address() is only allowed in @unsafe functions.`);
+        }
+        if (m.object.kind === ASTKind.Identifier) {
+            const id = (m.object as Identifier).name;
+            const lt = this.localVarTypes.get(id) || 'i32';
+            const t = this.newTemp();
+            const resType = `rawPtr<${lt}>`;
+            this.emit(`${t} = bitcast ptr %${id} to ptr`); 
+            this.tempTypes.set(t, resType);
+            return t;
+        }
+    }
+
     const obj = this.generateExpression(m.object);
     const objType = this.tempTypes.get(obj) || 'ptr';
     
@@ -937,6 +961,16 @@ export class CodeGenerator {
             this.tempTypes.set(t, method.rt);
             return t;
         }
+    }
+
+    // Handle .set(val) for pointers
+    if (this.isPointerType(objType) && m.member === 'set') {
+        const innerType = this.getPointerInnerType(objType);
+        const val = this.generateExpression(e.args[0]);
+        const vt = this.getValueType(val);
+        const llvmInnerType = this.toLLVMType(innerType);
+        this.emit(`store ${llvmInnerType} ${this.coerceToType(val, vt, llvmInnerType)}, ptr ${obj}, align ${this.getAlignment(innerType)}`);
+        return '0';
     }
     
     let stName = 'Unknown';
@@ -1070,8 +1104,27 @@ export class CodeGenerator {
         }
     }
 
+    // Handle .address
+    if (e.member === 'address') {
+        if (!this.isUnsafeContext) {
+            throw new Error(`.address is only allowed in @unsafe functions.`);
+        }
+        if (e.object.kind === ASTKind.Identifier) {
+            const id = (e.object as Identifier).name;
+            const lt = this.localVarTypes.get(id) || 'i32';
+            const t = this.newTemp();
+            const resType = `rawPtr<${lt}>`;
+            this.emit(`${t} = bitcast ptr %${id} to ptr`);
+            this.tempTypes.set(t, resType);
+            return t;
+        }
+    }
+
     // Built-in pointer properties
     if (this.isPointerType(objType) && e.member === 'get') {
+        if (objType.startsWith('rawPtr<') && !this.isUnsafeContext) {
+            throw new Error(`.get on rawPtr<T> is only allowed in @unsafe functions.`);
+        }
         const innerType = this.getPointerInnerType(objType);
         const llvmInnerType = this.toLLVMType(innerType);
         const t = this.newTemp();
@@ -1123,7 +1176,10 @@ export class CodeGenerator {
   }
 
   private getLLVMType(t: TypeAnnotation): string {
-    if (t.isPointer) return `ptr<${this.getLLVMTypeByName(t.name)}>`;
+    if (t.isPointer) {
+        const prefix = t.isRawPointer ? 'rawPtr<' : 'ptr<';
+        return `${prefix}${this.getLLVMTypeByName(t.name)}>`;
+    }
     if (t.isArray) return `[${t.arraySize || 0} x ${this.getLLVMTypeByName(t.name)}]`;
     
     let name = this.resolveTypeName(t);
@@ -1151,12 +1207,15 @@ export class CodeGenerator {
   }
 
   private isPointerType(t: string): boolean {
-    return t === 'ptr' || (t.startsWith('ptr<') && t.endsWith('>')) || t === 'string';
+    return t === 'ptr' || t.startsWith('ptr<') || t.startsWith('rawPtr<') || t === 'string';
   }
 
   private getPointerInnerType(t: string): string {
     if (t.startsWith('ptr<') && t.endsWith('>')) {
         return t.substring(4, t.length - 1);
+    }
+    if (t.startsWith('rawPtr<') && t.endsWith('>')) {
+        return t.substring(7, t.length - 1);
     }
     return 'i8';
   }

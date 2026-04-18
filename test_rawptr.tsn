@@ -1,0 +1,25 @@
+import * as console from "std:console";
+
+@unsafe
+function test_unsafe(): void {
+    console.log("Entering Unsafe Context (v0.15.2)");
+    
+    let x: i32 = 42;
+    // Lấy địa chỉ của biến x
+    let p: rawPtr<i32> = x.address();
+    
+    console.log("Giá trị ban đầu qua rawPtr:");
+    print_i32(p.get);
+    
+    console.log("Cập nhật x = 100 qua rawPtr.set()");
+    p.set(100);
+    
+    console.log("Giá trị mới của x:");
+    print_i32(x);
+}
+
+function main(): void {
+    test_unsafe();
+}
+
+declare function print_i32(n: i32): void;

@@ -30,9 +30,10 @@ export class Parser {
     if (this.match(TokenKind.Export)) return this.parseExport();
 
     let ffiLib: string | undefined;
-    if (this.match(TokenKind.At)) {
-      if (this.check(TokenKind.Identifier) && this.peek().text === 'ffi') {
-        this.advance(); // 'ffi'
+    let isUnsafe = false;
+    while (this.match(TokenKind.At)) {
+      const decoratorName = this.consume(TokenKind.Identifier, "Expected decorator name").text;
+      if (decoratorName === 'ffi') {
         this.consume(TokenKind.Dot, "Expected '.' after 'ffi'");
         if (this.check(TokenKind.Identifier) && this.peek().text === 'lib') {
           this.advance(); // 'lib'
@@ -41,6 +42,10 @@ export class Parser {
           else this.error("Expected string literal for ffi library");
           this.consume(TokenKind.RParen, "Expected ')'");
         }
+      } else if (decoratorName === 'unsafe') {
+        isUnsafe = true;
+      } else {
+        this.error(`Unknown decorator: @${decoratorName}`);
       }
     }
 
@@ -54,7 +59,7 @@ export class Parser {
     if (this.match(TokenKind.Struct)) return this.parseStruct();
 
     const isDeclare = this.match(TokenKind.Declare);
-    if (this.check(TokenKind.Function)) return this.parseFunction(isDeclare, ffiLib);
+    if (this.check(TokenKind.Function)) return this.parseFunction(isDeclare, ffiLib, isUnsafe);
 
     this.error('Expected declaration (function, class, let, const, interface, etc.)');
     return null;
@@ -190,6 +195,13 @@ export class Parser {
     const methods: ClassMethod[] = [];
     let constructorDecl: ClassMethod | undefined;
     while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+      let isUnsafe = false;
+      while (this.match(TokenKind.At)) {
+        const decoratorName = this.consume(TokenKind.Identifier, "Expected decorator name").text;
+        if (decoratorName === 'unsafe') isUnsafe = true;
+        else this.error(`Unknown decorator: @${decoratorName}`);
+      }
+
       let isPublic = true;
       if (this.match(TokenKind.Public)) isPublic = true;
       else if (this.match(TokenKind.Private)) isPublic = false;
@@ -205,7 +217,7 @@ export class Parser {
           name: 'constructor', 
           isPublic: true, 
           params: cParams, 
-          returnType: { name: 'void', isPointer: false, isArray: false }, 
+          returnType: { name: 'void', isPointer: false, isRawPointer: false, isArray: false }, 
           body: cBody, 
           line: startToken.line, 
           column: startToken.column 
@@ -226,6 +238,7 @@ export class Parser {
             params: mParams, 
             returnType: mRet, 
             body: mBody, 
+            isUnsafe,
             line: startToken.line, 
             column: startToken.column 
           });
@@ -298,7 +311,7 @@ export class Parser {
     return params;
   }
 
-  private parseFunction(isDeclare: boolean, ffiLib?: string): FunctionDecl {
+  private parseFunction(isDeclare: boolean, ffiLib?: string, isUnsafe: boolean = false): FunctionDecl {
     this.consume(TokenKind.Function, "Expected 'function'");
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected function name').text;
@@ -318,7 +331,7 @@ export class Parser {
       body = this.parseBlock();
       this.consume(TokenKind.RBrace, "Expected '}'");
     }
-    return { kind: ASTKind.FunctionDecl, name, typeParameters, params, returnType, body, isDeclare, ffiLib, line: token.line, column: token.column };
+    return { kind: ASTKind.FunctionDecl, name, typeParameters, params, returnType, body, isDeclare, ffiLib, isUnsafe, line: token.line, column: token.column };
   }
 
   private parseBlock(): Statement[] {
@@ -628,7 +641,7 @@ export class Parser {
 
   private parseType(): TypeAnnotation {
     let name = this.consume(TokenKind.Identifier, 'Expected type name').text;
-    let isPointer = false, isArray = false, arraySize: number | undefined;
+    let isPointer = false, isRawPointer = false, isArray = false, arraySize: number | undefined;
     let genericArgs: TypeAnnotation[] | undefined;
 
     if (this.match(TokenKind.Less)) {
@@ -643,6 +656,11 @@ export class Parser {
       isPointer = true;
       name = genericArgs[0].name;
       genericArgs = undefined;
+    } else if (name === 'rawPtr' && genericArgs && genericArgs.length === 1) {
+      isPointer = true;
+      isRawPointer = true;
+      name = genericArgs[0].name;
+      genericArgs = undefined;
     }
     
     if (this.match(TokenKind.LBracket)) {
@@ -650,7 +668,7 @@ export class Parser {
       if (this.check(TokenKind.Number)) arraySize = parseInt(this.advance().text);
       this.consume(TokenKind.RBracket, "Expected ']' for array type");
     }
-    return { name, isPointer, isArray, arraySize, genericArgs };
+    return { name, isPointer, isRawPointer, isArray, arraySize, genericArgs };
   }
 
   private parseTypeParameters(): string[] {
