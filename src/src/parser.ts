@@ -602,6 +602,7 @@ export class Parser {
     if (this.match(TokenKind.True)) return { kind: ASTKind.BoolLiteral, value: true, line: token.line, column: token.column };
     if (this.match(TokenKind.False)) return { kind: ASTKind.BoolLiteral, value: false, line: token.line, column: token.column };
     if (this.match(TokenKind.Null)) return { kind: ASTKind.NullLiteral, line: token.line, column: token.column };
+    if (this.match(TokenKind.Undefined)) return { kind: ASTKind.UndefinedLiteral, line: token.line, column: token.column };
     if (this.match(TokenKind.This)) return { kind: ASTKind.ThisExpr, line: token.line, column: token.column };
     if (this.match(TokenKind.Super)) return { kind: ASTKind.SuperExpr, line: token.line, column: token.column };
     if (this.match(TokenKind.New)) {
@@ -664,6 +665,10 @@ export class Parser {
   }
 
   private parsePrimaryType(): TypeAnnotation {
+    if (this.match(TokenKind.Null) || this.match(TokenKind.Undefined)) {
+      return { name: this.previous().text.toLowerCase(), isPointer: false, isArray: false };
+    }
+
     if (this.match(TokenKind.LBracket)) {
       const tupleElements: TypeAnnotation[] = [];
       if (!this.check(TokenKind.RBracket)) {

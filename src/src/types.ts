@@ -39,6 +39,7 @@ export enum TokenKind {
   Struct = 'STRUCT',
   Extends = 'EXTENDS',
   Implements = 'IMPLEMENTS',
+  Undefined = 'UNDEFINED',
   
   // Operators
   Plus = '+',
@@ -103,6 +104,7 @@ export enum ASTKind {
   ThisExpr = 'ThisExpr',
   SuperExpr = 'SuperExpr',
   TupleExpr = 'TupleExpr',
+  UndefinedLiteral = 'UndefinedLiteral',
   
   // Statements
   VarDecl = 'VarDecl',

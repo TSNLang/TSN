@@ -203,6 +203,7 @@ export class Lexer {
       'export': TokenKind.Export, 'from': TokenKind.From, 'as': TokenKind.As, 'type': TokenKind.Type,
       'struct': TokenKind.Struct, 'extends': TokenKind.Extends,
       'implements': TokenKind.Implements,
+      'undefined': TokenKind.Undefined,
     };
     return keywords[text] || TokenKind.Identifier;
   }

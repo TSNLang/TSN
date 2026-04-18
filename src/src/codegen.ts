@@ -67,6 +67,7 @@ export class CodeGenerator {
   private globalBuffer: string[] = [];
   private exportedSymbols: ExportedSymbol[] = [];
   private isUnsafeContext: boolean = false;
+  private lastExpressionWasUndefined: boolean = false;
 
   constructor(moduleResolver?: ModuleResolver) {
     this.moduleResolver = moduleResolver ?? new ModuleResolver('.');
@@ -574,17 +575,14 @@ export class CodeGenerator {
       const val = this.generateExpression(s.init);
       const vt = this.getValueType(val);
       
-      if (isManaged && this.toLLVMType(vt) === this.toLLVMType(this.getPointerInnerType(t))) {
-          this.generateAutoAllocation(`%${s.name}`, val, this.getPointerInnerType(t));
-      } else if (this.isStructType(t)) {
-          const stName = t.startsWith('%') ? t.substring(1) : t;
-          const structInfo = this.structs.get(stName)!;
-          const size = structInfo.fields.length * 8;
-          this.emit(`call void @llvm.memcpy.p0.p0.i64(ptr %${s.name}, ptr ${val}, i64 ${size}, i1 false)`);
-          this.ensureExternalDeclaration('llvm.memcpy.p0.p0.i64', { name: 'memcpy', kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'ptr', 'i64', 'i1'] } as any);
-      } else {
-          this.emit(`store ${allocaType} ${this.coerceToType(val, vt, allocaType)}, ptr %${s.name}, align ${this.getAlignment(allocaType)}`);
-      }
+      const coerced = this.coerceToType(val, vt, allocaType);
+      this.emit(`store ${this.toLLVMType(allocaType)} ${coerced}, ptr %${s.name}, align ${this.getAlignment(allocaType)}`);
+    } else if (s.type && s.type.isUnion) {
+        const undefinedIndex = s.type.unionTypes?.findIndex(ut => ut.name === 'undefined') ?? -1;
+        if (undefinedIndex !== -1) {
+            const undefinedVal = this.coerceToType('0', 'undefined', t);
+            this.emit(`store ${this.toLLVMType(allocaType)} ${undefinedVal}, ptr %${s.name}, align 8`);
+        }
     }
   }
 
@@ -712,12 +710,14 @@ export class CodeGenerator {
   private generateContinue(): void { this.emit(`br label %${this.loopStack[this.loopStack.length - 1].continueLabel}`); }
 
   private generateExpression(e: Expression): string {
+    this.lastExpressionWasUndefined = (e.kind === ASTKind.UndefinedLiteral);
     switch (e.kind) {
       case ASTKind.TupleExpr: return this.generateTupleExpr(e as TupleExpr);
       case ASTKind.NumberLiteral: return (e as NumberLiteral).value.toString();
       case ASTKind.StringLiteral: return this.generateStringLiteral(e as StringLiteral);
       case ASTKind.BoolLiteral: return (e as BoolLiteral).value ? '1' : '0';
       case ASTKind.NullLiteral: return 'null';
+      case ASTKind.UndefinedLiteral: return '0';
       case ASTKind.ThisExpr: return this.generateThis();
       case ASTKind.SuperExpr: return this.generateSuper();
       case ASTKind.NewExpr: return this.generateNew(e as NewExpr);
@@ -853,6 +853,34 @@ export class CodeGenerator {
       this.emit(`${t} = ${op} i1 ${l1}, ${r1}`); this.tempTypes.set(t, 'i1'); return t;
     }
     const lt = this.getValueType(l), rt = (lt === 'ptr' || r === 'null') ? 'ptr' : 'i32';
+    
+    // Union comparison with null/undefined
+    const isNull = r === 'null';
+    const isUndefined = r === '0' && this.lastExpressionWasUndefined;
+
+    if (this.unionDefinitions.has(lt) && (isNull || isUndefined)) {
+        const unionType = this.unionDefinitions.get(lt)!;
+        const targetName = isNull ? 'null' : 'undefined';
+        const typeIndex = unionType.unionTypes?.findIndex(ut => ut.name === targetName) ?? -1;
+
+        if (typeIndex !== -1) {
+            const tempAlloc = this.newTemp();
+            const llvmUnionType = lt;
+            this.emit(`${tempAlloc} = alloca ${llvmUnionType}, align 8`);
+            this.emit(`store ${llvmUnionType} ${l}, ptr ${tempAlloc}, align 4`);
+            const tagPtr = this.newTemp();
+            this.emit(`${tagPtr} = getelementptr inbounds ${llvmUnionType}, ptr ${tempAlloc}, i32 0, i32 0`);
+            const tag = this.newTemp();
+            this.emit(`${tag} = load i32, ptr ${tagPtr}, align 4`);
+            
+            const res = this.newTemp();
+            const cmp = op.includes('eq') ? 'eq' : 'ne';
+            this.emit(`${res} = icmp ${cmp} i32 ${tag}, ${typeIndex}`);
+            this.tempTypes.set(res, 'i1');
+            return res;
+        }
+    }
+
     this.emit(`${t} = ${op} ${rt} ${l}, ${r}`); this.tempTypes.set(t, op.startsWith('icmp') ? 'i1' : 'i32'); return t;
   }
 
@@ -1216,8 +1244,7 @@ export class CodeGenerator {
     }
     if (t.isArray) return `[${t.arraySize || 0} x ${this.getLLVMTypeByName(t.name)}]`;
     
-    let name = this.resolveTypeName(t);
-    if (name === 'string') return 'string';
+    if (name === 'string') return 'ptr';
     return this.getLLVMTypeByName(name);
   }
 
@@ -1231,7 +1258,8 @@ export class CodeGenerator {
       'f32': 'float', 'float': 'float',
       'f64': 'double', 'double': 'double',
       'number': 'double',
-      'void': 'void', 'string': 'ptr'
+      'void': 'void', 'string': 'ptr',
+      'null': 'i8', 'undefined': 'i8'
     };
     if (map[n]) return map[n];
     if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return 'ptr';
@@ -1318,8 +1346,14 @@ export class CodeGenerator {
        if (g) return g.type;
        return 'ptr';
     }
-    if (v.startsWith('%')) return this.tempTypes.get(v) || 'i32';
+    if (v.startsWith('%')) {
+        const type = this.tempTypes.get(v);
+        if (type) return type;
+        // Fallback for LLVM structures
+        return 'i32';
+    }
     if (v === 'null') return 'ptr';
+    if (v === '0' && this.lastExpressionWasUndefined) return 'i8';
     if (/^-?\d+\.\d+$/.test(v) || /^-?\d+e[+-]?\d+$/.test(v)) return 'double';
     return 'i32'; 
   }
@@ -1352,6 +1386,11 @@ export class CodeGenerator {
             const tempUnion = this.newTemp();
             this.emit(`${tempUnion} = alloca ${d}, align 8`);
             
+            // Clear union memory to avoid garbage
+            const size = this.getTypeSize(d);
+            this.emit(`call void @llvm.memset.p0.i64(ptr ${tempUnion}, i8 0, i64 ${size}, i1 false)`);
+            this.ensureExternalDeclaration('llvm.memset.p0.i64', { name: 'memset', kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'i8', 'i64', 'i1'] } as any);
+
             // Set Tag
             const tagPtr = this.newTemp();
             this.emit(`${tagPtr} = getelementptr inbounds ${d}, ptr ${tempUnion}, i32 0, i32 0`);
@@ -1360,7 +1399,7 @@ export class CodeGenerator {
             // Set Data
             const dataPtr = this.newTemp();
             this.emit(`${dataPtr} = getelementptr inbounds ${d}, ptr ${tempUnion}, i32 0, i32 1`);
-            this.emit(`store ${s} ${v}, ptr ${dataPtr}, align 1`); // simplified store to data buffer
+            this.emit(`store ${s} ${v}, ptr ${dataPtr}, align 1`);
             
             const result = this.newTemp();
             this.emit(`${result} = load ${d}, ptr ${tempUnion}, align 8`);

@@ -66,5 +66,16 @@ TSN employs a state-of-the-art memory management system:
 
 ---
 
+## ⚠️ Known Limitations
+
+TSN prioritizes performance and memory safety. Some TypeScript features are intentionally omitted or deferred:
+- **Intersection Types**: Currently not supported due to memory layout complexity.
+- **`any` Type**: Not supported to maintain strict type safety and performance.
+- **`never` Type**: Deferred until advanced control-flow analysis is implemented.
+
+For more details, see [Language Limitations](docs/limitations.md).
+
+---
+
 ## 🛠️ Project Structure
 
