@@ -1,4 +1,4 @@
-import { Token, TokenKind, ASTKind, Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ExprStmt, Parameter, InterfaceField, InterfaceMethod, TypeAnnotation, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ImportDecl, ExportDecl, ImportSpecifier, TypeAliasDecl, EnumDecl, EnumMember, NamespaceDecl, ClassDecl, StructDecl, ClassField, ClassMethod, NewExpr, ThisExpr } from './types.ts';
+import { Token, TokenKind, ASTKind, Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ExprStmt, Parameter, InterfaceField, InterfaceMethod, TypeAnnotation, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ImportDecl, ExportDecl, ImportSpecifier, TypeAliasDecl, EnumDecl, EnumMember, NamespaceDecl, ClassDecl, StructDecl, ClassField, ClassMethod, NewExpr, ThisExpr, TupleExpr } from './types.ts';
 import { Reporter } from './diagnostics.ts';
 
 export class Parser {
@@ -631,6 +631,18 @@ export class Parser {
       return { kind: ASTKind.AddressofExpr, operand, line: token.line, column: token.column };
     }
     if (this.match(TokenKind.Identifier)) return { kind: ASTKind.Identifier, name: this.previous().text, line: token.line, column: token.column };
+
+    if (this.match(TokenKind.LBracket)) {
+      const elements: Expression[] = [];
+      if (!this.check(TokenKind.RBracket)) {
+        do {
+          elements.push(this.parseExpression());
+        } while (this.match(TokenKind.Comma));
+      }
+      this.consume(TokenKind.RBracket, "Expected ']' after tuple elements");
+      return { kind: ASTKind.TupleExpr, elements, line: token.line, column: token.column };
+    }
+
     if (this.match(TokenKind.LParen)) {
       const expr = this.parseExpression();
       this.consume(TokenKind.RParen, "Expected ')'");
@@ -640,6 +652,17 @@ export class Parser {
   }
 
   private parseType(): TypeAnnotation {
+    if (this.match(TokenKind.LBracket)) {
+      const tupleElements: TypeAnnotation[] = [];
+      if (!this.check(TokenKind.RBracket)) {
+        do {
+          tupleElements.push(this.parseType());
+        } while (this.match(TokenKind.Comma));
+      }
+      this.consume(TokenKind.RBracket, "Expected ']' after tuple types");
+      return { name: 'tuple', isPointer: false, isArray: false, isTuple: true, tupleElements };
+    }
+
     let name = this.consume(TokenKind.Identifier, 'Expected type name').text;
     let isPointer = false, isRawPointer = false, isArray = false, arraySize: number | undefined;
     let genericArgs: TypeAnnotation[] | undefined;

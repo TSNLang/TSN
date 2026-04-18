@@ -712,6 +712,7 @@ export class CodeGenerator {
 
   private generateExpression(e: Expression): string {
     switch (e.kind) {
+      case ASTKind.TupleExpr: return this.generateTupleExpr(e as TupleExpr);
       case ASTKind.NumberLiteral: return (e as NumberLiteral).value.toString();
       case ASTKind.StringLiteral: return this.generateStringLiteral(e as StringLiteral);
       case ASTKind.BoolLiteral: return (e as BoolLiteral).value ? '1' : '0';
@@ -728,6 +729,25 @@ export class CodeGenerator {
       case ASTKind.AddressofExpr: return this.generateAddressof(e as AddressofExpr);
       default: return '0';
     }
+  }
+
+  private generateTupleExpr(e: TupleExpr): string {
+    const elements = e.elements.map(el => this.generateExpression(el));
+    const types = elements.map(el => this.getValueType(el));
+    const tupleType = `{ ${types.join(', ')} }`;
+      
+    let currentTuple = 'undef';
+    const finalTemp = this.newTemp();
+      
+    let lastTemp = 'undef';
+    for (let i = 0; i < elements.length; i++) {
+      const nextTemp = this.newTemp();
+      this.emit(`${nextTemp} = insertvalue ${tupleType} ${lastTemp}, ${types[i]} ${elements[i]}, ${i}`);
+      lastTemp = nextTemp;
+    }
+      
+    this.tempTypes.set(lastTemp, tupleType);
+    return lastTemp;
   }
 
   private generateThis(): string {
@@ -1176,6 +1196,9 @@ export class CodeGenerator {
   }
 
   private getLLVMType(t: TypeAnnotation): string {
+    if (t.isTuple && t.tupleElements) {
+      return `{ ${t.tupleElements.map(e => this.getLLVMType(e)).join(', ')} }`;
+    }
     if (t.isPointer) {
         const prefix = t.isRawPointer ? 'rawPtr<' : 'ptr<';
         return `${prefix}${this.getLLVMTypeByName(t.name)}>`;

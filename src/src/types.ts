@@ -101,6 +101,7 @@ export enum ASTKind {
   NewExpr = 'NewExpr',
   ThisExpr = 'ThisExpr',
   SuperExpr = 'SuperExpr',
+  TupleExpr = 'TupleExpr',
   
   // Statements
   VarDecl = 'VarDecl',
@@ -198,6 +199,26 @@ export interface AddressofExpr extends ASTNode {
   operand: Expression;
 }
 
+export interface NewExpr extends ASTNode {
+  kind: ASTKind.NewExpr;
+  className: string;
+  genericArgs?: TypeAnnotation[];
+  args: Expression[];
+}
+
+export interface ThisExpr extends ASTNode {
+  kind: ASTKind.ThisExpr;
+}
+
+export interface SuperExpr extends ASTNode {
+  kind: ASTKind.SuperExpr;
+}
+
+export interface TupleExpr extends ASTNode {
+  kind: ASTKind.TupleExpr;
+  elements: Expression[];
+}
+
 export type Expression =
   | NumberLiteral
   | StringLiteral
@@ -212,7 +233,8 @@ export type Expression =
   | AddressofExpr
   | NewExpr
   | ThisExpr
-  | SuperExpr;
+  | SuperExpr
+  | TupleExpr;
 
 // Statements
 export interface VarDecl extends ASTNode {
@@ -384,6 +406,8 @@ export interface TypeAnnotation {
   isArray: boolean;
   arraySize?: number;
   genericArgs?: TypeAnnotation[];
+  isTuple?: boolean;
+  tupleElements?: TypeAnnotation[];
 }
 
 export interface ClassMember extends ASTNode {
@@ -428,3 +452,4 @@ export interface ThisExpr extends ASTNode {
 export interface SuperExpr extends ASTNode {
   kind: ASTKind.SuperExpr;
 }
+
