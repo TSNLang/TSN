@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.15.5--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.15.6--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -22,21 +22,21 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
+## 🚀 Version 0.15.6-indev: Safe Nullability
+
+TSN now supports memory-safe `null` and `undefined` handling using Tagged Unions:
+
+1.  **Strict Null Checks**: Types are non-nullable by default. Use `T | null` or `T | undefined` for optional values.
+2.  **Tagged Implementation**: `null` and `undefined` are implemented as safe unit types within the union struct.
+3.  **Automatic Protection**: The compiler manages memory layout and tag checking, preventing common null-pointer exceptions at the native level.
+
 ## 🚀 Version 0.15.5-indev: Safe Union Types
 
-TSN now supports memory-safe Union types (Tagged Unions):
+TSN supports memory-safe Union types (Tagged Unions):
 
 1.  **Union Definition**: Combine multiple types using the pipe operator, e.g., `type Result = string | i32`.
 2.  **Tagged Implementation**: Unions are implemented as `{ i32, [MaxLen x i8] }`, ensuring type safety at runtime.
-3.  **Automatic Packaging**: The compiler automatically handles the conversion from a concrete type to its union representation.
 
-## 🚀 Version 0.15.4-indev: Tuple Support
-
-TSN now supports fixed-size heterogeneous collections:
-
-1.  **Tuple Types**: Define tuples using bracket syntax, e.g., `[i32, string]`.
-2.  **Tuple Literals**: Create tuples using bracket syntax, e.g., `let x: [i32, i32] = [10, 20];`.
-3.  **LLVM Integration**: Tuples are compiled to native anonymous structures for maximum performance.
 ---
 
 ## 💪 Core Language Features
@@ -55,7 +55,6 @@ TSN employs a state-of-the-art memory management system:
 - **Inheritance**: Full support for `extends` in both classes and structs (Field flattening).
 - **Polymorphism**: Virtual methods and **VTables** for dynamic dispatch.
 - **Interfaces**: Define contracts with `interface` and implement them with `implements`.
-- **Super**: Support for `super()` constructor chaining and `super.method()` static dispatch.
 - **FFI (Foreign Function Interface)**: Seamlessly call C/C++ libraries and system APIs using `@ffi.lib()`.
 
 ### ⚡ Performance
@@ -78,4 +77,3 @@ For more details, see [Language Limitations](docs/limitations.md).
 ---
 
 ## 🛠️ Project Structure
-
