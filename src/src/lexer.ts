@@ -178,7 +178,7 @@ export class Lexer {
       '%': TokenKind.Percent, '=': TokenKind.Equal, '<': TokenKind.Less, '>': TokenKind.Greater,
       '!': TokenKind.Not, '(': TokenKind.LParen, ')': TokenKind.RParen, '{': TokenKind.LBrace,
       '}': TokenKind.RBrace, '[': TokenKind.LBracket, ']': TokenKind.RBracket, ';': TokenKind.Semicolon,
-      '@': TokenKind.At, ':': TokenKind.Colon, ',': TokenKind.Comma, '.': TokenKind.Dot,
+      '@': TokenKind.At, ':': TokenKind.Colon, ',': TokenKind.Comma, '.': TokenKind.Dot, '|': TokenKind.Pipe,
     };
 
     const kind = map[ch];

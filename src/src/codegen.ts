@@ -49,6 +49,7 @@ export class CodeGenerator {
   private functions: Map<string, FunctionInfo> = new Map();
   private typeAliases: Map<string, TypeAnnotation> = new Map();
   private enums: Map<string, Map<string, number>> = new Map();
+  private unionDefinitions: Map<string, TypeAnnotation> = new Map();
   private scopeStack: string[] = [];
   private stringLiterals: Map<string, string> = new Map();
   private loopStack: LoopContext[] = [];
@@ -1196,6 +1197,16 @@ export class CodeGenerator {
   }
 
   private getLLVMType(t: TypeAnnotation): string {
+    if (t.isUnion && t.unionTypes) {
+        let maxSize = 0;
+        for (const ut of t.unionTypes) {
+            const size = this.getTypeSize(this.getLLVMType(ut));
+            if (size > maxSize) maxSize = size;
+                }
+        const llvmType = `{ i32, [${maxSize} x i8] }`;
+        this.unionDefinitions.set(llvmType, t);
+        return llvmType;
+    }
     if (t.isTuple && t.tupleElements) {
       return `{ ${t.tupleElements.map(e => this.getLLVMType(e)).join(', ')} }`;
     }
@@ -1330,9 +1341,33 @@ export class CodeGenerator {
     return Array.from(this.structs.keys())[0] || 'Unknown';
   }
 
-  private coerceToType(v: string, src: string, dest: string): string {
+    private coerceToType(v: string, src: string, dest: string): string {
     const s = this.toLLVMType(src), d = this.toLLVMType(dest);
     if (s === d) return v;
+
+    if (this.unionDefinitions.has(d)) {
+        const unionType = this.unionDefinitions.get(d)!;
+        const typeIndex = unionType.unionTypes?.findIndex(t => this.getLLVMType(t) === s);
+        if (typeIndex !== undefined && typeIndex !== -1) {
+            const tempUnion = this.newTemp();
+            this.emit(`${tempUnion} = alloca ${d}, align 8`);
+            
+            // Set Tag
+            const tagPtr = this.newTemp();
+            this.emit(`${tagPtr} = getelementptr inbounds ${d}, ptr ${tempUnion}, i32 0, i32 0`);
+            this.emit(`store i32 ${typeIndex}, ptr ${tagPtr}, align 4`);
+            
+            // Set Data
+            const dataPtr = this.newTemp();
+            this.emit(`${dataPtr} = getelementptr inbounds ${d}, ptr ${tempUnion}, i32 0, i32 1`);
+            this.emit(`store ${s} ${v}, ptr ${dataPtr}, align 1`); // simplified store to data buffer
+            
+            const result = this.newTemp();
+            this.emit(`${result} = load ${d}, ptr ${tempUnion}, align 8`);
+            this.tempTypes.set(result, d);
+            return result;
+        }
+    }
     
     // Integer to Integer
     if (s.startsWith('i') && d.startsWith('i')) {

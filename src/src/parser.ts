@@ -652,6 +652,18 @@ export class Parser {
   }
 
   private parseType(): TypeAnnotation {
+    let type = this.parsePrimaryType();
+    if (this.check(TokenKind.Pipe)) {
+      const types: TypeAnnotation[] = [type];
+      while (this.match(TokenKind.Pipe)) {
+        types.push(this.parsePrimaryType());
+      }
+      return { name: 'union', isPointer: false, isArray: false, isUnion: true, unionTypes: types };
+    }
+    return type;
+  }
+
+  private parsePrimaryType(): TypeAnnotation {
     if (this.match(TokenKind.LBracket)) {
       const tupleElements: TypeAnnotation[] = [];
       if (!this.check(TokenKind.RBracket)) {

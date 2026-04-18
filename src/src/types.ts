@@ -55,7 +55,8 @@ export enum TokenKind {
   GreaterEqual = '>=',
   And = '&&',
   Or = '||',
-  Not = '!',
+    Not = '!',
+  Pipe = '|',
   
   // Punctuation
   LParen = '(',
@@ -406,8 +407,10 @@ export interface TypeAnnotation {
   isArray: boolean;
   arraySize?: number;
   genericArgs?: TypeAnnotation[];
-  isTuple?: boolean;
+    isTuple?: boolean;
   tupleElements?: TypeAnnotation[];
+  isUnion?: boolean;
+  unionTypes?: TypeAnnotation[];
 }
 
 export interface ClassMember extends ASTNode {
@@ -452,4 +455,5 @@ export interface ThisExpr extends ASTNode {
 export interface SuperExpr extends ASTNode {
   kind: ASTKind.SuperExpr;
 }
+
 
