@@ -339,7 +339,7 @@ export class Parser {
     return params;
   }
 
-  private parseFunction(isDeclare: boolean, ffiLib?: string, isUnsafe: boolean = false, targetOS?: string): FunctionDecl {
+  private parseFunction(isDeclare: boolean, ffiLib?: string, isUnsafe: boolean = false, targetOS?: string[]): FunctionDecl {
     this.consume(TokenKind.Function, "Expected 'function'");
     const token = this.previous();
     const name = this.consume(TokenKind.Identifier, 'Expected function name').text;

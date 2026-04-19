@@ -1,6 +1,6 @@
 {
   "name": "tsn-compiler",
-  "version": "0.11.0",
+  "version": "0.16.4",
   "description": "TSN compiler implemented in TypeScript with Node standard APIs",
   "type": "module",
   "private": true,

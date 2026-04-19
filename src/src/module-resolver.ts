@@ -7,10 +7,11 @@ import { ImportDecl, ExportDecl, FunctionDecl, VarDecl, InterfaceDecl, ClassDecl
 import { Lexer } from './lexer.ts';
 import { Parser } from './parser.ts';
 import { Reporter } from './diagnostics.ts';
+import { CodeGenerator } from './codegen.ts';
 
 function toLLVMTypeName(type: TypeAnnotation): string {
   if (type.isPointer) return `ptr<${toLLVMNamedBaseType(type.name)}>`;
-  if (type.name === 'string') return 'ptr';
+  if (type.name === 'string') return 'string';
   return toLLVMNamedBaseType(type.name);
 }
 
@@ -23,11 +24,12 @@ function toLLVMNamedBaseType(name: string): string {
     f32: 'float', float: 'float',
     f64: 'double', double: 'double',
     number: 'double',
-    void: 'void', string: 'ptr',
+    void: 'void', string: 'string',
     null: 'i8', undefined: 'i8',
   };
 
-  return map[name] || (name === 'string' ? 'ptr' : 'i32');
+  if (name in map) return map[name];
+  return name;
 }
 
 // Represents an exported symbol from a module
@@ -51,11 +53,6 @@ export interface ModuleExports {
 // Standard library module definitions
 // These remain hardcoded until they are moved into TSN stdlib modules
 const STD_MODULES: Record<string, ExportedSymbol[]> = {
-  'std:fs': [
-    { name: 'readFile',  kind: 'function', llvmType: 'ptr', paramTypes: ['ptr'] },
-    { name: 'writeFile', kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr', 'i32'] },
-    { name: 'exists',    kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] },
-  ],
   'std:memory': [
     { name: 'alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] },
     { name: 'free',  kind: 'function', llvmType: 'void', paramTypes: ['ptr'] },
@@ -175,6 +172,8 @@ export class ModuleResolver {
         const program = parser.parse();
         
         const symbols: ExportedSymbol[] = [];
+        const codegen = new CodeGenerator(); // Use CodeGenerator to check target OS
+        
         for (let decl of program.declarations) {
             if (decl.kind === ASTKind.ExportDecl) {
                 decl = (decl as ExportDecl).declaration;
@@ -185,6 +184,8 @@ export class ModuleResolver {
                 symbols.push({ name: c.name, kind: 'class', ast: c });
             } else if (decl.kind === ASTKind.FunctionDecl) {
                 const f = decl as FunctionDecl;
+                if (!codegen.isTargetOSMatch(f.targetOS)) continue;
+                
                 symbols.push({
                   name: f.name,
                   kind: 'function',

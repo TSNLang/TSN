@@ -130,9 +130,9 @@ void tsn_decRef(void* p) {
     if (!p) return;
     int* refCount = (int*)p;
     (*refCount)--;
-    printf("DEBUG: RC decreased to %d at %p\n", *refCount, p);
+    // printf("DEBUG: RC decreased to %d at %p\n", *refCount, p);
     if (*refCount <= 0) {
-        printf("DEBUG: Freeing object at %p\n", p);
+        // printf("DEBUG: Freeing object at %p\n", p);
         free(p);
     }
 }
@@ -181,10 +181,10 @@ char* fs_readFile(const char* path) {
 
 int fs_writeFile(const char* path, const char* data, int len) {
     FILE* f = fopen(path, "wb");
-    if (!f) return 0;
+    if (!f) return -1;
     
     int written = (int)fwrite(data, 1, len, f);
-    fclose(f);
+    if (fclose(f) != 0) return -1;
     return written;
 }
 

@@ -22,6 +22,27 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
+## 🚀 Version 0.16.4-indev: roadmap for safe `std:fs`
+
+TSN 0.16.4 is planned to focus on a native `std:fs` designed for TSN itself, not a Node compatibility layer.
+
+The direction is:
+
+- build `std:fs` as a real TSN-first standard library module
+- use TSN-safe file APIs with ownership and RAII in mind
+- keep file handles and file operations explicit and safe
+- avoid depending on `std:result` for the filesystem core
+- do not try to mimic Node.js semantics inside `std:fs`
+- keep `node:*` compatibility for a later phase
+
+Planned scope:
+
+- `std:fs` first
+- safe file read/write APIs
+- RAII-oriented file handle design
+- Windows/Linux backend implementations
+- `0.17.x` reserved for `node:*` compatibility on top of `std:*`
+
 ## 🚀 Version 0.16.3-indev: simpler `std:process.exit()`
 
 TSN 0.16.3 continues moving runtime-facing APIs into real TSN standard library modules with a simpler Node-compatible shape.
