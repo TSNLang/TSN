@@ -1,21 +1,9 @@
 // tsn_runtime.c - Runtime support for TSN programs
-// Implements std:console, std:process, std:string, std:memory, std:fs
+// Implements std:string, std:memory
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// ============================================================================
-// std:process
-// ============================================================================
-
-void process_exit(int code) {
-    exit(code);
-}
-
-void tsn_exit(int code) {
-    exit(code);
-}
 
 // ============================================================================
 // std:string
@@ -156,42 +144,6 @@ void memory_free(void* ptr) {
 
 void memory_copy(void* dst, const void* src, int size) {
     memcpy(dst, src, size);
-}
-
-// ============================================================================
-// std:fs
-// ============================================================================
-
-char* fs_readFile(const char* path) {
-    FILE* f = fopen(path, "rb");
-    if (!f) return NULL;
-    
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    
-    char* buf = (char*)malloc(size + 1);
-    if (!buf) { fclose(f); return NULL; }
-    
-    fread(buf, 1, size, f);
-    buf[size] = '\0';
-    fclose(f);
-    return buf;
-}
-
-int fs_writeFile(const char* path, const char* data, int len) {
-    FILE* f = fopen(path, "wb");
-    if (!f) return -1;
-    
-    int written = (int)fwrite(data, 1, len, f);
-    if (fclose(f) != 0) return -1;
-    return written;
-}
-
-int fs_exists(const char* path) {
-    FILE* f = fopen(path, "r");
-    if (f) { fclose(f); return 1; }
-    return 0;
 }
 
 // ============================================================================

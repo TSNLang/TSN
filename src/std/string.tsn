@@ -1,0 +1,56 @@
+@ffi.lib("c")
+declare function strlen(s: string): i32;
+
+@ffi.lib("c")
+declare function strcmp(s1: string, s2: string): i32;
+
+declare function string_length(s: string): i32;
+declare function string_byteLength(s: string): i32;
+declare function string_charCodeAt(s: string, index: i32): i32;
+declare function string_concat(a: string, b: string): string;
+declare function string_compare(a: string, b: string): i32;
+declare function string_substr(s: string, start: i32, len: i32): string;
+declare function string_includes(s: string, search: string): bool;
+declare function string_indexOf(s: string, search: string): i32;
+declare function string_startsWith(s: string, search: string): bool;
+declare function string_endsWith(s: string, search: string): bool;
+
+export function length(s: string): i32 {
+    return string_length(s);
+}
+
+export function byteLength(s: string): i32 {
+    return string_byteLength(s);
+}
+
+export function charCodeAt(s: string, index: i32): i32 {
+    return string_charCodeAt(s, index);
+}
+
+export function concat(a: string, b: string): string {
+    return string_concat(a, b);
+}
+
+export function compare(a: string, b: string): i32 {
+    return string_compare(a, b);
+}
+
+export function substr(s: string, start: i32, len: i32): string {
+    return string_substr(s, start, len);
+}
+
+export function includes(s: string, search: string): bool {
+    return string_includes(s, search);
+}
+
+export function indexOf(s: string, search: string): i32 {
+    return string_indexOf(s, search);
+}
+
+export function startsWith(s: string, search: string): bool {
+    return string_startsWith(s, search);
+}
+
+export function endsWith(s: string, search: string): bool {
+    return string_endsWith(s, search);
+}
