@@ -1,0 +1,138 @@
+// std:memory - Low-level memory management for TSN
+// This module provides direct access to OS memory allocation APIs, avoiding CRuntime where possible.
+
+// ============================================================================
+// Windows Backend (kernel32.dll)
+// ============================================================================
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function GetProcessHeap(): ptr<void>;
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function HeapAlloc(heap: ptr<void>, flags: i32, bytes: i64): rawPtr<void>;
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function HeapFree(heap: ptr<void>, flags: i32, ptr: rawPtr<void>): i32;
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function HeapReAlloc(heap: ptr<void>, flags: i32, ptr: rawPtr<void>, bytes: i64): rawPtr<void>;
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function RtlMoveMemory(dst: rawPtr<void>, src: rawPtr<void>, len: i64): void;
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function RtlFillMemory(dst: rawPtr<void>, len: i64, fill: i8): void;
+
+// ============================================================================
+// Linux Backend (Giao diện tạm thời qua libc cho đến khi có syscall wrapper)
+// ============================================================================
+
+@target_os("linux")
+@ffi.lib("c")
+declare function malloc(size: i64): rawPtr<void>;
+
+@target_os("linux")
+@ffi.lib("c")
+declare function free(ptr: rawPtr<void>): void;
+
+@target_os("linux")
+@ffi.lib("c")
+declare function realloc(ptr: rawPtr<void>, size: i64): rawPtr<void>;
+
+@target_os("linux")
+@ffi.lib("c")
+declare function memmove(dst: rawPtr<void>, src: rawPtr<void>, n: i64): rawPtr<void>;
+
+@target_os("linux")
+@ffi.lib("c")
+declare function memset(s: rawPtr<void>, c: i32, n: i64): rawPtr<void>;
+
+// ============================================================================
+// Public Safe/Unsafe API
+// ============================================================================
+
+const HEAP_ZERO_MEMORY: i32 = 8;
+
+/**
+ * Cấp phát một vùng nhớ mới.
+ * Trả về rawPtr<void>, cần được giải phóng bằng memory.free()
+ */
+@unsafe
+export function alloc(size: i64): rawPtr<void> {
+    @target_os("windows") {
+        return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
+    }
+
+    @target_os("linux") {
+        let p = malloc(size);
+        if (p != null) {
+            memset(p, 0, size);
+        }
+        return p;
+    }
+}
+
+/**
+ * Giải phóng vùng nhớ đã cấp phát.
+ */
+@unsafe
+export function free(p: rawPtr<void>): void {
+    if (p == null) return;
+
+    @target_os("windows") {
+        HeapFree(GetProcessHeap(), 0, p);
+    }
+
+    @target_os("linux") {
+        free(p);
+    }
+}
+
+/**
+ * Thay đổi kích thước vùng nhớ đã cấp phát.
+ */
+@unsafe
+export function realloc(p: rawPtr<void>, newSize: i64): rawPtr<void> {
+    @target_os("windows") {
+        if (p == null) return alloc(newSize);
+        return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, p, newSize);
+    }
+
+    @target_os("linux") {
+        return realloc(p, newSize);
+    }
+}
+
+/**
+ * Sao chép vùng nhớ (an toàn với các vùng nhớ chồng lấn).
+ */
+@unsafe
+export function copy(dst: rawPtr<void>, src: rawPtr<void>, size: i64): void {
+    @target_os("windows") {
+        RtlMoveMemory(dst, src, size);
+    }
+
+    @target_os("linux") {
+        memmove(dst, src, size);
+    }
+}
+
+/**
+ * Điền giá trị vào vùng nhớ.
+ */
+@unsafe
+export function fill(p: rawPtr<void>, value: i8, size: i64): void {
+    @target_os("windows") {
+        RtlFillMemory(p, size, value);
+    }
+
+    @target_os("linux") {
+        memset(p, value, size);
+    }
+}
