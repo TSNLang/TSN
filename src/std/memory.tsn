@@ -1,138 +1,109 @@
-// std:memory - Low-level memory management for TSN
-// This module provides direct access to OS memory allocation APIs, avoiding CRuntime where possible.
+// std:memory - Native memory management for TSN
+// Supported OS: Windows, Posix (Linux/macOS)
 
-// ============================================================================
-// Windows Backend (kernel32.dll)
-// ============================================================================
+/** Win32 API Definitions **/
+@target_os("windows")
+@ffi.lib("kernel32")
+declare
+function GetProcessHeap(): rawPtr<void>;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function GetProcessHeap(): ptr<void>;
+declare
+function HeapAlloc(hHeap: rawPtr<void>, dwFlags: i32, dwBytes: i64): rawPtr<void>;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function HeapAlloc(heap: ptr<void>, flags: i32, bytes: i64): rawPtr<void>;
+declare
+function HeapFree(hHeap: rawPtr<void>, dwFlags: i32, lpMem: rawPtr<void>): i32;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function HeapFree(heap: ptr<void>, flags: i32, ptr: rawPtr<void>): i32;
+declare
+function HeapReAlloc(hHeap: rawPtr<void>, dwFlags: i32, lpMem: rawPtr<void>, dwBytes: i64): rawPtr<void>;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function HeapReAlloc(heap: ptr<void>, flags: i32, ptr: rawPtr<void>, bytes: i64): rawPtr<void>;
+declare
+function RtlMoveMemory(Destination: rawPtr<void>, Source: rawPtr<void>, Length: i64): void;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function RtlMoveMemory(dst: rawPtr<void>, src: rawPtr<void>, len: i64): void;
+declare
+function RtlFillMemory(Destination: rawPtr<void>, Length: i64, Fill: i8): void;
 
-@target_os("windows")
-@ffi.lib("kernel32")
-declare function RtlFillMemory(dst: rawPtr<void>, len: i64, fill: i8): void;
+export const HEAP_ZERO_MEMORY: i32 = 8;
 
-// ============================================================================
-// Linux Backend (Giao diện tạm thời qua libc cho đến khi có syscall wrapper)
-// ============================================================================
-
-@target_os("linux")
-@ffi.lib("c")
-declare function malloc(size: i64): rawPtr<void>;
-
-@target_os("linux")
-@ffi.lib("c")
-declare function free(ptr: rawPtr<void>): void;
-
-@target_os("linux")
-@ffi.lib("c")
-declare function realloc(ptr: rawPtr<void>, size: i64): rawPtr<void>;
-
-@target_os("linux")
-@ffi.lib("c")
-declare function memmove(dst: rawPtr<void>, src: rawPtr<void>, n: i64): rawPtr<void>;
-
-@target_os("linux")
-@ffi.lib("c")
-declare function memset(s: rawPtr<void>, c: i32, n: i64): rawPtr<void>;
-
-// ============================================================================
-// Public Safe/Unsafe API
-// ============================================================================
-
-const HEAP_ZERO_MEMORY: i32 = 8;
+/** Public API **/
 
 /**
- * Cấp phát một vùng nhớ mới.
- * Trả về rawPtr<void>, cần được giải phóng bằng memory.free()
+ * Cấp phát một vùng nhớ mới (Windows).
  */
-@unsafe
-export function alloc(size: i64): rawPtr<void> {
-    @target_os("windows") {
-        return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
-    }
-
-    @target_os("linux") {
-        let p = malloc(size);
-        if (p != null) {
-            memset(p, 0, size);
-        }
-        return p;
-    }
+@target_os("windows")
+export @unsafe function alloc(size: i64): rawPtr<void> {
+    return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
 }
 
 /**
- * Giải phóng vùng nhớ đã cấp phát.
+ * Giải phóng vùng nhớ (Windows).
  */
-@unsafe
-export function free(p: rawPtr<void>): void {
+@target_os("windows")
+export @unsafe function free(p: rawPtr<void>): void {
     if (p == null) return;
-
-    @target_os("windows") {
-        HeapFree(GetProcessHeap(), 0, p);
-    }
-
-    @target_os("linux") {
-        free(p);
-    }
+    HeapFree(GetProcessHeap(), 0, p);
 }
 
 /**
- * Thay đổi kích thước vùng nhớ đã cấp phát.
+ * Thay đổi kích thước vùng nhớ (Windows).
  */
-@unsafe
-export function realloc(p: rawPtr<void>, newSize: i64): rawPtr<void> {
-    @target_os("windows") {
-        if (p == null) return alloc(newSize);
-        return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, p, newSize);
-    }
-
-    @target_os("linux") {
-        return realloc(p, newSize);
-    }
+@target_os("windows")
+export @unsafe function realloc(p: rawPtr<void>, newSize: i64): rawPtr<void> {
+    if (p == null) return alloc(newSize);
+    return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, p, newSize);
 }
 
 /**
- * Sao chép vùng nhớ (an toàn với các vùng nhớ chồng lấn).
+ * Sao chép vùng nhớ (Windows).
  */
-@unsafe
-export function copy(dst: rawPtr<void>, src: rawPtr<void>, size: i64): void {
-    @target_os("windows") {
-        RtlMoveMemory(dst, src, size);
-    }
-
-    @target_os("linux") {
-        memmove(dst, src, size);
-    }
+@target_os("windows")
+export @unsafe function copy(dst: rawPtr<void>, src: rawPtr<void>, size: i64): void {
+    RtlMoveMemory(dst, src, size);
 }
 
 /**
- * Điền giá trị vào vùng nhớ.
+ * Điền giá trị vào vùng nhớ (Windows).
  */
-@unsafe
-export function fill(p: rawPtr<void>, value: i8, size: i64): void {
-    @target_os("windows") {
-        RtlFillMemory(p, size, value);
-    }
+@target_os("windows")
+export @unsafe function fill(p: rawPtr<void>, value: i8, size: i64): void {
+    RtlFillMemory(p, size, value);
+}
 
-    @target_os("linux") {
-        memset(p, value, size);
-    }
+/** Utility Functions (OS Independent logic using raw pointer arithmetic) **/
+
+/**
+ * Trả về con trỏ mới với một khoảng offset (tính bằng byte).
+ */
+export @unsafe function offset(p: rawPtr<void>, bytes: i64): rawPtr<void> {
+    let addr: i64 = p;
+    let res: i64 = addr + bytes;
+    let pRes: rawPtr<void> = res;
+    return pRes;
+}
+
+/**
+ * Đọc 1 byte tại vị trí con trỏ + offset.
+ */
+export @unsafe function getByte(p: rawPtr<void>, i: i64): i8 {
+    let target = offset(p, i);
+    let ptrI8: rawPtr<i8> = target;
+    return ptrI8.get();
+}
+
+/**
+ * Ghi 1 byte vào vị trí con trỏ + offset.
+ */
+export @unsafe function setByte(p: rawPtr<void>, i: i64, value: i8): void {
+    let target = offset(p, i);
+    let ptrI8: rawPtr<i8> = target;
+    ptrI8.set(value);
 }

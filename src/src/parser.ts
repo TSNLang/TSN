@@ -480,10 +480,13 @@ export class Parser {
     this.consume(TokenKind.Semicolon, "Expected ';' in for condition");
     let update: Statement | undefined;
     if (!this.check(TokenKind.RParen)) {
-      const target = this.parseExpression();
-      this.consume(TokenKind.Equal, "Expected '=' in for update");
-      const value = this.parseExpression();
-      update = { kind: ASTKind.Assignment, target, value, line: target.line, column: target.column };
+      const expr = this.parseExpression();
+      if (this.match(TokenKind.Equal)) {
+        const value = this.parseExpression();
+        update = { kind: ASTKind.Assignment, target: expr, value, line: expr.line, column: expr.column };
+      } else {
+        update = { kind: ASTKind.ExprStmt, expr, line: expr.line, column: expr.column };
+      }
     }
     this.consume(TokenKind.RParen, "Expected ')'");
     let body: Statement[];
@@ -520,8 +523,38 @@ export class Parser {
     return left;
   }
   private parseLogicalAnd(): Expression {
-    let left = this.parseEquality();
+    let left = this.parseBitwiseOr();
     while (this.match(TokenKind.And)) {
+      const op = this.previous().text;
+      const right = this.parseBitwiseOr();
+      left = { kind: ASTKind.BinaryExpr, operator: op, left, right, line: left.line, column: left.column };
+    }
+    return left;
+  }
+
+  private parseBitwiseOr(): Expression {
+    let left = this.parseBitwiseXor();
+    while (this.match(TokenKind.Pipe)) {
+      const op = this.previous().text;
+      const right = this.parseBitwiseXor();
+      left = { kind: ASTKind.BinaryExpr, operator: op, left, right, line: left.line, column: left.column };
+    }
+    return left;
+  }
+
+  private parseBitwiseXor(): Expression {
+    let left = this.parseBitwiseAnd();
+    while (this.match(TokenKind.Caret)) {
+      const op = this.previous().text;
+      const right = this.parseBitwiseAnd();
+      left = { kind: ASTKind.BinaryExpr, operator: op, left, right, line: left.line, column: left.column };
+    }
+    return left;
+  }
+
+  private parseBitwiseAnd(): Expression {
+    let left = this.parseEquality();
+    while (this.match(TokenKind.Ampersand)) {
       const op = this.previous().text;
       const right = this.parseEquality();
       left = { kind: ASTKind.BinaryExpr, operator: op, left, right, line: left.line, column: left.column };
@@ -538,11 +571,21 @@ export class Parser {
     return left;
   }
   private parseComparison(): Expression {
-    let left = this.parseAdditive();
+    let left = this.parseShift();
     while (this.match(TokenKind.Less, TokenKind.LessEqual, TokenKind.Greater, TokenKind.GreaterEqual)) {
       const op = this.previous().text;
-      const right = this.parseAdditive();
+      const right = this.parseShift();
       left = { kind: ASTKind.BinaryExpr, operator: op, left, right, line: left.line, column: left.column };
+    }
+    return left;
+  }
+
+  private parseShift(): Expression {
+    let left = this.parseAdditive();
+    while (this.match(TokenKind.LessLess, TokenKind.GreaterGreater)) {
+       const op = this.previous().text;
+       const right = this.parseAdditive();
+       left = { kind: ASTKind.BinaryExpr, operator: op, left, right, line: left.line, column: left.column };
     }
     return left;
   }
@@ -565,7 +608,7 @@ export class Parser {
     return left;
   }
   private parseUnary(): Expression {
-    if (this.match(TokenKind.Not, TokenKind.Minus)) {
+    if (this.match(TokenKind.Not, TokenKind.Minus, TokenKind.Tilde)) {
       const token = this.previous();
       const operand = this.parseUnary();
       return { kind: ASTKind.UnaryExpr, operator: token.text, operand, line: token.line, column: token.column };
@@ -602,6 +645,12 @@ export class Parser {
           } catch (e) {
               this.pos = snapshot;
           }
+      }
+      
+      if (this.match(TokenKind.PlusPlus, TokenKind.MinusMinus)) {
+        const op = this.previous().text;
+        expr = { kind: ASTKind.UnaryExpr, operator: op, operand: expr, isPostfix: true, line: expr.line, column: expr.column };
+        continue;
       }
 
       if (this.match(TokenKind.LParen)) {

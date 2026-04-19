@@ -1,56 +1,153 @@
-@ffi.lib("c")
-declare function strlen(s: string): i32;
+import * as memory from "std:memory";
 
-@ffi.lib("c")
-declare function strcmp(s1: string, s2: string): i32;
-
-declare function string_length(s: string): i32;
-declare function string_byteLength(s: string): i32;
-declare function string_charCodeAt(s: string, index: i32): i32;
-declare function string_concat(a: string, b: string): string;
-declare function string_compare(a: string, b: string): i32;
-declare function string_substr(s: string, start: i32, len: i32): string;
-declare function string_includes(s: string, search: string): bool;
-declare function string_indexOf(s: string, search: string): i32;
-declare function string_startsWith(s: string, search: string): bool;
-declare function string_endsWith(s: string, search: string): bool;
-
-export function length(s: string): i32 {
-    return string_length(s);
+/**
+ * Độ dài tính bằng byte (không bao gồm null terminator).
+ */
+export @unsafe function byteLength(s: string): i32 {
+    if (s == null) return 0;
+    let p: rawPtr<void> = s;
+    let i: i32 = 0;
+    while (memory.getByte(p, i) != 0) {
+        i++;
+    }
+    return i;
 }
 
-export function byteLength(s: string): i32 {
-    return string_byteLength(s);
+/**
+ * Độ dài tính bằng số ký tự (hỗ trợ UTF-8).
+ */
+export @unsafe function length(s: string): i32 {
+    if (s == null) return 0;
+    let blen = byteLength(s);
+    let count = 0;
+    let p: rawPtr<void> = s;
+    for (let i = 0; i < blen; i++) {
+        let b = memory.getByte(p, i);
+        // UTF-8 lead byte: không phải là 10xxxxxx (0x80)
+        // Các byte nằm trong khoảng 0x80-0xBF là continuation bytes
+        if ((b & 0xc0) != 0x80) {
+            count++;
+        }
+    }
+    return count;
 }
 
-export function charCodeAt(s: string, index: i32): i32 {
-    return string_charCodeAt(s, index);
+/**
+ * Lấy mã code point của ký tự tại vị trí index.
+ */
+export @unsafe function charCodeAt(s: string, index: i32): i32 {
+    if (s == null) return 0;
+    let p: rawPtr<void> = s;
+    return memory.getByte(p, index);
 }
 
-export function concat(a: string, b: string): string {
-    return string_concat(a, b);
+/**
+ * Nối hai chuỗi.
+ */
+export @unsafe function concat(a: string, b: string): string {
+    let la = byteLength(a);
+    let lb = byteLength(b);
+    let total = la + lb;
+    
+    let buf = memory.alloc(total + 1);
+    if (buf == null) return "";
+    
+    if (la > 0) memory.copy(buf, a, la);
+    if (lb > 0) memory.copy(memory.offset(buf, la), b, lb);
+    
+    memory.setByte(buf, total, 0); // Null terminator
+    
+    let res: string = buf;
+    return res;
 }
 
-export function compare(a: string, b: string): i32 {
-    return string_compare(a, b);
+/**
+ * So sánh hai chuỗi. Trả về 0 nếu bằng nhau.
+ */
+export @unsafe function compare(a: string, b: string): i32 {
+    let pa: rawPtr<void> = a;
+    let pb: rawPtr<void> = b;
+    let i = 0;
+    
+    while (true) {
+        let ca = memory.getByte(pa, i);
+        let cb = memory.getByte(pb, i);
+        
+        if (ca != cb) return ca - cb;
+        if (ca == 0) return 0;
+        i++;
+    }
 }
 
-export function substr(s: string, start: i32, len: i32): string {
-    return string_substr(s, start, len);
+/**
+ * Trích xuất chuỗi con (tính theo byte).
+ */
+export @unsafe function substr(s: string, start: i32, len: i32): string {
+    if (s == null) return "";
+    let buf = memory.alloc(len + 1);
+    if (buf == null) return "";
+    
+    memory.copy(buf, memory.offset(s, start), len);
+    memory.setByte(buf, len, 0);
+    
+    let res: string = buf;
+    return res;
 }
 
-export function includes(s: string, search: string): bool {
-    return string_includes(s, search);
+/**
+ * Kiểm tra chuỗi con ở vị trí bắt đầu.
+ */
+export @unsafe function startsWith(s: string, search: string): bool {
+    let slen = byteLength(s);
+    let nlen = byteLength(search);
+    if (nlen > slen) return false;
+    
+    for (let i = 0; i < nlen; i++) {
+        if (memory.getByte(s, i) != memory.getByte(search, i)) return false;
+    }
+    return true;
 }
 
-export function indexOf(s: string, search: string): i32 {
-    return string_indexOf(s, search);
+/**
+ * Kiểm tra chuỗi con ở vị trí kết thúc.
+ */
+export @unsafe function endsWith(s: string, search: string): bool {
+    let slen = byteLength(s);
+    let nlen = byteLength(search);
+    if (nlen > slen) return false;
+    
+    let offset = slen - nlen;
+    for (let i = 0; i < nlen; i++) {
+        if (memory.getByte(s, offset + i) != memory.getByte(search, i)) return false;
+    }
+    return true;
 }
 
-export function startsWith(s: string, search: string): bool {
-    return string_startsWith(s, search);
+/**
+ * Tìm vị trí đầu tiên của chuỗi con.
+ */
+export @unsafe function indexOf(s: string, search: string): i32 {
+    let slen = byteLength(s);
+    let nlen = byteLength(search);
+    if (nlen == 0) return 0;
+    if (nlen > slen) return -1;
+    
+    for (let i = 0; i <= slen - nlen; i++) {
+        let match = true;
+        for (let j = 0; j < nlen; j++) {
+            if (memory.getByte(s, i + j) != memory.getByte(search, j)) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return i;
+    }
+    return -1;
 }
 
-export function endsWith(s: string, search: string): bool {
-    return string_endsWith(s, search);
+/**
+ * Kiểm tra chuỗi có chứa chuỗi con không.
+ */
+export @unsafe function includes(s: string, search: string): bool {
+    return indexOf(s, search) != -1;
 }

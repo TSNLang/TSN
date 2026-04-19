@@ -43,7 +43,9 @@ export enum TokenKind {
   
   // Operators
   Plus = '+',
+  PlusPlus = '++',
   Minus = '-',
+  MinusMinus = '--',
   Star = '*',
   Slash = '/',
   Percent = '%',
@@ -56,8 +58,13 @@ export enum TokenKind {
   GreaterEqual = '>=',
   And = '&&',
   Or = '||',
-    Not = '!',
+  Not = '!',
   Pipe = '|',
+  Ampersand = '&',
+  Caret = '^',
+  Tilde = '~',
+  LessLess = '<<',
+  GreaterGreater = '>>',
   
   // Punctuation
   LParen = '(',
@@ -176,6 +183,7 @@ export interface UnaryExpr extends ASTNode {
   kind: ASTKind.UnaryExpr;
   operator: string;
   operand: Expression;
+  isPostfix?: boolean;
 }
 
 export interface CallExpr extends ASTNode {

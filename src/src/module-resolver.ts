@@ -53,11 +53,6 @@ export interface ModuleExports {
 // Standard library module definitions
 // These remain hardcoded until they are moved into TSN stdlib modules
 const STD_MODULES: Record<string, ExportedSymbol[]> = {
-  'std:memory': [
-    { name: 'alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] },
-    { name: 'free',  kind: 'function', llvmType: 'void', paramTypes: ['ptr'] },
-    { name: 'copy',  kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'ptr', 'i32'] },
-  ],
 };
 
 export class ModuleResolver {
@@ -152,6 +147,7 @@ export class ModuleResolver {
     const stdPath = `src/std/${stdName}.tsn`;
     
     try {
+        console.log(`🔍 Loading std module from: ${stdPath}`);
         const content = readFileSync(stdPath, 'utf8');
         const lexer = new Lexer(content);
         const tokens = lexer.tokenize();
@@ -180,6 +176,14 @@ export class ModuleResolver {
                   llvmType: toLLVMTypeName(f.returnType),
                   paramTypes: f.params.map((p) => toLLVMTypeName(p.type)),
                   ast: f,
+                });
+            } else if (decl.kind === ASTKind.VarDecl) {
+                const v = decl as VarDecl;
+                symbols.push({
+                    name: v.name,
+                    kind: v.isConst ? 'const' : 'let',
+                    varType: toLLVMTypeName(v.type || { name: 'i32' } as any),
+                    ast: v
                 });
             }
         }

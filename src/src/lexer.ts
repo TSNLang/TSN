@@ -65,8 +65,12 @@ export class Lexer {
       '!=': TokenKind.NotEqual,
       '<=': TokenKind.LessEqual,
       '>=': TokenKind.GreaterEqual,
+      '++': TokenKind.PlusPlus,
+      '--': TokenKind.MinusMinus,
       '&&': TokenKind.And,
       '||': TokenKind.Or,
+      '<<': TokenKind.LessLess,
+      '>>': TokenKind.GreaterGreater,
       '->': TokenKind.Arrow,
     };
 
@@ -93,6 +97,19 @@ export class Lexer {
   private readNumber(line: number, column: number): Token {
     let text = '';
     const start = this.pos;
+
+    // Hexadecimal: 0x...
+    if (this.current() === '0' && (this.peek() === 'x' || this.peek() === 'X')) {
+      text += '0x';
+      this.advance(); // 0
+      this.advance(); // x
+      while (this.pos < this.source.length && this.isHexDigit(this.current())) {
+        text += this.current();
+        this.advance();
+      }
+      return { kind: TokenKind.Number, text, line, column, length: this.pos - start };
+    }
+
     while (this.pos < this.source.length && this.isDigit(this.current())) {
       text += this.current();
       this.advance();
@@ -179,6 +196,7 @@ export class Lexer {
       '!': TokenKind.Not, '(': TokenKind.LParen, ')': TokenKind.RParen, '{': TokenKind.LBrace,
       '}': TokenKind.RBrace, '[': TokenKind.LBracket, ']': TokenKind.RBracket, ';': TokenKind.Semicolon,
       '@': TokenKind.At, ':': TokenKind.Colon, ',': TokenKind.Comma, '.': TokenKind.Dot, '|': TokenKind.Pipe,
+      '&': TokenKind.Ampersand, '^': TokenKind.Caret, '~': TokenKind.Tilde,
     };
 
     const kind = map[ch];
@@ -268,5 +286,8 @@ export class Lexer {
   private isDigit(ch: string): boolean { return ch >= '0' && ch <= '9'; }
   private isAlpha(ch: string): boolean {
     return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_';
+  }
+  private isHexDigit(ch: string): boolean {
+    return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
   }
 }

@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.16.5--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.16.6--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -21,6 +21,16 @@
 **TSN** is a systems programming language that maintains the elegant syntax of TypeScript while compiling directly to native code via **LLVM IR**.
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
+
+## 🚀 Version 0.16.6-indev: Complete Native Memory & String Module
+
+TSN 0.16.6 marks a major milestone by completely isolating string and memory operations from the C Runtime, implementing them purely via native OS APIs and direct memory manipulation.
+
+Key highlights:
+- **Native `std:memory`:** Full implementation using Win32 Heap API (`HeapAlloc`, etc.) along with raw pointer manipulation (`rawPtr<T>.get()` and `rawPtr<T>.set(value)`).
+- **Refactored `std:string`:** Completely rewritten to be C-string independent. Incorporates full UTF-8 capabilities for length evaluation and native functions for string arithmetic.
+- **Compiler Expansions:** Introduced support for bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`), hexadecimal literals (`0x`), and increment/decrement operators (`++`, `--`).
+- **FFI Enhancements:** The LLVM IR generator now automatically handles external `declare` function bindings correctly for seamless API integration.
 
 ## 🚀 Version 0.16.5-indev: native std:memory & CRuntime removal
 
