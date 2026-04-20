@@ -1,0 +1,54 @@
+import * as memory from "std:memory";
+import { Iterator } from "std:iterator";
+import { Optional, Some, None } from "std:option";
+import { Array } from "std:array";
+
+@ffi.lib("")
+declare
+function os_get_argc(): i32;
+
+@ffi.lib("")
+declare
+function os_get_argv(): rawPtr<void>;
+
+export class ArgsIterator implements Iterator<string> {
+    private argc: i32;
+    private argv: rawPtr<void>;
+    private index: i32;
+
+    constructor() {
+        this.argc = os_get_argc();
+        this.argv = os_get_argv();
+        this.index = 0;
+    }
+
+    next(): Optional<string> {
+        if (this.index >= this.argc) {
+            return None<string>();
+        }
+        
+        let ptrOffset = (this.index as i64) * 8;
+        let strPtr = memory.getPointer(this.argv, ptrOffset);
+        
+        let s: string = strPtr as string;
+        
+        this.index = this.index + 1;
+        return Some<string>(s);
+    }
+
+    
+    // Tạm thời để thay thế [...iterator] giống như .collect() của Rust
+    toArray(): Array<string> {
+        let arr = new Array<string>();
+        while (true) {
+            let opt = this.next();
+            if (opt.isNone()) break;
+            arr.push(opt.unwrap());
+        }
+        return arr;
+    }
+}
+
+export function args(): ArgsIterator {
+    return new ArgsIterator();
+}

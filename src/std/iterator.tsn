@@ -1,0 +1,6 @@
+import { Optional } from "std:option";
+
+// The core Iterator interface
+export interface Iterator<T> {
+    next(): Optional<T>;
+}

@@ -127,8 +127,12 @@ export class CodeGenerator {
   generate(program: Program): string {
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
     this.externalDecls = []; this.exportedSymbols = [];
+    this.emittedVTables.clear();
     this.globalBuffer = []; this.currentOutput = null;
+    this.globalBuffer.push('@__tsn_argc = global i32 0, align 4');
+    this.globalBuffer.push('@__tsn_argv = global ptr null, align 8');
     this.importedSymbols.clear(); this.importedModules.clear(); this.includedModulePaths.clear();
+
 
     // PRE-SCAN: Collect all signatures
     for (const decl of program.declarations) this.preScanDeclaration(decl);
@@ -549,8 +553,14 @@ export class CodeGenerator {
     }
 
     const llvmRt = this.isCurrentMain ? 'i32' : this.toLLVMType(rt);
-    this.emit(`define ${llvmRt} @${mName}(${paramsStr}) {`);
+    const finalParamsStr = this.isCurrentMain ? 'i32 %argc, ptr %argv' : paramsStr;
+    this.emit(`define ${llvmRt} @${mName}(${finalParamsStr}) {`);
     this.emit('entry:'); this.indent++;
+
+    if (this.isCurrentMain) {
+      this.emit(`store i32 %argc, ptr @__tsn_argc, align 4`);
+      this.emit(`store ptr %argv, ptr @__tsn_argv, align 8`);
+    }
 
     if (isMethod) {
       this.emit(`%this.addr = alloca ptr, align 8`);
@@ -613,6 +623,58 @@ export class CodeGenerator {
     return vars;
   }
 
+  private inferExprType(e: Expression): string {
+      if (e.kind === ASTKind.Identifier) {
+          const id = (e as Identifier).name;
+          return this.localVarTypes.get(id) || (this.currentFunctionParams.has(id) ? this.currentFunctionParamTypes.get(id)! : 'i32');
+      }
+      if (e.kind === ASTKind.ThisExpr) return `%${this.currentClassName}`;
+      if (e.kind === ASTKind.CallExpr) {
+          const ce = e as CallExpr;
+          if (ce.callee.kind === ASTKind.Identifier) {
+              const name = (ce.callee as Identifier).name;
+              const info = this.functions.get(this.resolveMangledName(name)) || this.functions.get(name);
+              return info ? info.returnType : 'i32';
+          }
+          if (ce.callee.kind === ASTKind.MemberExpr) {
+              const m = ce.callee as MemberExpr;
+              let objType = this.inferExprType(m.object);
+              
+              if (!objType || objType === 'i32') {
+                  if (m.object.kind === ASTKind.Identifier) {
+                      const id = (m.object as Identifier).name;
+                      const fullName = `${id}.${m.member}`;
+                      const imported = this.importedSymbols.get(fullName);
+                      if (imported) {
+                          if (ce.genericArgs && ce.genericArgs.length > 0 && imported.ast) {
+                              const instName = this.instantiateFunction(fullName, ce.genericArgs);
+                              const info = this.functions.get(instName);
+                              if (info) return info.returnType;
+                          }
+                          return imported.llvmType || 'i32';
+                      }
+                  }
+              }
+              
+              if (objType && this.isClassType(objType)) {
+                  const className = objType.startsWith('%') ? objType.substring(1) : objType;
+                  const cls = this.classDecls.get(className);
+                  if (cls) {
+                      const method = cls.methods.find(x => x.name === m.member);
+                      if (method) return this.getLLVMType(method.returnType);
+                  }
+              }
+          }
+      }
+      if (e.kind === ASTKind.StringLiteral) return 'string';
+      if (e.kind === ASTKind.NewExpr) {
+          const ne = e as NewExpr;
+          if (ne.genericArgs && ne.genericArgs.length > 0) return `%${this.instantiateClass(ne.className, ne.genericArgs)}`;
+          return `%${ne.className}`;
+      }
+      return 'i32';
+  }
+
   private collectVarDeclsFromStmt(s: Statement, out: { name: string; llvmType: string }[]): void {
     switch (s.kind) {
       case ASTKind.VarDecl: {
@@ -620,40 +682,8 @@ export class CodeGenerator {
         let lt = 'i32';
         if (v.type) {
             lt = this.getLLVMType(v.type);
-        }
-        else if (v.init && v.init.kind === ASTKind.NewExpr) {
-            const ne = v.init as NewExpr;
-            if (ne.genericArgs && ne.genericArgs.length > 0) {
-                lt = `%${this.instantiateClass(ne.className, ne.genericArgs)}`;
-            } else {
-                lt = `%${ne.className}`;
-            }
-        }
-        else if (v.init && v.init.kind === ASTKind.StringLiteral) lt = 'string';
-        else if (v.init && v.init.kind === ASTKind.Identifier) {
-           const id = (v.init as Identifier).name;
-           const it = this.localVarTypes.get(id) || (this.currentFunctionParams.has(id) ? this.currentFunctionParamTypes.get(id) : 'i32');
-           if (it) lt = it;
-        } else if (v.init && v.init.kind === ASTKind.CallExpr) {
-           const ce = v.init as CallExpr;
-           if (ce.callee.kind === ASTKind.Identifier) {
-               const name = (ce.callee as Identifier).name;
-               const info = this.functions.get(this.resolveMangledName(name)) || this.functions.get(name);
-               if (info) lt = info.returnType;
-           } else if (ce.callee.kind === ASTKind.MemberExpr) {
-               const m = ce.callee as MemberExpr;
-               if (m.object.kind === ASTKind.Identifier) {
-                  const fullName = `${(m.object as Identifier).name}.${m.member}`;
-                  const imported = this.importedSymbols.get(fullName);
-                  if (imported) {
-                      if (ce.genericArgs && ce.genericArgs.length > 0 && imported.ast) {
-                          const instName = this.instantiateFunction(fullName, ce.genericArgs);
-                          const info = this.functions.get(instName);
-                          if (info) lt = info.returnType;
-                      } else lt = imported.llvmType || 'i32';
-                  }
-               }
-           }
+        } else if (v.init) {
+            lt = this.inferExprType(v.init);
         }
         
         out.push({ name: v.name, llvmType: lt });
@@ -938,7 +968,7 @@ export class CodeGenerator {
     const st = this.structs.get(className);
     if (!st) return 'null';
     // 1. Alloc memory
-    const size = this.getTypeSize(`%${className}`);
+    const size = this.getTypeSize(`%${className}`, true);
     const ptr = this.newTemp();
     this.ensureExternalDeclaration('class_alloc', { name: 'class_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] });
     this.emit(`${ptr} = call ptr @class_alloc(i32 ${size})`);
@@ -1622,7 +1652,7 @@ export class CodeGenerator {
       'ptr': 'ptr', 'rawPtr': 'ptr'
     };
     if (map[n]) return map[n];
-    if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return 'ptr';
+    if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return `%${n}`;
     if (this.structDecls.has(n)) return `%${n}`;
     return (n === 'string') ? 'ptr' : 'i32';
   }
@@ -1630,6 +1660,11 @@ export class CodeGenerator {
   private isClassType(llvmType: string): boolean {
     const name = llvmType.startsWith('%') ? llvmType.substring(1) : llvmType;
     return this.classDecls.has(name);
+  }
+
+  private isInterfaceType(llvmType: string): boolean {
+    const name = llvmType.startsWith('%') ? llvmType.substring(1) : llvmType;
+    return this.interfaceDecls.has(name);
   }
 
   private isStructType(llvmType: string): boolean {
@@ -1652,9 +1687,11 @@ export class CodeGenerator {
   }
 
   private toLLVMType(t: string): string {
-    if (this.isPointerType(t)) return 'ptr';
+    if (this.isPointerType(t) || this.isClassType(t)) return 'ptr';
+    if (t.startsWith('%') && this.interfaceDecls.has(t.substring(1))) return 'ptr';
     return t;
   }
+
 
   private generateAutoAllocation(targetPtr: string, val: string, innerType: string): string {
     const size = this.getTypeSize(innerType);
@@ -1681,13 +1718,14 @@ export class CodeGenerator {
 
   private getAlignment(t: string): number { 
       if (t === 'i128') return 16;
-      if (t === 'i64' || this.isPointerType(t) || t === 'double') return 8;
+      if (t === 'i64' || this.isPointerType(t) || this.isClassType(t) || this.isInterfaceType(t) || t === 'double') return 8;
       return 4; 
   }
   
-  private getTypeSize(t: string): number {
+  private getTypeSize(t: string, asStruct: boolean = false): number {
     if (t === 'i128') return 16;
     if (t === 'i64' || this.isPointerType(t) || t === 'double') return 8;
+    if (!asStruct && (this.isClassType(t) || this.isInterfaceType(t))) return 8;
     if (t === 'i32' || t === 'f32' || t === 'float') return 4;
     if (t === 'i16' || t === 'f16' || t === 'half' || t === 'bfloat') return 2;
     if (t === 'i8' || t === 'i1') return 1;
@@ -1811,6 +1849,17 @@ export class CodeGenerator {
     if (s === 'ptr' && d.startsWith('i')) {
         const t = this.newTemp(); this.emit(`${t} = ptrtoint ptr ${v} to ${d}`); this.tempTypes.set(t, d); return t;
     }
+    
+    // Integer to Pointer
+    if (s.startsWith('i') && d === 'ptr') {
+        const t = this.newTemp(); this.emit(`${t} = inttoptr ${s} ${v} to ptr`); this.tempTypes.set(t, d); return t;
+    }
+
+
+    // Pointer to Integer
+    if (s === 'ptr' && d.startsWith('i')) {
+        const t = this.newTemp(); this.emit(`${t} = ptrtoint ptr ${v} to ${d}`); this.tempTypes.set(t, d); return t;
+    }
     // Integer to Pointer
     if (s.startsWith('i') && d === 'ptr') {
         const t = this.newTemp(); this.emit(`${t} = inttoptr ${s} ${v} to ptr`); this.tempTypes.set(t, d); return t;
@@ -1827,6 +1876,8 @@ export class CodeGenerator {
   private emit(l: string): void { (this.currentOutput ?? this.output).push('  '.repeat(this.indent) + l); }
 
   private buildVTable(c: ClassDecl, customName?: string): void {
+      if (c.typeParameters && c.typeParameters.length > 0) return;
+
       const className = customName || c.name;
       if (this.vTables.has(className)) return;
 
@@ -1886,7 +1937,11 @@ export class CodeGenerator {
       return res;
   }
 
+  private emittedVTables: Set<string> = new Set();
   private generateVTable(v: VTableInfo): void {
+      if (this.emittedVTables.has(v.className)) return;
+      this.emittedVTables.add(v.className);
+      
       if (v.mangledNames.length === 0) {
           this.emit(`@_VTable.${v.className} = private constant [1 x ptr] [ptr null], align 8`);
           return;
@@ -2033,9 +2088,12 @@ export class CodeGenerator {
       if (Array.isArray(node)) return node.map(n => this.cloneAndReplace(n, typeMap));
 
       // If it's a TypeAnnotation, check if it's a generic parameter
-      if (node.name && typeof node.name === 'string' && typeMap.has(node.name) && node.isPointer === false && node.isArray === false) {
+      if (node.name && typeof node.name === 'string' && typeMap.has(node.name)) {
           const replacement = typeMap.get(node.name)!;
-          return { ...node, name: replacement.name, isPointer: replacement.isPointer, isArray: replacement.isArray, arraySize: replacement.arraySize, genericArgs: replacement.genericArgs };
+          if (node.isPointer || node.isArray) {
+              return { ...node, name: replacement.name };
+          }
+          return { ...node, name: replacement.name, isPointer: replacement.isPointer, isArray: replacement.isArray, arraySize: replacement.arraySize, typeArguments: replacement.typeArguments };
       }
 
       const newNode: any = { ...node };

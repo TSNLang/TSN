@@ -166,3 +166,18 @@ void print_f32(float n) {
 void print_f64(double n) {
     printf("%lf\n", n);
 }
+
+// ============================================================================
+// OS Arguments Support
+// ============================================================================
+extern int __tsn_argc;
+extern char** __tsn_argv;
+
+int os_get_argc() {
+    return __tsn_argc;
+}
+
+char** os_get_argv() {
+    return __tsn_argv;
+}
+

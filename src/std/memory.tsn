@@ -107,3 +107,14 @@ export @unsafe function setByte(p: rawPtr<void>, i: i64, value: i8): void {
     let ptrI8: rawPtr<i8> = target;
     ptrI8.set(value);
 }
+
+/**
+ * Đọc một con trỏ 64-bit từ vị trí con trỏ hiện tại + offset.
+ */
+export @unsafe function getPointer(p: rawPtr<void>, i: i64): rawPtr<void> {
+    let target = offset(p, i);
+    let ptrI64: rawPtr<i64> = target;
+    let addr: i64 = ptrI64.get();
+    let res: rawPtr<void> = addr;
+    return res;
+}

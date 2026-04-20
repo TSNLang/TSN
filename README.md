@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.16.8--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.16.9--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -21,6 +21,17 @@
 **TSN** is a systems programming language that maintains the elegant syntax of TypeScript while compiling directly to native code via **LLVM IR**.
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
+
+## 🚀 Version 0.16.9-indev: std:os Iterators & Type Inference Engine
+
+TSN 0.16.9 implements standard OS modules, generic typing engine stabilization, and recursive expression inference processing.
+
+Key highlights:
+- **Recursive Type Inference**: Upgraded `inferExprType` to correctly dive deeply into chained method calls (ex: `os.args().toArray()`), accurately mapping their real object signatures.
+- **Generic VTable Shield**: Blocked uninitialized generic templates from emitting undefined/false LLVM IR tables which corrupt the Linker phase.
+- **Struct Memory Footprint Calculations**: Heavily updated `getTypeSize` so objects evaluated via FFI/`class_alloc` are treated as comprehensive memory clusters instead of simplified 8-byte pointer chunks.
+- **Deep Type Cloning in Arrays**: Eliminated parameter slicing when instantiating parameter templates (`<T>`) within wrappers like `rawPtr<T>`, preserving explicit memory boundaries over integers.
+- **`std:os` Command-Line Args Wrapper**: Implemented an overarching `os.args()` loop capable of exporting string elements securely via `ArgsIterator` and `Array<string>`.
 
 ## 🚀 Version 0.16.8-indev: std:time & Compiler Stabilization
 
