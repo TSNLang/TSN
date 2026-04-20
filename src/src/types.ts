@@ -40,6 +40,7 @@ export enum TokenKind {
   Extends = 'EXTENDS',
   Implements = 'IMPLEMENTS',
   Undefined = 'UNDEFINED',
+  Sizeof = 'SIZEOF',
   
   // Operators
   Plus = '+',
@@ -112,6 +113,8 @@ export enum ASTKind {
   SuperExpr = 'SuperExpr',
   TupleExpr = 'TupleExpr',
   UndefinedLiteral = 'UndefinedLiteral',
+  SizeofExpr = 'SizeofExpr',
+  CastExpr = 'CastExpr',
   
   // Statements
   VarDecl = 'VarDecl',
@@ -208,6 +211,17 @@ export interface MemberExpr extends ASTNode {
 export interface AddressofExpr extends ASTNode {
   kind: ASTKind.AddressofExpr;
   operand: Expression;
+}
+
+export interface SizeofExpr extends ASTNode {
+  kind: ASTKind.SizeofExpr;
+  targetType: TypeAnnotation;
+}
+
+export interface CastExpr extends ASTNode {
+  kind: ASTKind.CastExpr;
+  expr: Expression;
+  targetType: TypeAnnotation;
 }
 
 export interface NewExpr extends ASTNode {

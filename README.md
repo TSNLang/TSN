@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.16.6--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.16.7--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -21,6 +21,16 @@
 **TSN** is a systems programming language that maintains the elegant syntax of TypeScript while compiling directly to native code via **LLVM IR**.
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
+
+## 🚀 Version 0.16.7-indev: Dynamic Array<T> & Compiler sizeof
+
+TSN 0.16.7 introduces the first native dynamic collection and advanced compiler features.
+
+Key highlights:
+- **`std:array` Module**: Introduced `Array<T>` generic class for dynamic, resizable arrays.
+- **Static vs Dynamic**: Clarified `T[]` as static-size buffer and `Array<T>` as dynamic-size collection.
+- **Compiler `sizeof`**: Added support for `sizeof(Type)` operator to compute memory layout sizes at compile time.
+- **Implicit Casts**: Improved i32 to i64 implicit promotion for better compatibility with memory APIs.
 
 ## 🚀 Version 0.16.6-indev: Complete Native Memory & String Module
 

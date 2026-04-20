@@ -169,6 +169,7 @@ export class CodeGenerator {
   }
 
   private preScanDeclaration(decl: Declaration): void {
+    console.log(`DEBUG: preScanDeclaration processing ${decl.kind}`);
     if (decl.kind === ASTKind.ImportDecl) this.processImport(decl as ImportDecl);
     else if (decl.kind === ASTKind.TypeAliasDecl) this.typeAliases.set((decl as TypeAliasDecl).name, (decl as TypeAliasDecl).type);
     else if (decl.kind === ASTKind.VarDecl) {
@@ -239,7 +240,10 @@ export class CodeGenerator {
   private generateStructsRecursive(decl: Declaration): void {
     if (decl.kind === ASTKind.InterfaceDecl) this.generateInterface(decl as InterfaceDecl);
     else if (decl.kind === ASTKind.StructDecl) this.generateStruct(decl as StructDecl);
-    else if (decl.kind === ASTKind.ClassDecl) this.generateClassStruct(decl as ClassDecl);
+    else if (decl.kind === ASTKind.ClassDecl) {
+      const c = decl as ClassDecl;
+      if (c.typeParameters.length === 0) this.generateClassStruct(c);
+    }
     else if (decl.kind === ASTKind.NamespaceDecl) { for (const sub of (decl as NamespaceDecl).body) this.generateStructsRecursive(sub); }
     else if (decl.kind === ASTKind.ExportDecl) this.generateStructsRecursive((decl as ExportDecl).declaration);
   }
@@ -265,17 +269,27 @@ export class CodeGenerator {
   }
 
   private generateGlobalsRecursive(decl: Declaration): void {
-    if (decl.kind === ASTKind.VarDecl) this.generateGlobalConst(decl as VarDecl);
+    if (decl.kind === ASTKind.VarDecl) {
+        this.generateGlobalConst(decl as VarDecl);
+    }
     else if (decl.kind === ASTKind.NamespaceDecl) {
       this.scopeStack.push((decl as NamespaceDecl).name);
       for (const sub of (decl as NamespaceDecl).body) this.generateGlobalsRecursive(sub);
       this.scopeStack.pop();
-    } else if (decl.kind === ASTKind.ExportDecl) this.generateGlobalsRecursive((decl as ExportDecl).declaration);
+    } else if (decl.kind === ASTKind.ExportDecl) {
+        this.generateGlobalsRecursive((decl as ExportDecl).declaration);
+    } else {
+        const name = (decl as any).name || 'unnamed';
+        console.log(`DEBUG: generateGlobalsRecursive processing ${decl.kind} (${name})`);
+    }
   }
 
   private generateFunctionsRecursive(decl: Declaration): void {
     if (decl.kind === ASTKind.FunctionDecl) this.generateFunction(decl as FunctionDecl);
-    else if (decl.kind === ASTKind.ClassDecl) this.generateClassMethods(decl as ClassDecl);
+    else if (decl.kind === ASTKind.ClassDecl) {
+      const c = decl as ClassDecl;
+      if (c.typeParameters.length === 0) this.generateClassMethods(c);
+    }
     else if (decl.kind === ASTKind.NamespaceDecl) {
       this.scopeStack.push((decl as NamespaceDecl).name);
       for (const sub of (decl as NamespaceDecl).body) this.generateFunctionsRecursive(sub);
@@ -326,7 +340,9 @@ export class CodeGenerator {
   }
 
   private generateClassMethods(c: ClassDecl): void {
-    this.scopeStack.push(c.name); this.currentClassName = c.name;
+    const oldScope = this.scopeStack;
+    const oldName = this.currentClassName;
+    this.scopeStack = [c.name]; this.currentClassName = c.name;
     if (c.constructorDecl) {
       const fn = { 
         name: 'constructor', 
@@ -334,6 +350,7 @@ export class CodeGenerator {
         returnType: { name: 'void', isPointer: false, isArray: false }, 
         body: c.constructorDecl.body, 
         isDeclare: false, 
+        isUnsafe: !!c.constructorDecl.isUnsafe,
         kind: ASTKind.FunctionDecl 
       } as any;
       this.generateFunction(fn, true);
@@ -345,11 +362,12 @@ export class CodeGenerator {
         params: m.params, 
         returnType: m.returnType, 
         body: m.body, 
+        isUnsafe: !!m.isUnsafe,
         isDeclare: false 
       } as any;
       this.generateFunction(fn, true);
     }
-    this.currentClassName = null; this.scopeStack.pop();
+    this.currentClassName = oldName; this.scopeStack = oldScope;
   }
 
   private processImport(decl: ImportDecl): void {
@@ -426,7 +444,12 @@ export class CodeGenerator {
   private generateGlobalConst(decl: VarDecl): void {
     const t = decl.type ? this.getLLVMType(decl.type) : 'i32';
     const mName = this.scopeStack.length > 0 ? this.scopeStack.join('_') + '_' + decl.name : decl.name;
-    const isPointerLike = !!decl.type && (decl.type.isPointer || decl.type.name === 'string');
+    const isPointerLike = !!decl.type && (decl.type.isPointer || decl.type.isRawPointer || decl.type.name === 'string' || decl.type.name === 'ptr' || t === 'ptr');
+    
+    if (this.scopeStack.length === 0 && decl.name === 'p') {
+        console.log(`DEBUG: Generating global 'p'. scopeStack is empty! Source: ${decl.line}:${decl.column}`);
+    }
+
     if (decl.type?.isArray) {
       const size = decl.type.arraySize || 0, et = this.getLLVMType({ name: decl.type.name, isPointer: false, isArray: false });
       this.globals.set(decl.name, { name: mName, type: `[${size} x ${et}]`, isConst: decl.isConst });
@@ -468,15 +491,22 @@ export class CodeGenerator {
 
     const oldRet = this.currentFunctionReturnType, oldParams = this.currentFunctionParams, oldParamTypes = this.currentFunctionParamTypes;
     const oldHoisted = this.hoistedVars, oldLocalVarTypes = this.localVarTypes;
-    const oldUnsafe = this.isUnsafeContext;
+    const oldUnsafe = this.isUnsafeContext, oldClassName = this.currentClassName;
 
     this.isUnsafeContext = !!decl.isUnsafe;
 
-    this.currentFunctionParams.clear(); this.currentFunctionParamTypes.clear();
-    this.currentFunctionReturnType = rt; this.hoistedVars.clear(); this.localVarTypes.clear();
+    this.currentFunctionParams = new Set();
+    this.currentFunctionParamTypes = new Map();
+    this.currentFunctionReturnType = rt;
+    this.hoistedVars = new Set();
+    this.localVarTypes = new Map();
     this.cleanupStack.push(new Set());
+    this.scopeStack.push(decl.name);
 
-    if (isMethod) { this.currentFunctionParams.add('this'); this.currentFunctionParamTypes.set('this', 'ptr'); }
+    if (isMethod) { 
+        this.currentFunctionParams.add('this'); 
+        this.currentFunctionParamTypes.set('this', `%${this.currentClassName}`); 
+    }
     for (const p of decl.params) { 
       this.currentFunctionParams.add(p.name); 
       const pt = p.type.name === 'string' ? 'string' : this.getLLVMType(p.type);
@@ -526,15 +556,17 @@ export class CodeGenerator {
       if (rt === 'void') this.emit('ret void');
       else this.emit(`ret ${rt} 0`);
     }
-    this.indent--; this.emit('}'); this.emit('');
-
     this.cleanupStack.pop();
-    this.isUnsafeContext = oldUnsafe;
     this.currentFunctionReturnType = oldRet;
     this.currentFunctionParams = oldParams;
     this.currentFunctionParamTypes = oldParamTypes;
     this.hoistedVars = oldHoisted;
     this.localVarTypes = oldLocalVarTypes;
+    this.isUnsafeContext = oldUnsafe;
+    this.currentClassName = oldClassName;
+    this.scopeStack.pop();
+    this.indent--;
+    this.emit('}\n');
   }
 
   private collectVarDecls(stmts: Statement[]): { name: string; llvmType: string }[] {
@@ -551,7 +583,14 @@ export class CodeGenerator {
         if (v.type) {
             lt = this.getLLVMType(v.type);
         }
-        else if (v.init && v.init.kind === ASTKind.NewExpr) lt = `%${(v.init as NewExpr).className}`;
+        else if (v.init && v.init.kind === ASTKind.NewExpr) {
+            const ne = v.init as NewExpr;
+            if (ne.genericArgs && ne.genericArgs.length > 0) {
+                lt = `%${this.instantiateClass(ne.className, ne.genericArgs)}`;
+            } else {
+                lt = `%${ne.className}`;
+            }
+        }
         else if (v.init && v.init.kind === ASTKind.StringLiteral) lt = 'string';
         else if (v.init && v.init.kind === ASTKind.Identifier) {
            const id = (v.init as Identifier).name;
@@ -671,7 +710,7 @@ export class CodeGenerator {
       
       const fPtr = this.newTemp();
       this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
-      this.emit(`store ${fieldType} ${this.coerceToType(val, vt, fieldType)}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
+      this.emit(`store ${this.toLLVMType(fieldType)} ${this.coerceToType(val, vt, fieldType)}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
       return;
     }
     
@@ -701,9 +740,9 @@ export class CodeGenerator {
           }
       } else {
           const lType = this.toLLVMType(lt);
-          if (global) this.emit(`store ${lType} ${this.coerceToType(val, vt, lType)}, ptr @${global.name}, align 4`);
-          else if (this.currentFunctionParams.has(id)) this.emit(`store ${lType} ${this.coerceToType(val, vt, lType)}, ptr %${id}.addr, align 4`);
-          else this.emit(`store ${lType} ${this.coerceToType(val, vt, lType)}, ptr %${id}, align ${this.getAlignment(lt)}`);
+          if (global) this.emit(`store ${this.toLLVMType(lType)} ${this.coerceToType(val, vt, lType)}, ptr @${global.name}, align 4`);
+          else if (this.currentFunctionParams.has(id)) this.emit(`store ${this.toLLVMType(lType)} ${this.coerceToType(val, vt, lType)}, ptr %${id}.addr, align 4`);
+          else this.emit(`store ${this.toLLVMType(lType)} ${this.coerceToType(val, vt, lType)}, ptr %${id}, align ${this.getAlignment(lt)}`);
       }
       return;
     }
@@ -719,7 +758,7 @@ export class CodeGenerator {
 
     if (finalVal) {
       const rt = this.toLLVMType(this.currentFunctionReturnType);
-      this.emit(`ret ${rt} ${this.coerceToType(finalVal, this.getValueType(finalVal), this.currentFunctionReturnType)}`);
+      this.emit(`ret ${this.toLLVMType(rt)} ${this.coerceToType(finalVal, this.getValueType(finalVal), this.currentFunctionReturnType)}`);
     } else this.emit('ret void');
   }
 
@@ -795,8 +834,19 @@ export class CodeGenerator {
       case ASTKind.IndexExpr: return this.generateIndexExpr(e as IndexExpr);
       case ASTKind.MemberExpr: return this.generateMemberExpr(e as MemberExpr);
       case ASTKind.AddressofExpr: return this.generateAddressof(e as AddressofExpr);
+      case ASTKind.SizeofExpr: return this.generateSizeofExpr(e as SizeofExpr);
+      case ASTKind.CastExpr: return this.generateCastExpr(e as CastExpr);
       default: return '0';
     }
+  }
+
+  private generateCastExpr(e: CastExpr): string {
+    const val = this.generateExpression(e.expr);
+    const actualT = this.getValueType(val);
+    const targetT = this.getLLVMType(e.targetType);
+    const result = this.coerceToType(val, actualT, targetT);
+    this.tempTypes.set(result, targetT);
+    return result;
   }
 
   private generateTupleExpr(e: TupleExpr): string {
@@ -1122,11 +1172,11 @@ export class CodeGenerator {
         if (m.member === 'set' && args.length > 0) {
             const val = this.generateExpression(args[0]);
             const vt = this.getValueType(val);
-            this.emit(`store ${llvmInnerType} ${this.coerceToType(val, vt, llvmInnerType)}, ptr ${obj}, align ${this.getAlignment(innerType)}`);
+            this.emit(`store ${this.toLLVMType(llvmInnerType)} ${this.coerceToType(val, vt, llvmInnerType)}, ptr ${obj}, align ${this.getAlignment(innerType)}`);
             return '0';
         } else if (m.member === 'get') {
             const t = this.newTemp();
-            this.emit(`${t} = load ${llvmInnerType}, ptr ${obj}, align ${this.getAlignment(innerType)}`);
+            this.emit(`${t} = load ${this.toLLVMType(llvmInnerType)}, ptr ${obj}, align ${this.getAlignment(innerType)}`);
             this.tempTypes.set(t, innerType);
             return t;
         }
@@ -1217,13 +1267,13 @@ export class CodeGenerator {
                 this.emit(`${fnPtr} = load ptr, ptr ${fnPtrAddr}, align 8`);
                 
                 // 3. Prepare arguments
-                const args = e.args.map((arg, i) => {
+                const mappedArgs = args.map((arg, i) => {
                     const v = this.generateExpression(arg);
                     const actualT = this.getValueType(v);
                     const expectedT = info && info.paramTypes[i + 1] ? info.paramTypes[i + 1] : actualT;
                     return `${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`;
                 }).join(', ');
-                const aStr = [`ptr ${obj}`, ...args.length ? [args] : []].join(', ');
+                const aStr = [`ptr ${obj}`, ...mappedArgs.length ? [mappedArgs] : []].join(', ');
                 const llvmRt = this.toLLVMType(rt);
                 
                 // 4. Call function pointer
@@ -1343,13 +1393,13 @@ export class CodeGenerator {
     if (g && g.type.startsWith('[')) {
       const et = g.type.match(/\[.*? x (.*?)\]/)![1];
       this.emit(`${ePtr} = getelementptr inbounds ${g.type}, ptr @${g.name}, i32 0, i32 ${idx}`);
-      this.emit(`${t} = load ${et}, ptr ${ePtr}, align 4`); this.tempTypes.set(t, et); return t;
+      this.emit(`${t} = load ${this.toLLVMType(et)}, ptr ${ePtr}, align 4`); this.tempTypes.set(t, et); return t;
     }
     const lt = this.localVarTypes.get(base) || 'i32';
     if (lt.startsWith('[')) {
       const et = lt.match(/\[.*? x (.*?)\]/)![1];
       this.emit(`${ePtr} = getelementptr inbounds ${lt}, ptr %${base}, i32 0, i32 ${idx}`);
-      this.emit(`${t} = load ${et}, ptr ${ePtr}, align 4`); this.tempTypes.set(t, et); return t;
+      this.emit(`${t} = load ${this.toLLVMType(et)}, ptr ${ePtr}, align 4`); this.tempTypes.set(t, et); return t;
     }
     this.emit(`${ePtr} = getelementptr inbounds i32, ptr %${base}, i32 ${idx}`);
     this.emit(`${t} = load i32, ptr ${ePtr}, align 4`); this.tempTypes.set(t, 'i32'); return t;
@@ -1427,7 +1477,7 @@ export class CodeGenerator {
     const t = this.newTemp();
     
     this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
-    this.emit(`${t} = load ${fieldType}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
+    this.emit(`${t} = load ${this.toLLVMType(fieldType)}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
     this.tempTypes.set(t, fieldType);
     return t;
   }
@@ -1451,6 +1501,15 @@ export class CodeGenerator {
       return res;
     }
     return 'null';
+  }
+
+  private generateSizeofExpr(e: SizeofExpr): string {
+    const llvmType = this.getLLVMType(e.targetType);
+    const size = this.getTypeSize(llvmType);
+    const t = this.newTemp();
+    this.emit(`${t} = add i64 ${size}, 0`);
+    this.tempTypes.set(t, 'i64');
+    return t;
   }
 
   private resolveTypeName(t: TypeAnnotation): string {
@@ -1622,6 +1681,12 @@ export class CodeGenerator {
     // Search in local types
     for (const [name, type] of this.localVarTypes) {
         if (v === `%${name}` && type.startsWith('%')) return type.substring(1);
+    }
+    // Search in params
+    if (v.startsWith('%')) {
+        const name = v.substring(1).replace('.addr', '');
+        const pt = this.currentFunctionParamTypes.get(name);
+        if (pt && pt.startsWith('%')) return pt.substring(1);
     }
     return Array.from(this.structs.keys())[0] || 'Unknown';
   }
@@ -1819,19 +1884,25 @@ export class CodeGenerator {
     this.generateVTable(vinfo);
     
     // Register methods
+    const oldScopeInst = this.scopeStack;
+    this.scopeStack = [];
     this.scopeStack.push(mangledName);
     if (instantiatedDecl.constructorDecl) {
         const mName = this.mangleName('constructor', instantiatedDecl.constructorDecl.params);
         const pts = ['ptr', ...instantiatedDecl.constructorDecl.params.map(p => this.getLLVMType(p.type))];
-        this.functions.set(`${mangledName}.constructor`, { name: mName, returnType: 'void', paramTypes: pts });
+        const mInfo = { name: mName, returnType: 'void', paramTypes: pts, isExternal: false };
+        this.functions.set(`${mangledName}.constructor`, mInfo as any);
+        this.functions.set(mName, mInfo as any);
     }
     for (const m of instantiatedDecl.methods) {
         const mName = this.mangleName(m.name, m.params);
         const rt = this.getLLVMType(m.returnType);
         const pts = ['ptr', ...m.params.map(p => this.getLLVMType(p.type))];
-        this.functions.set(`${mangledName}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
+        const mInfo = { name: mName, returnType: rt, paramTypes: pts, isExternal: false };
+        this.functions.set(`${mangledName}.${m.name}`, mInfo as any);
+        this.functions.set(mName, mInfo as any);
     }
-    this.scopeStack.pop();
+    this.scopeStack = oldScopeInst;
 
     // Generate methods
     this.generateClassMethods(instantiatedDecl);

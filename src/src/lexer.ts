@@ -222,6 +222,7 @@ export class Lexer {
       'struct': TokenKind.Struct, 'extends': TokenKind.Extends,
       'implements': TokenKind.Implements,
       'undefined': TokenKind.Undefined,
+      'sizeof': TokenKind.Sizeof,
     };
     return keywords[text] || TokenKind.Identifier;
   }

@@ -1,0 +1,88 @@
+import * as memory from "std:memory";
+
+/**
+ * Array<T> - Một mảng động tương tự std::vector hoặc mảng trong JavaScript/TypeScript.
+ * Sử dụng std:memory để quản lý bộ nhớ heap.
+ */
+export class Array<T> {
+    private data: rawPtr<T>;
+    public length: i32;
+    private capacity: i32;
+
+    @unsafe constructor() {
+        this.length = 0;
+        this.capacity = 4; // Dung lượng khởi tạo mặc định
+        this.data = memory.alloc((this.capacity as i64) * sizeof(T));
+    }
+
+    /**
+     * Thêm một phần tử vào cuối mảng.
+     * Tự động tăng dung lượng nếu cần.
+     */
+    @unsafe push(item: T): void {
+        if (this.length >= this.capacity) {
+            this.grow();
+        }
+        
+        // Tính toán vị trí con trỏ: data + (length * sizeof(T))
+        let p: rawPtr<T> = memory.offset(this.data, (this.length as i64) * sizeof(T));
+        p.set(item);
+        this.length = this.length + 1;
+    }
+
+    /**
+     * Lấy và xóa phần tử cuối cùng của mảng.
+     */
+    @unsafe pop(): T {
+        if (this.length <= 0) {
+            // Trong tương lai có thể ném exception or return Option<T>
+            return undefined; 
+        }
+        
+        this.length = this.length - 1;
+        let p: rawPtr<T> = memory.offset(this.data, (this.length as i64) * sizeof(T));
+        return p.get();
+    }
+
+    /**
+     * Truy cập phần tử tại vị trí index.
+     */
+    @unsafe get(index: i32): T {
+        if (index < 0 || index >= this.length) {
+            return undefined;
+        }
+        let p: rawPtr<T> = memory.offset(this.data, (index as i64) * sizeof(T));
+        return p.get();
+    }
+
+    /**
+     * Cập nhật giá trị tại vị trí index.
+     */
+    @unsafe set(index: i32, val: T): void {
+        if (index >= 0 && index < this.length) {
+            let p: rawPtr<T> = memory.offset(this.data, (index as i64) * sizeof(T));
+            p.set(val);
+        }
+    }
+
+    /**
+     * Giải phóng bộ nhớ của mảng (Thủ công cho đến khi có Destructor).
+     */
+    @unsafe dispose(): void {
+        if (this.data != null) {
+            memory.free(this.data);
+            this.data = null;
+            this.length = 0;
+            this.capacity = 0;
+        }
+    }
+
+    /**
+     * Tăng gấp đôi dung lượng bộ nhớ.
+     */
+    @unsafe private grow(): void {
+        let newCapacity = this.capacity * 2;
+        this.data = memory.realloc(this.data, (newCapacity as i64) * sizeof(T));
+        this.capacity = newCapacity;
+    }
+}

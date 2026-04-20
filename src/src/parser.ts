@@ -16,7 +16,11 @@ export class Parser {
     while (!this.isAtEnd()) {
       try {
         const decl = this.parseDeclaration();
-        if (decl) declarations.push(decl);
+        if (decl) {
+          const name = (decl as any).name || 'unnamed';
+          console.log(`DEBUG: Parser adding declaration ${decl.kind} (${name}) at ${decl.line}:${decl.column}`);
+          declarations.push(decl);
+        }
         else this.synchronize();
       } catch (e) {
         this.synchronize();
@@ -247,6 +251,7 @@ export class Parser {
           params: cParams, 
           returnType: { name: 'void', isPointer: false, isRawPointer: false, isArray: false }, 
           body: cBody, 
+          isUnsafe,
           line: startToken.line, 
           column: startToken.column 
         };
@@ -667,6 +672,9 @@ export class Parser {
       } else if (this.match(TokenKind.Dot)) {
         const member = this.consume(TokenKind.Identifier, 'Expected member name').text;
         expr = { kind: ASTKind.MemberExpr, object: expr, member, line: expr.line, column: expr.column };
+      } else if (this.match(TokenKind.As)) {
+        const targetType = this.parseType();
+        expr = { kind: ASTKind.CastExpr, expr, targetType, line: expr.line, column: expr.column };
       } else break;
     }
     return expr;
@@ -683,7 +691,10 @@ export class Parser {
     if (this.match(TokenKind.This)) return { kind: ASTKind.ThisExpr, line: token.line, column: token.column };
     if (this.match(TokenKind.Super)) return { kind: ASTKind.SuperExpr, line: token.line, column: token.column };
     if (this.match(TokenKind.New)) {
-      const cName = this.consume(TokenKind.Identifier, 'Expected class name after new').text;
+      let cName = this.consume(TokenKind.Identifier, 'Expected class name after new').text;
+      while (this.match(TokenKind.Dot)) {
+          cName += "." + this.consume(TokenKind.Identifier, "Expected identifier after '.'").text;
+      }
       
       let genericArgs: TypeAnnotation[] | undefined;
       if (this.match(TokenKind.Less)) {
@@ -707,6 +718,12 @@ export class Parser {
       const operand = this.parseExpression();
       this.consume(TokenKind.RParen, "Expected ')'");
       return { kind: ASTKind.AddressofExpr, operand, line: token.line, column: token.column };
+    }
+    if (this.match(TokenKind.Sizeof)) {
+      this.consume(TokenKind.LParen, "Expected '(' after sizeof");
+      const targetType = this.parseType();
+      this.consume(TokenKind.RParen, "Expected ')' after type");
+      return { kind: ASTKind.SizeofExpr, targetType, line: token.line, column: token.column };
     }
     if (this.match(TokenKind.Identifier)) return { kind: ASTKind.Identifier, name: this.previous().text, line: token.line, column: token.column };
 
