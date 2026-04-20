@@ -71,6 +71,7 @@ export class CodeGenerator {
   private exportedSymbols: ExportedSymbol[] = [];
   private isUnsafeContext: boolean = false;
   private lastExpressionWasUndefined: boolean = false;
+  private isCurrentMain: boolean = false;
 
   constructor(moduleResolver?: ModuleResolver) {
     this.moduleResolver = moduleResolver ?? new ModuleResolver('.');
@@ -525,9 +526,9 @@ export class CodeGenerator {
 
     const oldRet = this.currentFunctionReturnType, oldParams = this.currentFunctionParams, oldParamTypes = this.currentFunctionParamTypes;
     const oldHoisted = this.hoistedVars, oldLocalVarTypes = this.localVarTypes;
-    const oldUnsafe = this.isUnsafeContext, oldClassName = this.currentClassName;
-
+    const oldUnsafe = this.isUnsafeContext, oldClassName = this.currentClassName, oldIsMain = this.isCurrentMain;
     this.isUnsafeContext = !!decl.isUnsafe;
+    this.isCurrentMain = decl.name === 'main' && this.scopeStack.length === 0;
 
     this.currentFunctionParams = new Set();
     this.currentFunctionParamTypes = new Map();
@@ -547,7 +548,8 @@ export class CodeGenerator {
       this.currentFunctionParamTypes.set(p.name, pt); 
     }
 
-    this.emit(`define ${this.toLLVMType(rt)} @${mName}(${paramsStr}) {`);
+    const llvmRt = this.isCurrentMain ? 'i32' : this.toLLVMType(rt);
+    this.emit(`define ${llvmRt} @${mName}(${paramsStr}) {`);
     this.emit('entry:'); this.indent++;
 
     if (isMethod) {
@@ -587,9 +589,11 @@ export class CodeGenerator {
 
     if (decl.body.length === 0 || decl.body[decl.body.length - 1].kind !== ASTKind.ReturnStmt) {
       this.emitCleanup();
-      if (rt === 'void') this.emit('ret void');
+      if (this.isCurrentMain) this.emit('ret i32 0');
+      else if (rt === 'void') this.emit('ret void');
       else this.emit(`ret ${rt} 0`);
     }
+    this.isCurrentMain = oldIsMain;
     this.cleanupStack.pop();
     this.currentFunctionReturnType = oldRet;
     this.currentFunctionParams = oldParams;
@@ -793,7 +797,10 @@ export class CodeGenerator {
     if (finalVal) {
       const rt = this.toLLVMType(this.currentFunctionReturnType);
       this.emit(`ret ${this.toLLVMType(rt)} ${this.coerceToType(finalVal, this.getValueType(finalVal), this.currentFunctionReturnType)}`);
-    } else this.emit('ret void');
+    } else {
+      if (this.isCurrentMain) this.emit('ret i32 0');
+      else this.emit('ret void');
+    }
   }
 
   private generateIf(s: IfStmt): void {
