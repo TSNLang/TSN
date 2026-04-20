@@ -731,11 +731,16 @@ export class Parser {
       const elements: Expression[] = [];
       if (!this.check(TokenKind.RBracket)) {
         do {
-          elements.push(this.parseExpression());
+          if (this.match(TokenKind.Ellipsis)) {
+            const expr = this.parseExpression();
+            elements.push({ kind: ASTKind.SpreadElementExpr, expr, line: token.line, column: token.column } as any);
+          } else {
+            elements.push(this.parseExpression());
+          }
         } while (this.match(TokenKind.Comma));
       }
-      this.consume(TokenKind.RBracket, "Expected ']' after tuple elements");
-      return { kind: ASTKind.TupleExpr, elements, line: token.line, column: token.column };
+      this.consume(TokenKind.RBracket, "Expected ']' after array elements");
+      return { kind: ASTKind.ArrayLiteralExpr, elements, line: token.line, column: token.column };
     }
 
     if (this.match(TokenKind.LParen)) {

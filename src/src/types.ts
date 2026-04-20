@@ -78,6 +78,7 @@ export enum TokenKind {
   Colon = ':',
   Comma = ',',
   Dot = '.',
+  Ellipsis = '...',
   Arrow = '=>',
   At = '@',
   
@@ -115,6 +116,9 @@ export enum ASTKind {
   UndefinedLiteral = 'UndefinedLiteral',
   SizeofExpr = 'SizeofExpr',
   CastExpr = 'CastExpr',
+  ArrayLiteralExpr = 'ArrayLiteralExpr',
+  SpreadElementExpr = 'SpreadElementExpr',
+  
   
   // Statements
   VarDecl = 'VarDecl',
@@ -239,6 +243,16 @@ export interface SuperExpr extends ASTNode {
   kind: ASTKind.SuperExpr;
 }
 
+export interface SpreadElementExpr extends ASTNode {
+  kind: ASTKind.SpreadElementExpr;
+  expr: Expression;
+}
+
+export interface ArrayLiteralExpr extends ASTNode {
+  kind: ASTKind.ArrayLiteralExpr;
+  elements: Expression[];
+}
+
 export interface TupleExpr extends ASTNode {
   kind: ASTKind.TupleExpr;
   elements: Expression[];
@@ -259,7 +273,10 @@ export type Expression =
   | NewExpr
   | ThisExpr
   | SuperExpr
-  | TupleExpr;
+  | TupleExpr
+  | ArrayLiteralExpr
+  | SpreadElementExpr;
+
 
 // Statements
 export interface VarDecl extends ASTNode {

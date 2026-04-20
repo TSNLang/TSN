@@ -59,6 +59,15 @@ export class Lexer {
       return this.readString(ch, startLine, startColumn);
     }
 
+    // Three-character operators
+    const nextThree = ch + this.peek() + this.peek(2);
+    if (nextThree === '...') {
+      this.advance();
+      this.advance();
+      this.advance();
+      return { kind: TokenKind.Ellipsis, text: nextThree, line: startLine, column: startColumn, length: 3 };
+    }
+
     // Two-character operators
     const twoCharOps: Record<string, TokenKind> = {
       '==': TokenKind.EqualEqual,

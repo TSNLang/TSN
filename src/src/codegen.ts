@@ -629,6 +629,34 @@ export class CodeGenerator {
           return this.localVarTypes.get(id) || (this.currentFunctionParams.has(id) ? this.currentFunctionParamTypes.get(id)! : 'i32');
       }
       if (e.kind === ASTKind.ThisExpr) return `%${this.currentClassName}`;
+      if (e.kind === ASTKind.ArrayLiteralExpr) {
+          const arr = e as ArrayLiteralExpr;
+          let tsnType = 'i32';
+          if (arr.elements.length > 0) {
+              const first = arr.elements[0];
+              if (first.kind === ASTKind.SpreadElementExpr) {
+                  const iterType = this.inferExprType((first as SpreadElementExpr).expr);
+                  const className = iterType.startsWith('%') ? iterType.substring(1) : iterType;
+                  const cDecl = this.classDecls.get(className);
+                  if (cDecl) {
+                      const nextMethod = cDecl.methods.find(m => m.name === 'next');
+                      if (nextMethod && nextMethod.returnType.name.startsWith('Optional')) {
+                          if (nextMethod.returnType.genericArgs && nextMethod.returnType.genericArgs.length > 0) {
+                              tsnType = nextMethod.returnType.genericArgs[0].name;
+                          } else if (nextMethod.returnType.name.includes('_')) {
+                              tsnType = nextMethod.returnType.name.split('_')[1];
+                          }
+                      }
+                  }
+              } else {
+                  const llvmT = this.inferExprType(first);
+                  if (llvmT === 'ptr') tsnType = 'string';
+                  else if (llvmT.startsWith('%')) tsnType = llvmT.substring(1);
+                  else tsnType = llvmT;
+              }
+          }
+          return `%Array_${tsnType}`;
+      }
       if (e.kind === ASTKind.CallExpr) {
           const ce = e as CallExpr;
           if (ce.callee.kind === ASTKind.Identifier) {
@@ -889,6 +917,7 @@ export class CodeGenerator {
   private generateExpression(e: Expression): string {
     this.lastExpressionWasUndefined = (e.kind === ASTKind.UndefinedLiteral);
     switch (e.kind) {
+      case ASTKind.ArrayLiteralExpr: return this.generateArrayLiteralExpr(e as ArrayLiteralExpr);
       case ASTKind.TupleExpr: return this.generateTupleExpr(e as TupleExpr);
       case ASTKind.NumberLiteral: return (e as NumberLiteral).value.toString();
       case ASTKind.StringLiteral: return this.generateStringLiteral(e as StringLiteral);
@@ -937,6 +966,119 @@ export class CodeGenerator {
       
     this.tempTypes.set(lastTemp, tupleType);
     return lastTemp;
+  }
+
+  private generateArrayLiteralExpr(e: ArrayLiteralExpr): string {
+    let tsnType = 'i32'; // Default
+    
+    // Type Inference for Array<T>
+    if (e.elements.length > 0) {
+        for (const el of e.elements) {
+            if (el.kind === ASTKind.SpreadElementExpr) {
+                const spread = el as SpreadElementExpr;
+                const iterType = this.inferExprType(spread.expr);
+                const className = iterType.startsWith('%') ? iterType.substring(1) : iterType;
+                const cDecl = this.classDecls.get(className);
+                if (cDecl) {
+                    const nextMethod = cDecl.methods.find(m => m.name === 'next');
+                    if (nextMethod && nextMethod.returnType.name.startsWith('Optional')) {
+                        if (nextMethod.returnType.genericArgs && nextMethod.returnType.genericArgs.length > 0) {
+                            tsnType = nextMethod.returnType.genericArgs[0].name;
+                        } else if (nextMethod.returnType.name.includes('_')) {
+                            tsnType = nextMethod.returnType.name.split('_')[1];
+                        }
+                        break;
+                    }
+                }
+            } else {
+                const llvmT = this.inferExprType(el);
+                if (llvmT === 'ptr') tsnType = 'string';
+                else if (llvmT.startsWith('%')) tsnType = llvmT.substring(1);
+                else tsnType = llvmT;
+                break;
+            }
+        }
+    }
+
+    // 1. Instantiate Array<T>
+    const className = `Array_${tsnType}`;
+    if (!this.classDecls.has(className) && this.genericClasses.has('Array')) {
+        this.instantiateClass('Array', [{ name: tsnType, isPointer: false, isArray: false }]);
+    }
+    const arraySize = this.getTypeSize(`%${className}`, true);
+    const arrPtr = this.newTemp();
+    this.ensureExternalDeclaration('class_alloc', { name: 'class_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] });
+    this.emit(`${arrPtr} = call ptr @class_alloc(i32 ${arraySize})`);
+    
+    // Assign VTable!!!
+    const vinfo = this.vTables.get(className);
+    if (vinfo) {
+        const vtablePtr = this.newTemp();
+        this.emit(`${vtablePtr} = getelementptr inbounds %${className}, ptr ${arrPtr}, i32 0, i32 1`); // VTable is at index 1 due to refCount wait
+        // Wait, VTable in struct is ALWAYS at index 1.
+        this.emit(`store ptr @_VTable.${className}, ptr ${vtablePtr}, align 8`);
+    }
+
+    const arrInitType = `ptr`;
+    const arrMethod = `@_T12Array_${tsnType}11constructorE`;
+    this.emit(`call void ${arrMethod}(ptr ${arrPtr})`);
+    this.tempTypes.set(arrPtr, `%${className}`);
+
+    // 2. Push elements
+    for (const el of e.elements) {
+        if (el.kind === ASTKind.SpreadElementExpr) {
+            const spread = el as SpreadElementExpr;
+            const iterVal = this.generateExpression(spread.expr);
+            const iterClass = this.tempTypes.get(iterVal) || this.inferExprType(spread.expr);
+            const iterClassName = iterClass.startsWith('%') ? iterClass.substring(1) : iterClass;
+            
+            // Loop: while (true) { let opt = iter.next(); if (opt.isSome()) arr.push(opt.unwrap()); else break; }
+            const loopCond = this.newLabel('spread.cond');
+            const loopBody = this.newLabel('spread.body');
+            const loopEnd = this.newLabel('spread.end');
+            
+            this.emit('br label %' + loopCond);
+            this.emit(loopCond + ':');
+            
+            // Call next()
+            const optVal = this.newTemp();
+            const optClass = `Optional_${tsnType}`;
+            
+            // Since next() returns an Object (struct), it usually returns by value, but in TSN objects are pointers
+            // Wait, Optional<T> is a Class! So it's a pointer.
+            const nextMangled = this.mangleNameWithScope(iterClassName, 'next', []);
+            this.emit(`${optVal} = call ptr @${nextMangled}(ptr ${iterVal})`);
+            
+            // Check isSome
+            const isSomeMangled = this.mangleNameWithScope(optClass, 'isSome', []);
+            const isSomeRes = this.newTemp();
+            this.emit(`${isSomeRes} = call i1 @${isSomeMangled}(ptr ${optVal})`);
+            
+            this.emit(`br i1 ${isSomeRes}, label %${loopBody}, label %${loopEnd}`);
+            
+            this.emit(loopBody + ':');
+            // Call unwrap()
+            const unwrapMangled = this.mangleNameWithScope(optClass, 'unwrap', []);
+            const unwrapRes = this.newTemp();
+            const unwrapRetT = this.toLLVMType(tsnType);
+            this.emit(`${unwrapRes} = call ${unwrapRetT} @${unwrapMangled}(ptr ${optVal})`);
+            
+            // Call Array.push()
+            const pushMangled = this.mangleNameWithScope(className, 'push', [{ name: 'item', type: { name: tsnType, isPointer: false, isArray: false } }]);
+            // Push signature in LLVM? Push takes `ptr this, ty item`!
+            this.emit(`call void @${pushMangled}(ptr ${arrPtr}, ${unwrapRetT} ${unwrapRes})`);
+            
+            this.emit(`br label %${loopCond}`);
+            this.emit(loopEnd + ':');
+        } else {
+            const val = this.generateExpression(el);
+            const pushMangled = this.mangleNameWithScope(className, 'push', [{ name: 'item', type: { name: tsnType, isPointer: false, isArray: false } }]);
+            const valRetT = this.toLLVMType(tsnType);
+            this.emit(`call void @${pushMangled}(ptr ${arrPtr}, ${valRetT} ${val})`);
+        }
+    }
+    
+    return arrPtr;
   }
 
   private generateThis(): string {
