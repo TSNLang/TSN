@@ -145,9 +145,54 @@ export @unsafe function indexOf(s: string, search: string): i32 {
     return -1;
 }
 
+
 /**
  * Kiểm tra chuỗi có chứa chuỗi con không.
  */
 export @unsafe function includes(s: string, search: string): bool {
     return indexOf(s, search) != -1;
+}
+
+/**
+ * Chuyển đổi số i64 sang chuỗi.
+ */
+export @unsafe function fromInt(n: i64): string {
+    if (n == 0) return "0";
+    
+    let isNegative = false;
+    let val = n;
+    if (val < 0) {
+        isNegative = true;
+        val = -val;
+    }
+    
+    let buf = memory.alloc(32);
+    let i = 0;
+    while (val > 0) {
+        let digit = (val % 10) as i32;
+        memory.setByte(buf, i, (digit + 48) as i8);
+        val = val / 10;
+        i++;
+    }
+    
+    if (isNegative) {
+        memory.setByte(buf, i, 45 as i8);
+        i++;
+    }
+    
+    memory.setByte(buf, i, 0);
+    
+    let res: string = (buf as string);
+    // Đảo ngược chuỗi
+    let left = 0;
+    let right = i - 1;
+    while (left < right) {
+        let temp = memory.getByte(buf, left);
+        memory.setByte(buf, left, memory.getByte(buf, right));
+        memory.setByte(buf, right, temp);
+        left++;
+        right--;
+    }
+    
+    return res;
 }

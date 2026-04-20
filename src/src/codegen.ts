@@ -134,6 +134,15 @@ export class CodeGenerator {
 
     // Phase 2: Struct definitions
     for (const decl of program.declarations) this.generateStructsRecursive(decl);
+    
+    // Also generate structs for any classes registered via imports (like time.StopWatch)
+    for (const [name, cls] of this.classDecls) {
+        if (!this.structs.has(name)) {
+            if (!cls.typeParameters || cls.typeParameters.length === 0) {
+                this.generateClassStruct(cls, name);
+            }
+        }
+    }
 
     // Phase 3: Global variables
     for (const decl of program.declarations) this.generateGlobalsRecursive(decl);
@@ -242,7 +251,7 @@ export class CodeGenerator {
     else if (decl.kind === ASTKind.StructDecl) this.generateStruct(decl as StructDecl);
     else if (decl.kind === ASTKind.ClassDecl) {
       const c = decl as ClassDecl;
-      if (c.typeParameters.length === 0) this.generateClassStruct(c);
+      if (!c.typeParameters || c.typeParameters.length === 0) this.generateClassStruct(c);
     }
     else if (decl.kind === ASTKind.NamespaceDecl) { for (const sub of (decl as NamespaceDecl).body) this.generateStructsRecursive(sub); }
     else if (decl.kind === ASTKind.ExportDecl) this.generateStructsRecursive((decl as ExportDecl).declaration);
@@ -288,7 +297,7 @@ export class CodeGenerator {
     if (decl.kind === ASTKind.FunctionDecl) this.generateFunction(decl as FunctionDecl);
     else if (decl.kind === ASTKind.ClassDecl) {
       const c = decl as ClassDecl;
-      if (c.typeParameters.length === 0) this.generateClassMethods(c);
+      if (!c.typeParameters || c.typeParameters.length === 0) this.generateClassMethods(c);
     }
     else if (decl.kind === ASTKind.NamespaceDecl) {
       this.scopeStack.push((decl as NamespaceDecl).name);
@@ -297,7 +306,10 @@ export class CodeGenerator {
     } else if (decl.kind === ASTKind.ExportDecl) this.generateFunctionsRecursive((decl as ExportDecl).declaration);
   }
 
-  private generateClassStruct(c: ClassDecl): void {
+  private generateClassStruct(c: ClassDecl, customName?: string): void {
+    const className = customName || c.name;
+    if (this.structs.has(className)) return;
+    
     const fields: { name: string; type: string }[] = [];
     const llvmFields: string[] = ['i32', 'ptr']; // index 0: _refCount, index 1: _vtable
     fields.push({ name: '_refCount', type: 'i32' });
@@ -322,8 +334,8 @@ export class CodeGenerator {
       fields.push({ name: f.name, type: t }); 
       llvmFields.push(this.toLLVMType(t)); // Ensure we use 'ptr' for pointers
     }
-    this.structs.set(c.name, { name: c.name, fields, base: c.baseClassName });
-    this.emit(`%${c.name} = type { ${llvmFields.join(', ')} }`);
+    this.structs.set(className, { name: className, fields, base: c.baseClassName });
+    this.emit(`%${className} = type { ${llvmFields.join(', ')} }`);
   }
 
   private getRecursiveClassFields(className: string): { name: string; type: string }[] {
@@ -378,8 +390,30 @@ export class CodeGenerator {
     for (const [name, sym] of imported) {
         this.importedSymbols.set(name, sym);
         if (sym.kind === 'class' && sym.ast) {
-            this.genericClasses.set(name, sym.ast);
-            this.classDecls.set(name, sym.ast); // Also add to classDecls to support VTable building
+            const cls = sym.ast as ClassDecl;
+            this.genericClasses.set(name, cls);
+            this.classDecls.set(name, cls);
+            this.buildVTable(cls, name); // Build namespaced VTable
+            
+            // Register methods and constructor for the imported class name
+            // e.g. if name is "time.StopWatch", register "time.StopWatch.elapsed"
+            if (cls.constructorDecl) {
+                const ctorName = `${name}.constructor`;
+                this.scopeStack.push(cls.name);
+                const mName = this.mangleName('constructor', cls.constructorDecl.params);
+                this.scopeStack.pop();
+                const pts = ['ptr', ...cls.constructorDecl.params.map(p => this.getLLVMType(p.type))];
+                this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts });
+            }
+            for (const m of cls.methods) {
+                this.scopeStack.push(cls.name);
+                const mName = this.mangleName(m.name, m.params);
+                this.scopeStack.pop();
+                
+                const rt = this.getLLVMType(m.returnType);
+                const pts = ['ptr', ...m.params.map(p => this.getLLVMType(p.type))];
+                this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
+            }
         } else if (sym.kind === 'function' && sym.ast && sym.ast.typeParameters && sym.ast.typeParameters.length > 0) {
             this.genericFunctions.set(name, sym.ast);
         }
@@ -1444,6 +1478,23 @@ export class CodeGenerator {
             this.emit(`${t} = bitcast ptr %${id} to ptr`);
             this.tempTypes.set(t, resType);
             return t;
+        } else if (e.object.kind === ASTKind.MemberExpr) {
+            // Get pointer to member instead of value
+            const me = e.object as MemberExpr;
+            const obj = this.generateExpression(me.object);
+            const objType = this.tempTypes.get(obj) || 'ptr';
+            const stName = (me.object.kind === ASTKind.ThisExpr) ? this.currentClassName! : 
+                           (objType.startsWith('%') ? objType.substring(1) : ((this.classDecls.has(objType) || this.interfaceDecls.has(objType)) ? objType : this.guessStructTypeByVal(obj)));
+            
+            const structInfo = this.structs.get(stName);
+            if (structInfo) {
+                const fIdx = this.getFieldIndex(stName, me.member);
+                const fieldType = structInfo.fields[fIdx] ? structInfo.fields[fIdx].type : 'i32';
+                const fPtr = this.newTemp();
+                this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
+                this.tempTypes.set(fPtr, `rawPtr<${fieldType}>`);
+                return fPtr;
+            }
         }
     }
 
@@ -1560,7 +1611,8 @@ export class CodeGenerator {
       'f64': 'double', 'double': 'double',
       'number': 'double',
       'void': 'void', 'string': 'ptr',
-      'null': 'i8', 'undefined': 'i8'
+      'null': 'i8', 'undefined': 'i8',
+      'ptr': 'ptr', 'rawPtr': 'ptr'
     };
     if (map[n]) return map[n];
     if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return 'ptr';
@@ -1767,8 +1819,9 @@ export class CodeGenerator {
   private newLabel(p: string): string { return `${p}.${this.labelCounter++}`; }
   private emit(l: string): void { (this.currentOutput ?? this.output).push('  '.repeat(this.indent) + l); }
 
-  private buildVTable(c: ClassDecl): void {
-      if (this.vTables.has(c.name)) return;
+  private buildVTable(c: ClassDecl, customName?: string): void {
+      const className = customName || c.name;
+      if (this.vTables.has(className)) return;
 
       const methodNames: string[] = [];
       const mangledNames: string[] = [];
@@ -1815,7 +1868,7 @@ export class CodeGenerator {
           }
       }
 
-      this.vTables.set(c.name, { className: c.name, methodNames, mangledNames });
+      this.vTables.set(className, { className: className, methodNames, mangledNames });
   }
 
   private mangleNameWithScope(scope: string, name: string, params: Parameter[]): string {

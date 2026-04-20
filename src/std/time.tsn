@@ -1,0 +1,86 @@
+
+/**
+ * std:time - Module quản lý thời gian cho TSN.
+ * Cung cấp khả năng lấy thời gian hệ thống, đo hiệu năng và tạo độ trễ.
+ */
+
+@ffi.lib("kernel32.dll")
+declare function GetSystemTimeAsFileTime(lpSystemTimeAsFileTime: ptr): void;
+
+@ffi.lib("kernel32.dll")
+declare function Sleep(dwMilliseconds: i32): void;
+
+@ffi.lib("kernel32.dll")
+declare function QueryPerformanceCounter(lpPerformanceCount: ptr): i32;
+
+@ffi.lib("kernel32.dll")
+declare function QueryPerformanceFrequency(lpFrequency: ptr): i32;
+
+/**
+ * Tạm dừng thực thi trong một khoảng thời gian.
+ * @param ms Số miliseconds cần chờ.
+ */
+export function sleep(ms: i32): void {
+    Sleep(ms);
+}
+
+/**
+ * Trả về dấu thời gian hiện tại (Unix Timestamp) tính bằng milliseconds.
+ */
+@unsafe export function now(): i64 {
+    let ft: i64 = 0;
+    GetSystemTimeAsFileTime(ft.address);
+    
+    // Windows FileTime là số lượng đơn vị 100-nanosecond kể từ January 1, 1601 (UTC).
+    // Có 116444736000000000 đơn vị 100-ns từ 1601 đến 1970 (Unix Epoch).
+    let unixTime100ns: i64 = ft - 116444736000000000;
+    
+    // Chuyển đổi sang milliseconds (1 ms = 10,000 đơn vị 100-ns)
+    return unixTime100ns / 10000;
+}
+
+/**
+ * Class hỗ trợ đo thời gian chính xác cao.
+ */
+export class StopWatch {
+    private startTime: i64;
+    private frequency: i64;
+
+    @unsafe constructor() {
+        this.startTime = 0;
+        this.frequency = 0;
+        QueryPerformanceFrequency(this.frequency.address);
+        this.reset();
+    }
+
+    /**
+     * Đặt lại mốc thời gian bắt đầu.
+     */
+    @unsafe public reset(): void {
+        QueryPerformanceCounter(this.startTime.address);
+    }
+
+    /**
+     * Tính thời gian trôi qua kể từ lúc reset() hoặc khởi tạo (tính bằng milliseconds).
+     */
+    @unsafe public elapsed(): i64 {
+        let currentTime: i64 = 0;
+        QueryPerformanceCounter(currentTime.address);
+        
+        let diff: i64 = currentTime - this.startTime;
+        // Chuyển đổi tick sang ms: (diff * 1000) / frequency
+        return (diff * 1000) / this.frequency;
+    }
+
+    /**
+     * Tính thời gian trôi qua chính xác cao (tính bằng microseconds).
+     */
+    @unsafe public elapsedMicro(): i64 {
+        let currentTime: i64 = 0;
+        QueryPerformanceCounter(currentTime.address);
+        
+        let diff: i64 = currentTime - this.startTime;
+        // Chuyển đổi tick sang microseconds: (diff * 1,000,000) / frequency
+        return (diff * 1000000) / this.frequency;
+    }
+}
