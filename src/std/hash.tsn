@@ -1,0 +1,140 @@
+import * as memory from "std:memory";
+import * as str from "std:string";
+
+/**
+ * std:hash - Các hàm băm nền tảng cho TSN.
+ *
+ * Mục tiêu hiện tại:
+ * - ổn định trong cùng một build/runtime
+ * - đủ tốt cho HashMap / unordered_map về sau
+ * - chỉ dùng các phép toán mà compiler đã hỗ trợ chắc chắn
+ */
+
+const SEED: i32 = 5381;
+const MIX_C1: i32 = 33;
+const MIX_C2: i32 = 97;
+const FINAL_C1: i32 = 13;
+const FINAL_C2: i32 = 17;
+
+/**
+ * Trộn hai giá trị hash lại với nhau.
+ */
+export function combine(a: i32, b: i32): i32 {
+    let h = a;
+    h = ((h << 5) + h) ^ b;
+    h = h ^ (h >> FINAL_C1);
+    h = h ^ (h << 3);
+    h = h ^ (h >> FINAL_C2);
+    return h;
+}
+
+/**
+ * Trộn một số nguyên 32-bit để giảm các pattern tuyến tính.
+ */
+export function hashI32(value: i32): i32 {
+    let x = value;
+    x = ((x << 5) + x) ^ (x >> 16);
+    x = x ^ (x << 7);
+    x = x ^ (x >> 11);
+    return x;
+}
+
+/**
+ * Băm số nguyên 64-bit bằng cách gộp hai nửa 32-bit.
+ */
+export function hashI64(value: i64): i32 {
+    let lo = value as i32;
+    let hi = (value >> 32) as i32;
+    return combine(hashI32(lo), hashI32(hi));
+}
+
+export function hashU8(value: u8): i32 {
+    return hashI32(value as i32);
+}
+
+export function hashU16(value: u16): i32 {
+    return hashI32(value as i32);
+}
+
+export function hashU32(value: u32): i32 {
+    return hashI32(value as i32);
+}
+
+export function hashU64(value: u64): i32 {
+    return hashI64(value as i64);
+}
+
+export function hashI8(value: i8): i32 {
+    return hashI32(value as i32);
+}
+
+export function hashI16(value: i16): i32 {
+    return hashI32(value as i32);
+}
+
+/**
+ * Băm bit pattern của số thực 32-bit.
+ * -0.0 và +0.0 sẽ cho hash khác nhau nếu bit pattern khác nhau.
+ * Các NaN khác payload cũng sẽ cho hash khác nhau.
+ */
+export @unsafe function hashF32(value: f32): i32 {
+    let local = value;
+    return finalize(hashBytes(addressof(local) as rawPtr<void>, sizeof(f32) as i32), sizeof(f32) as i32);
+}
+
+/**
+ * Băm bit pattern của số thực 64-bit.
+ * Phù hợp cho identity hash theo biểu diễn IEEE-754 hiện tại.
+ */
+export @unsafe function hashF64(value: f64): i32 {
+    let local = value;
+    return finalize(hashBytes(addressof(local) as rawPtr<void>, sizeof(f64) as i32), sizeof(f64) as i32);
+}
+
+export function hashBool(value: bool): i32 {
+    if (value) return MIX_C2;
+    return MIX_C1;
+}
+
+/**
+ * Băm địa chỉ con trỏ. Hữu ích cho identity hash.
+ */
+export function hashPtr(value: rawPtr<void>): i32 {
+    let addr: i64 = value;
+    return hashI64(addr);
+}
+
+/**
+ * Băm một dải byte bằng biến thể DJB2 xor.
+ */
+export @unsafe function hashBytes(data: rawPtr<void>, length: i32): i32 {
+    if (data == null || length <= 0) return 0;
+
+    let h = SEED;
+    for (let i = 0; i < length; i++) {
+        let b = memory.getByte(data, i);
+        h = ((h << 5) + h) ^ (b as i32);
+        h = h ^ (h >> 7);
+    }
+    return h;
+}
+
+/**
+ * Băm chuỗi theo byte UTF-8 hiện có trong runtime.
+ */
+export @unsafe function hashString(value: string): i32 {
+    if (value == null) return 0;
+    let length = str.byteLength(value);
+    return hashBytes(value as rawPtr<void>, length);
+}
+
+/**
+ * Hoàn tất hash tích lũy trước khi lưu vào bảng băm.
+ */
+export function finalize(hash: i32, length: i32): i32 {
+    let h = hash ^ length;
+    h = h ^ (h >> FINAL_C1);
+    h = h * MIX_C2;
+    h = h ^ (h >> FINAL_C2);
+    return h;
+}

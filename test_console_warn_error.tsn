@@ -1,7 +1,0 @@
-import * as console from "std:console";
-
-function main(): void {
-    console.log("stdout-log");
-    console.warn("stdout-warn");
-    console.error("stderr-error");
-}

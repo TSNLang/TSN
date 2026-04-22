@@ -1,0 +1,14 @@
+import * as console from "std:console";
+import * as hash from "std:hash";
+import * as str from "std:string";
+
+function main(): i32 {
+    let a = hash.hashI32(42);
+    let b = hash.hashString("tsn");
+    let c = hash.hashF32(3.25 as f32);
+    let d = hash.hashF64(6.5 as f64);
+    let e = hash.finalize(hash.combine(hash.combine(a, b), hash.combine(c, d)), str.byteLength("tsn"));
+
+    console.log(str.fromInt(e as i64));
+    return 0;
+}
