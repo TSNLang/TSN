@@ -105,7 +105,7 @@ int string_endsWith(const char* str, const char* search) {
 }
 
 // ============================================================================
-// std:memory (ARC Support)
+// std:memory
 // ============================================================================
 
 void tsn_incRef(void* p) {

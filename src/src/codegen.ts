@@ -65,6 +65,7 @@ export class CodeGenerator {
   private moduleResolver: ModuleResolver;
   private hoistedVars: Set<string> = new Set();
   private localVarTypes: Map<string, string> = new Map();
+  private movedLocals: Set<string> = new Set();
   private importedSymbols: Map<string, ExportedSymbol> = new Map();
   private importedModules: Map<string, ModuleExports> = new Map();
   private includedModulePaths: Set<string> = new Set();
@@ -113,14 +114,27 @@ export class CodeGenerator {
     return targetOS.some(os => this.isSingleTargetOSMatch(os));
   }
 
+  private emitOwnedCleanupForValue(ptr: string, type: string): void {
+    if (this.isClassType(type)) {
+      const className = type.startsWith('%') ? type.substring(1) : type;
+      const disposeName = `${className}.dispose`;
+      const disposeInfo = this.functions.get(disposeName) || this.functions.get(this.resolveMangledName(disposeName));
+      if (disposeInfo) {
+        this.emit(`call void @${disposeInfo.name}(ptr ${ptr})`);
+      }
+    }
+    this.ensureExternalDeclaration('memory_free', { name: 'memory_free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+    this.emit(`call void @memory_free(ptr ${ptr})`);
+  }
+
   private emitCleanup(): void {
     const currentScope = this.cleanupStack[this.cleanupStack.length - 1];
     if (currentScope.size === 0) return;
-    this.ensureExternalDeclaration('tsn_decRef', { name: 'tsn_decRef', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
     for (const varName of currentScope) {
       const ptr = this.newTemp();
+      const varType = this.localVarTypes.get(varName) || 'ptr';
       this.emit(`${ptr} = load ptr, ptr %${varName}, align 8`);
-      this.emit(`call void @tsn_decRef(ptr ${ptr})`);
+      this.emitOwnedCleanupForValue(ptr, varType);
     }
   }
 
@@ -643,7 +657,7 @@ export class CodeGenerator {
     }
 
     const oldRet = this.currentFunctionReturnType, oldParams = this.currentFunctionParams, oldParamTypes = this.currentFunctionParamTypes;
-    const oldHoisted = this.hoistedVars, oldLocalVarTypes = this.localVarTypes;
+    const oldHoisted = this.hoistedVars, oldLocalVarTypes = this.localVarTypes, oldMovedLocals = this.movedLocals;
     const oldUnsafe = this.isUnsafeContext, oldClassName = this.currentClassName, oldIsMain = this.isCurrentMain;
     this.isUnsafeContext = !!decl.isUnsafe;
     this.isCurrentMain = decl.name === 'main' && this.scopeStack.length === 0;
@@ -653,6 +667,7 @@ export class CodeGenerator {
     this.currentFunctionReturnType = rt;
     this.hoistedVars = new Set();
     this.localVarTypes = new Map();
+    this.movedLocals = new Set();
     this.cleanupStack.push(new Set());
     this.scopeStack.push(decl.name);
 
@@ -712,7 +727,7 @@ export class CodeGenerator {
     for (const s of decl.body) this.generateStatement(s);
 
     if (decl.body.length === 0 || decl.body[decl.body.length - 1].kind !== ASTKind.ReturnStmt) {
-      if (!this.isCurrentMain) this.emitCleanup();
+      this.emitCleanup();
       if (this.isCurrentMain) this.emit('ret i32 0');
       else if (rt === 'void') this.emit('ret void');
       else this.emit(`ret ${rt} 0`);
@@ -724,6 +739,7 @@ export class CodeGenerator {
     this.currentFunctionParamTypes = oldParamTypes;
     this.hoistedVars = oldHoisted;
     this.localVarTypes = oldLocalVarTypes;
+    this.movedLocals = oldMovedLocals;
     this.isUnsafeContext = oldUnsafe;
     this.currentClassName = oldClassName;
     this.scopeStack.pop();
@@ -913,6 +929,17 @@ export class CodeGenerator {
       
       const coerced = this.coerceToType(val, vt, allocaType);
       this.emit(`store ${this.toLLVMType(allocaType)} ${coerced}, ptr %${s.name}, align ${this.getAlignment(allocaType)}`);
+      if (isOwningManaged || isClass) {
+        this.movedLocals.delete(s.name);
+      }
+      if ((isOwningManaged || isClass) && s.init.kind === ASTKind.Identifier) {
+        const srcId = (s.init as Identifier).name;
+        const srcType = this.localVarTypes.get(srcId);
+        if (srcType && srcType === t) {
+          this.emit(`store ptr null, ptr %${srcId}, align 8`);
+          this.movedLocals.add(srcId);
+        }
+      }
     } else if (s.type && s.type.isUnion) {
         const undefinedIndex = s.type.unionTypes?.findIndex(ut => ut.name === 'undefined') ?? -1;
         if (undefinedIndex !== -1) {
@@ -962,12 +989,13 @@ export class CodeGenerator {
       } else if (this.isClassType(lt)) {
           const oldVal = this.newTemp();
           this.emit(`${oldVal} = load ptr, ptr %${id}, align 8`);
-          this.ensureExternalDeclaration('tsn_decRef', { name: 'tsn_decRef', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });
-          this.emit(`call void @tsn_decRef(ptr ${oldVal})`);
+          this.emitOwnedCleanupForValue(oldVal, lt);
           this.emit(`store ${this.toLLVMType(lt)} ${val}, ptr %${id}, align 8`);
+          this.movedLocals.delete(id);
           if (s.value.kind === ASTKind.Identifier) {
               const srcId = (s.value as Identifier).name;
               this.emit(`store ptr null, ptr %${srcId}, align 8`);
+              this.movedLocals.add(srcId);
           }
       } else {
           const lType = this.toLLVMType(lt);
@@ -996,11 +1024,10 @@ export class CodeGenerator {
 
     if (returnSourceLocal) {
       this.cleanupStack[this.cleanupStack.length - 1].delete(returnSourceLocal);
+      this.movedLocals.add(returnSourceLocal);
     }
 
-    if (!this.isCurrentMain) {
-      this.emitCleanup();
-    }
+    this.emitCleanup();
 
     if (finalVal) {
       const rt = this.toLLVMType(this.currentFunctionReturnType);
@@ -1286,6 +1313,10 @@ export class CodeGenerator {
   }
 
   private generateIdentifier(e: Identifier): string {
+    const movedType = this.localVarTypes.get(e.name);
+    if (movedType && (this.isClassType(movedType) || (movedType.startsWith('ptr<') && !movedType.startsWith('ptr<void>'))) && this.movedLocals.has(e.name)) {
+      throw new Error(`Use after move: '${e.name}' can no longer be used after ownership was transferred`);
+    }
     if (this.currentFunctionParams.has(e.name)) {
       const pt = this.currentFunctionParamTypes.get(e.name)!;
       const t = this.newTemp(); this.emit(`${t} = load ${this.toLLVMType(pt)}, ptr %${e.name}.addr, align ${this.getAlignment(pt)}`);
