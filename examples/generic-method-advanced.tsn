@@ -1,0 +1,40 @@
+import * as console from "std:console";
+import * as str from "std:string";
+
+// Test case for generic methods on generic classes
+class Box<T> {
+    private value: T;
+
+    constructor(val: T) {
+        this.value = val;
+    }
+
+    get(): T {
+        return this.value;
+    }
+
+    // TODO: Generic method - not yet supported
+    // This would allow: box.map<string>(transformer)
+    // map<U>(transformer: U): U {
+    //     return transformer;
+    // }
+}
+
+// Test case for generic methods on non-generic classes
+class Util {
+    // TODO: Generic method on non-generic class
+    // identity<T>(value: T): T {
+    //     return value;
+    // }
+}
+
+function main(): i32 {
+    let box = new Box<i32>(42);
+    console.log(str.fromInt(box.get() as i64));
+
+    // TODO: When generic methods are supported:
+    // let result = box.map<string>("transformed");
+    // let id = Util.identity<i32>(100);
+
+    return 0;
+}
