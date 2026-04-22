@@ -9,6 +9,7 @@ build/
 *.dll
 *.so
 *.dylib
+*.s
 
 # IDE
 .vs/

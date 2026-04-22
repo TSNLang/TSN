@@ -257,7 +257,13 @@ export class Parser {
         };
       } else {
         const memberName = this.consume(TokenKind.Identifier, 'Expected class member name').text;
-        if (this.check(TokenKind.LParen)) {
+        if (this.check(TokenKind.LParen) || this.check(TokenKind.Less)) {
+          // Method with optional type parameters
+          let methodTypeParameters: string[] | undefined;
+          if (this.match(TokenKind.Less)) {
+            methodTypeParameters = this.parseTypeParameters();
+          }
+          
           const mParams = this.parseMethodParams();
           this.consume(TokenKind.Colon, "Expected ':' after method params");
           const mRet = this.parseType();
@@ -266,7 +272,8 @@ export class Parser {
           this.consume(TokenKind.RBrace, "Expected '}'");
           methods.push({ 
             kind: ASTKind.ClassMethod,
-            name: memberName, 
+            name: memberName,
+            typeParameters: methodTypeParameters,
             isPublic, 
             params: mParams, 
             returnType: mRet, 

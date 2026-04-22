@@ -47,6 +47,7 @@ export class CodeGenerator {
   private genericClasses: Map<string, ClassDecl> = new Map();
   private genericInterfaces: Map<string, InterfaceDecl> = new Map();
   private genericFunctions: Map<string, FunctionDecl> = new Map();
+  private genericMethods: Map<string, { classDecl: ClassDecl; method: ClassMethod }> = new Map();
   private instantiatedNames: Set<string> = new Set();
   private globals: Map<string, GlobalInfo> = new Map();
   private functions: Map<string, FunctionInfo> = new Map();
@@ -224,6 +225,12 @@ export class CodeGenerator {
       this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts });
     }
       for (const m of c.methods) {
+        // Store generic methods for later instantiation
+        if (m.typeParameters && m.typeParameters.length > 0) {
+          const key = `${c.name}.${m.name}`;
+          this.genericMethods.set(key, { classDecl: c, method: m });
+          continue;
+        }
         const mName = this.mangleName(m.name, m.params);
         const rt = this.getLLVMType(m.returnType);
         const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
@@ -378,6 +385,10 @@ export class CodeGenerator {
       this.generateFunction(fn, true);
     }
     for (const m of c.methods) {
+      // Skip generic methods - they'll be instantiated on demand
+      if (m.typeParameters && m.typeParameters.length > 0) {
+        continue;
+      }
       const fn = { 
         kind: ASTKind.FunctionDecl,
         name: m.name, 
@@ -1596,6 +1607,35 @@ export class CodeGenerator {
 
     // Static Dispatch (Fallthrough or for non-virtual/super calls)
     const dotName = `${stName}.${m.member}`;
+    
+    // Check if this is a generic method call
+    if (genericArgs && genericArgs.length > 0) {
+        const genericMethodKey = dotName;
+        if (this.genericMethods.has(genericMethodKey)) {
+            const instantiatedName = this.instantiateMethod(stName, m.member, genericArgs);
+            const info = this.functions.get(instantiatedName);
+            const argStrings = args.map((arg, i) => {
+                const v = this.generateExpression(arg);
+                const actualT = this.getValueType(v);
+                const expectedT = info && info.paramTypes[i + 1] ? info.paramTypes[i + 1] : actualT;
+                return `${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`;
+            }).join(', ');
+            const rt = info ? info.returnType : 'i32';
+            const llvmRt = this.toLLVMType(rt);
+            const actualName = info ? info.name : instantiatedName;
+            const aStr = [`ptr ${obj}`, ...argStrings.length ? [argStrings] : []].join(', ');
+            
+            if (llvmRt === 'void') { 
+                this.emit(`call void @${actualName}(${aStr})`); 
+                return '0'; 
+            }
+            const t = this.newTemp(); 
+            this.emit(`${t} = call ${llvmRt} @${actualName}(${aStr})`); 
+            this.tempTypes.set(t, rt); 
+            return t;
+        }
+    }
+    
     const resolvedName = this.resolveMangledName(dotName);
     const info = this.functions.get(resolvedName) || this.functions.get(dotName);
     const argStrings = args.map((arg, i) => {
@@ -2164,6 +2204,10 @@ export class CodeGenerator {
 
       // 3. Cập nhật hoặc thêm mới các phương thức của lớp hiện tại
       for (const m of c.methods) {
+          // Skip generic methods - they can't be in VTable since they need type arguments
+          if (m.typeParameters && m.typeParameters.length > 0) {
+              continue;
+          }
           const idx = methodNames.indexOf(m.name);
           const currentMangled = this.mangleNameWithScope(c.name, m.name, m.params);
           if (idx !== -1) {
@@ -2301,6 +2345,55 @@ export class CodeGenerator {
     this.currentOutput = this.globalBuffer;
     this.generateFunction(instantiatedDecl);
     this.currentOutput = oldOutput;
+
+    return mangledName;
+  }
+
+  private instantiateMethod(className: string, methodName: string, args: TypeAnnotation[]): string {
+    const key = `${className}.${methodName}`;
+    const mangledName = key + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
+    if (this.instantiatedNames.has(mangledName)) return mangledName;
+
+    const genericMethodInfo = this.genericMethods.get(key);
+    if (!genericMethodInfo) return methodName;
+
+    this.instantiatedNames.add(mangledName);
+
+    const typeMap = new Map<string, TypeAnnotation>();
+    genericMethodInfo.method.typeParameters?.forEach((p, i) => typeMap.set(p, args[i]));
+
+    const instantiatedMethod: ClassMethod = this.cloneAndReplace(genericMethodInfo.method, typeMap) as ClassMethod;
+    instantiatedMethod.name = methodName + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
+    instantiatedMethod.typeParameters = [];
+
+    const oldScope = this.scopeStack;
+    const oldClassName = this.currentClassName;
+    this.scopeStack = [className];
+    this.currentClassName = className;
+
+    const mName = this.mangleName(instantiatedMethod.name, instantiatedMethod.params);
+    const rt = this.getLLVMType(instantiatedMethod.returnType);
+    const pts = ['ptr', ...instantiatedMethod.params.map(p => this.getFunctionParamStorageType(p))];
+    this.functions.set(mangledName, { name: mName, returnType: rt, paramTypes: pts });
+    this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts });
+
+    const oldOutput = this.currentOutput;
+    this.currentOutput = this.globalBuffer;
+    
+    const fn = { 
+      kind: ASTKind.FunctionDecl,
+      name: instantiatedMethod.name, 
+      params: instantiatedMethod.params, 
+      returnType: instantiatedMethod.returnType, 
+      body: instantiatedMethod.body, 
+      isUnsafe: !!instantiatedMethod.isUnsafe,
+      isDeclare: false 
+    } as any;
+    this.generateFunction(fn, true);
+    
+    this.currentOutput = oldOutput;
+    this.currentClassName = oldClassName;
+    this.scopeStack = oldScope;
 
     return mangledName;
   }

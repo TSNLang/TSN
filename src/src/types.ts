@@ -467,6 +467,7 @@ export interface ClassField extends ClassMember {
 
 export interface ClassMethod extends ClassMember {
   name: string;
+  typeParameters?: string[];
   params: Parameter[];
   returnType: TypeAnnotation;
   body: Statement[];
