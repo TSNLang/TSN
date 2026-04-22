@@ -642,7 +642,7 @@ export class Parser {
               do {
                   gArgs.push(this.parseType());
               } while (this.match(TokenKind.Comma));
-              this.consume(TokenKind.Greater, "Expected '>'");
+              this.consumeGenericClose("Expected '>'");
 
               this.consume(TokenKind.LParen, "Expected '(' after generic arguments");
               const args: Expression[] = [];
@@ -707,7 +707,7 @@ export class Parser {
           do {
               genericArgs.push(this.parseType());
           } while (this.match(TokenKind.Comma));
-          this.consume(TokenKind.Greater, "Expected '>' after generic arguments");
+          this.consumeGenericClose("Expected '>' after generic arguments");
       }
 
       this.consume(TokenKind.LParen, "Expected '('");
@@ -793,7 +793,7 @@ export class Parser {
         do {
             genericArgs.push(this.parseType());
         } while (this.match(TokenKind.Comma));
-        this.consume(TokenKind.Greater, "Expected '>' after generic arguments");
+        this.consumeGenericClose("Expected '>' after generic arguments");
     }
 
     if (name === 'ptr' && genericArgs && genericArgs.length === 1) {
@@ -820,8 +820,24 @@ export class Parser {
     do {
         params.push(this.consume(TokenKind.Identifier, 'Expected type parameter name').text);
     } while (this.match(TokenKind.Comma));
-    this.consume(TokenKind.Greater, "Expected '>' after type parameters");
+    this.consumeGenericClose("Expected '>' after type parameters");
     return params;
+  }
+
+  private splitCurrentGreaterToken(): boolean {
+    if (this.check(TokenKind.GreaterGreater)) {
+      const token = this.peek();
+      const first: Token = { ...token, kind: TokenKind.Greater, text: '>', length: 1 };
+      const second: Token = { ...token, kind: TokenKind.Greater, text: '>', column: token.column + 1, length: 1 };
+      this.tokens.splice(this.pos, 1, first, second);
+      return true;
+    }
+    return false;
+  }
+
+  private consumeGenericClose(message: string): Token {
+    this.splitCurrentGreaterToken();
+    return this.consume(TokenKind.Greater, message);
   }
 
   private isGenericCallAhead(): boolean {
@@ -835,6 +851,11 @@ export class Parser {
       else if (kind === TokenKind.Greater) {
         depth--;
         if (depth === 0) {
+          return this.tokens[i + 1]?.kind === TokenKind.LParen;
+        }
+      } else if (kind === TokenKind.GreaterGreater) {
+        depth -= 2;
+        if (depth <= 0) {
           return this.tokens[i + 1]?.kind === TokenKind.LParen;
         }
       } else if (kind === TokenKind.Semicolon || kind === TokenKind.LBrace || kind === TokenKind.RBrace) {

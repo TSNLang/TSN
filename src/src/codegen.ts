@@ -219,14 +219,14 @@ export class CodeGenerator {
       if (c.constructorDecl) {
       const ctorName = `${c.name}.constructor`;
       const mName = this.mangleName('constructor', c.constructorDecl.params);
-      const pts = ['ptr', ...c.constructorDecl.params.map(p => this.getLLVMType(p.type))];
+      const pts = ['ptr', ...c.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
       this.functions.set(mName, { name: mName, returnType: 'void', paramTypes: pts });
       this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts });
     }
       for (const m of c.methods) {
         const mName = this.mangleName(m.name, m.params);
         const rt = this.getLLVMType(m.returnType);
-        const pts = ['ptr', ...m.params.map(p => this.getLLVMType(p.type))];
+        const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
         this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts });
         this.functions.set(this.scopeStack.join('.') + '.' + m.name, { name: mName, returnType: rt, paramTypes: pts });
       }
@@ -412,7 +412,7 @@ export class CodeGenerator {
                 this.scopeStack.push(cls.name);
                 const mName = this.mangleName('constructor', cls.constructorDecl.params);
                 this.scopeStack.pop();
-                const pts = ['ptr', ...cls.constructorDecl.params.map(p => this.getLLVMType(p.type))];
+                const pts = ['ptr', ...cls.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
                 this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts });
             }
             for (const m of cls.methods) {
@@ -421,7 +421,7 @@ export class CodeGenerator {
                 this.scopeStack.pop();
                 
                 const rt = this.getLLVMType(m.returnType);
-                const pts = ['ptr', ...m.params.map(p => this.getLLVMType(p.type))];
+                const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
                 this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
             }
         } else if (sym.kind === 'function' && sym.ast) {
@@ -714,7 +714,10 @@ export class CodeGenerator {
       if (e.kind === ASTKind.CallExpr) {
           const ce = e as CallExpr;
           if (ce.callee.kind === ASTKind.Identifier) {
-              const name = (ce.callee as Identifier).name;
+              let name = (ce.callee as Identifier).name;
+              if (ce.genericArgs && ce.genericArgs.length > 0) {
+                  name = this.instantiateFunction(name, ce.genericArgs);
+              }
               const info = this.functions.get(this.resolveMangledName(name)) || this.functions.get(name);
               return info ? info.returnType : 'i32';
           }
@@ -1175,7 +1178,7 @@ export class CodeGenerator {
       const aStr = [`ptr ${ptr}`, ...args.map((a, i) => {
         const expectedT = info.paramTypes[i + 1];
         const actualT = this.getValueType(a);
-        return `${expectedT} ${this.coerceToType(a, actualT, expectedT)}`;
+        return `${this.toLLVMType(expectedT)} ${this.coerceToType(a, actualT, expectedT)}`;
       })].join(', ');
       this.emit(`call void @${info.name}(${aStr})`);
     }
@@ -1364,7 +1367,7 @@ export class CodeGenerator {
   }
 
   private generateCallExpr(e: CallExpr): string {
-    if (e.callee.kind === ASTKind.MemberExpr) return this.generateMemberCallExpr(e.callee as MemberExpr, e.args);
+    if (e.callee.kind === ASTKind.MemberExpr) return this.generateMemberCallExpr(e.callee as MemberExpr, e.args, e.genericArgs);
     
     // Handle super() constructor call
     if (e.callee.kind === ASTKind.SuperExpr) {
@@ -1431,13 +1434,17 @@ export class CodeGenerator {
     const t = this.newTemp(); this.emit(`${t} = call ${llvmRt} @${actualName}(${args})`); this.tempTypes.set(t, rt); return t;
   }
 
-  private generateMemberCallExpr(m: MemberExpr, args: Expression[]): string {
+  private generateMemberCallExpr(m: MemberExpr, args: Expression[], genericArgs?: TypeAnnotation[]): string {
     // Namespace check (e.g. memory.alloc or string.byteLength)
     if (m.object.kind === ASTKind.Identifier) {
         const ns = (m.object as Identifier).name;
         const fullName = `${ns}.${m.member}`;
         if (this.importedSymbols.has(fullName)) {
             const sym = this.importedSymbols.get(fullName)!;
+            if (genericArgs && genericArgs.length > 0 && sym.kind === 'function' && sym.ast) {
+                const instName = this.instantiateFunction(fullName, genericArgs);
+                return this.generateInternalCall(instName, args);
+            }
             return this.generateImportedCall(fullName, sym.name, sym, args);
         }
     }
@@ -1617,7 +1624,7 @@ export class CodeGenerator {
                      name: mName,
                      kind: 'function',
                      llvmType: this.getLLVMType(method.returnType),
-                     paramTypes: ['ptr', ...method.params.map(p => this.getLLVMType(p.type))]
+                     paramTypes: ['ptr', ...method.params.map(p => this.getFunctionParamStorageType(p))]
                  };
                  this.ensureExternalDeclaration(mName, mInfo as any);
                  this.functions.set(actualName, mInfo as any);
@@ -1824,6 +1831,23 @@ export class CodeGenerator {
     this.emit(`${t} = add i64 ${size}, 0`);
     this.tempTypes.set(t, 'i64');
     return t;
+  }
+
+  private getTypeAnnotationKey(t: TypeAnnotation): string {
+    if (t.isPointer) {
+      const prefix = t.isRawPointer ? 'rawPtr' : 'ptr';
+      return `${prefix}_${this.getTypeAnnotationKey({ ...t, isPointer: false, isRawPointer: false })}`;
+    }
+    if (t.isArray) {
+      const baseKey = this.getTypeAnnotationKey({ ...t, isArray: false, arraySize: undefined });
+      return t.arraySize !== undefined ? `${baseKey}_arr_${t.arraySize}` : `${baseKey}_arr`;
+    }
+
+    let name = t.name;
+    if (t.genericArgs && t.genericArgs.length > 0) {
+      name += '_' + t.genericArgs.map(arg => this.getTypeAnnotationKey(arg)).join('_');
+    }
+    return name;
   }
 
   private resolveTypeName(t: TypeAnnotation): string {
@@ -2185,7 +2209,7 @@ export class CodeGenerator {
       return {
           name: methodName,
           returnType: this.getLLVMType(m.returnType),
-          paramTypes: ['ptr', ...m.params.map(p => this.getLLVMType(p.type))]
+          paramTypes: ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))]
       };
   }
   private buildInterfaceVTable(i: InterfaceDecl): void {
@@ -2196,7 +2220,7 @@ export class CodeGenerator {
   }
 
   private instantiateClass(className: string, args: TypeAnnotation[]): string {
-    const mangledName = className + "_" + args.map(a => a.name).join("_");
+    const mangledName = className + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
     if (this.instantiatedNames.has(mangledName)) return mangledName;
 
     const baseDecl = this.genericClasses.get(className);
@@ -2230,7 +2254,7 @@ export class CodeGenerator {
     this.scopeStack.push(mangledName);
     if (instantiatedDecl.constructorDecl) {
         const mName = this.mangleName('constructor', instantiatedDecl.constructorDecl.params);
-        const pts = ['ptr', ...instantiatedDecl.constructorDecl.params.map(p => this.getLLVMType(p.type))];
+        const pts = ['ptr', ...instantiatedDecl.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
         const mInfo = { name: mName, returnType: 'void', paramTypes: pts, isExternal: false };
         this.functions.set(`${mangledName}.constructor`, mInfo as any);
         this.functions.set(mName, mInfo as any);
@@ -2238,7 +2262,7 @@ export class CodeGenerator {
     for (const m of instantiatedDecl.methods) {
         const mName = this.mangleName(m.name, m.params);
         const rt = this.getLLVMType(m.returnType);
-        const pts = ['ptr', ...m.params.map(p => this.getLLVMType(p.type))];
+        const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
         const mInfo = { name: mName, returnType: rt, paramTypes: pts, isExternal: false };
         this.functions.set(`${mangledName}.${m.name}`, mInfo as any);
         this.functions.set(mName, mInfo as any);
@@ -2253,7 +2277,7 @@ export class CodeGenerator {
   }
 
   private instantiateFunction(fnName: string, args: TypeAnnotation[]): string {
-    const mangledName = fnName + "_" + args.map(a => a.name).join("_");
+    const mangledName = fnName + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
     if (this.instantiatedNames.has(mangledName)) return mangledName;
 
     const baseDecl = this.genericFunctions.get(fnName);
@@ -2270,7 +2294,7 @@ export class CodeGenerator {
 
     const mName = this.mangleName(instantiatedDecl.name, instantiatedDecl.params);
     const rt = this.getLLVMType(instantiatedDecl.returnType);
-    const pts = instantiatedDecl.params.map(p => this.getLLVMType(p.type));
+    const pts = instantiatedDecl.params.map(p => this.getFunctionParamStorageType(p));
     this.functions.set(mangledName, { name: mName, returnType: rt, paramTypes: pts });
 
     const oldOutput = this.currentOutput;
@@ -2282,7 +2306,7 @@ export class CodeGenerator {
   }
 
   private instantiateInterface(ifName: string, args: TypeAnnotation[]): string {
-    const mangledName = ifName + "_" + args.map(a => a.name).join("_");
+    const mangledName = ifName + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
     if (this.instantiatedNames.has(mangledName)) return mangledName;
 
     const baseDecl = this.genericInterfaces.get(ifName);
@@ -2310,23 +2334,57 @@ export class CodeGenerator {
 
 
   private cloneAndReplace(node: any, typeMap: Map<string, TypeAnnotation>): any {
-      if (!node || typeof node !== 'object') return node;
-      if (Array.isArray(node)) return node.map(n => this.cloneAndReplace(n, typeMap));
+      const cloneTypeAnnotation = (typeNode: any, seenTypes: WeakMap<object, any>, resolving: Set<string>): any => {
+          if (!typeNode || typeof typeNode !== 'object') return typeNode;
+          if (seenTypes.has(typeNode)) return seenTypes.get(typeNode);
 
-      // If it's a TypeAnnotation, check if it's a generic parameter
-      if (node.name && typeof node.name === 'string' && typeMap.has(node.name)) {
-          const replacement = typeMap.get(node.name)!;
-          if (node.isPointer || node.isArray) {
-              return { ...node, name: replacement.name };
+          if (typeNode.name && typeof typeNode.name === 'string' && typeMap.has(typeNode.name)) {
+              if (resolving.has(typeNode.name)) {
+                  return { ...typeNode };
+              }
+              resolving.add(typeNode.name);
+              const replacement = cloneTypeAnnotation(typeMap.get(typeNode.name)!, seenTypes, resolving);
+              resolving.delete(typeNode.name);
+              if (typeNode.isPointer || typeNode.isArray) {
+                  return {
+                      ...replacement,
+                      isPointer: !!typeNode.isPointer,
+                      isRawPointer: !!typeNode.isRawPointer,
+                      isArray: !!typeNode.isArray,
+                      arraySize: typeNode.arraySize,
+                  };
+              }
+              return replacement;
           }
-          return { ...node, name: replacement.name, isPointer: replacement.isPointer, isArray: replacement.isArray, arraySize: replacement.arraySize, typeArguments: replacement.typeArguments };
-      }
 
-      const newNode: any = { ...node };
-      for (const key in newNode) {
-          newNode[key] = this.cloneAndReplace(newNode[key], typeMap);
-      }
-      return newNode;
+          const cloned = { ...typeNode };
+          seenTypes.set(typeNode, cloned);
+          if (cloned.genericArgs) cloned.genericArgs = cloned.genericArgs.map((arg: TypeAnnotation) => cloneTypeAnnotation(arg, seenTypes, resolving));
+          if (cloned.unionTypes) cloned.unionTypes = cloned.unionTypes.map((arg: TypeAnnotation) => cloneTypeAnnotation(arg, seenTypes, resolving));
+          if (cloned.tupleElements) cloned.tupleElements = cloned.tupleElements.map((arg: TypeAnnotation) => cloneTypeAnnotation(arg, seenTypes, resolving));
+          return cloned;
+      };
+
+      const visit = (current: any, seen: WeakMap<object, any>): any => {
+          if (!current || typeof current !== 'object') return current;
+          if (Array.isArray(current)) return current.map(item => visit(item, seen));
+          if (seen.has(current)) return seen.get(current);
+
+          const isTypeAnnotationLike = !!current.name && typeof current.name === 'string' &&
+              ('isPointer' in current || 'isArray' in current || 'genericArgs' in current || 'unionTypes' in current || 'tupleElements' in current);
+          if (isTypeAnnotationLike) {
+              return cloneTypeAnnotation(current, new WeakMap<object, any>(), new Set<string>());
+          }
+
+          const clone: any = { ...current };
+          seen.set(current, clone);
+          for (const key in clone) {
+              clone[key] = visit(clone[key], seen);
+          }
+          return clone;
+      };
+
+      return visit(node, new WeakMap<object, any>());
   }
 
   includeImportedModulePrograms(program: Program): Program {

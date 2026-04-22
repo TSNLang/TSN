@@ -1,0 +1,18 @@
+import * as console from "std:console";
+import * as opt from "std:option";
+import * as str from "std:string";
+
+function main(): i32 {
+    let a = opt.Some<i32>(42);
+    let b = opt.None<i32>();
+
+    if (a.isSome()) {
+        console.log(str.fromInt(a.unwrap() as i64));
+    }
+
+    if (b.isNone()) {
+        console.log("none");
+    }
+
+    return 0;
+}

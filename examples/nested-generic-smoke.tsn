@@ -1,0 +1,18 @@
+import * as console from "std:console";
+import { Array } from "std:array";
+import { Some } from "std:option";
+import * as str from "std:string";
+
+function main(): i32 {
+    let values = new Array<i32>();
+    values.push(7);
+    values.push(11);
+
+    let wrapped = Some<Array<i32>>(values);
+    let first = wrapped.unwrap().get(0);
+    let second = wrapped.unwrap().get(1);
+
+    console.log(str.fromInt(first as i64));
+    console.log(str.fromInt(second as i64));
+    return 0;
+}

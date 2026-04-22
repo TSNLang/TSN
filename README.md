@@ -22,6 +22,18 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
+## 🚀 Version 0.16.14-indev: Generic for Everything
+
+TSN 0.16.14-indev is planned to focus on making generics work reliably across the whole language before pushing deeper into full self-hosting.
+
+Key highlights:
+- **Generic Stabilization First**: The priority is to make generic classes, generic functions, and monomorphization behave consistently across local code, stdlib modules, and imported modules.
+- **Cross-Module Generics**: Imported generic types and functions should instantiate cleanly without losing declarations, runtime metadata, or dependency wiring.
+- **Nested Generic Coverage**: Patterns such as `Array<Optional<T>>`, generic methods, generic constructors, and generic stdlib utilities should become routine instead of edge cases.
+- **Self-Hosting Prerequisite**: A stronger generic foundation is treated as the required step before serious self-host migration of compiler pieces into TSN.
+- **Collections Later**: General containers such as `std:map` remain postponed until the generic model is strong enough to support them cleanly.
+- **Design Note Available**: See `docs/generic_stabilization.md` for the detailed checklist and technical direction.
+
 ## 🚀 Version 0.16.13-indev: `std:hash` Completion
 
 TSN 0.16.13-indev uses the new Rest Parameters (`...`) foundation to make `std:hash` more practical for real multi-value hashing APIs.
