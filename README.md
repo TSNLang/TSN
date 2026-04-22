@@ -22,14 +22,25 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.16.14-indev: Generic for Everything
+## 🚀 Version 0.16.14-indev: Generic for Everything (In Progress)
 
-TSN 0.16.14-indev is planned to focus on making generics work reliably across the whole language before pushing deeper into full self-hosting.
+TSN 0.16.14-indev focuses on making generics work reliably across the whole language before pushing deeper into full self-hosting.
+
+**Completed:**
+- ✅ **Nested Generic Support**: `Optional<Array<i32>>`, `Array<Optional<T>>` now work correctly
+- ✅ **Cross-Module Generic Instantiation**: Imported generic functions and classes instantiate cleanly
+- ✅ **Parser Enhancement**: `>>` token splitting for nested generic close (`Optional<Array<i32>>`)
+- ✅ **Type Substitution**: Cycle-safe nested generic parameter replacement in monomorphization
+- ✅ **Generic Function Inference**: `inferExprType()` now handles generic function calls with `genericArgs`
+
+**In Progress:**
+- 🔄 **Generic Methods**: Stabilizing generic methods on instantiated classes
+- 🔄 **Generic Constructors**: Full support for generic constructor parameters
+- 🔄 **Stdlib Generic Coverage**: Expanding generic patterns across `std:*` modules
 
 Key highlights:
 - **Generic Stabilization First**: The priority is to make generic classes, generic functions, and monomorphization behave consistently across local code, stdlib modules, and imported modules.
-- **Cross-Module Generics**: Imported generic types and functions should instantiate cleanly without losing declarations, runtime metadata, or dependency wiring.
-- **Nested Generic Coverage**: Patterns such as `Array<Optional<T>>`, generic methods, generic constructors, and generic stdlib utilities should become routine instead of edge cases.
+- **Nested Generic Coverage**: Patterns such as `Array<Optional<T>>`, generic methods, generic constructors, and generic stdlib utilities are becoming routine instead of edge cases.
 - **Self-Hosting Prerequisite**: A stronger generic foundation is treated as the required step before serious self-host migration of compiler pieces into TSN.
 - **Collections Later**: General containers such as `std:map` remain postponed until the generic model is strong enough to support them cleanly.
 - **Design Note Available**: See `docs/generic_stabilization.md` for the detailed checklist and technical direction.
