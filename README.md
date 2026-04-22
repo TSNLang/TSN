@@ -35,10 +35,11 @@ TSN 0.16.14-indev focuses on making generics work reliably across the whole lang
 - ✅ **Generic Class Methods**: Methods on generic classes work correctly (e.g., `Container<T>.get()`, `Container<T>.set()`)
 - ✅ **Generic Methods**: Methods with their own type parameters (e.g., `identity<T>(value: T): T`) now work on non-generic classes
 - ✅ **Generic Methods on Generic Classes**: Methods with type parameters on generic classes (e.g., `Box<T>.map<U>()`) fully functional
+- ✅ **Generic Constructors**: Generic classes with constructors (e.g., `new Box<i32>(42)`) work correctly
 
-**In Progress:**
-- 🔄 **Generic Constructors**: Full support for generic constructor parameters
+**Completed!** TSN 0.16.14-indev "Generic for Everything" is feature-complete. Next focus:
 - 🔄 **Stdlib Generic Coverage**: Expanding generic patterns across `std:*` modules
+- 🔄 **Self-Hosting**: Migrating compiler components to TSN
 
 Key highlights:
 - **Generic Stabilization First**: The priority is to make generic classes, generic functions, and monomorphization behave consistently across local code, stdlib modules, and imported modules.
