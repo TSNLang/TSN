@@ -2304,6 +2304,12 @@ export class CodeGenerator {
         this.functions.set(mName, mInfo as any);
     }
     for (const m of instantiatedDecl.methods) {
+        // If method has type parameters, register it as a generic method
+        if (m.typeParameters && m.typeParameters.length > 0) {
+            const key = `${mangledName}.${m.name}`;
+            this.genericMethods.set(key, { classDecl: instantiatedDecl, method: m });
+            continue;
+        }
         const mName = this.mangleName(m.name, m.params);
         const rt = this.getLLVMType(m.returnType);
         const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];

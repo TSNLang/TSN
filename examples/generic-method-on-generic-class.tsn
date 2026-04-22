@@ -1,0 +1,41 @@
+import * as console from "std:console";
+import * as str from "std:string";
+
+// Generic class with generic method
+class Box<T> {
+    private value: T;
+
+    constructor(val: T) {
+        this.value = val;
+    }
+
+    get(): T {
+        return this.value;
+    }
+
+    // Generic method on generic class
+    // T is from class, U is from method
+    map<U>(transformer: U): U {
+        return transformer;
+    }
+}
+
+function main(): i32 {
+    // Create Box<i32>
+    let intBox = new Box<i32>(42);
+    console.log(str.fromInt(intBox.get() as i64));
+
+    // Call generic method with different type
+    let result = intBox.map<i32>(100);
+    console.log(str.fromInt(result as i64));
+
+    // Create Box<string>
+    let strBox = new Box<string>("hello");
+    console.log(strBox.get());
+
+    // Call generic method on string box
+    let result2 = strBox.map<i32>(200);
+    console.log(str.fromInt(result2 as i64));
+
+    return 0;
+}
