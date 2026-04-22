@@ -33,9 +33,10 @@ TSN 0.16.14-indev focuses on making generics work reliably across the whole lang
 - ✅ **Type Substitution**: Cycle-safe nested generic parameter replacement in monomorphization
 - ✅ **Generic Function Inference**: `inferExprType()` now handles generic function calls with `genericArgs`
 - ✅ **Generic Class Methods**: Methods on generic classes work correctly (e.g., `Container<T>.get()`, `Container<T>.set()`)
+- ✅ **Generic Methods**: Methods with their own type parameters (e.g., `identity<T>(value: T): T`) now work on non-generic classes
 
 **In Progress:**
-- 🔄 **Generic Methods with Type Parameters**: Methods that have their own type parameters (e.g., `map<U>(fn: U): U`)
+- 🔄 **Generic Methods on Generic Classes**: Methods with type parameters on generic classes (e.g., `Box<T>.map<U>()`)
 - 🔄 **Generic Constructors**: Full support for generic constructor parameters
 - 🔄 **Stdlib Generic Coverage**: Expanding generic patterns across `std:*` modules
 
