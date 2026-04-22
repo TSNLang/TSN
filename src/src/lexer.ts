@@ -80,7 +80,7 @@ export class Lexer {
       '||': TokenKind.Or,
       '<<': TokenKind.LessLess,
       '>>': TokenKind.GreaterGreater,
-      '->': TokenKind.Arrow,
+      '=>': TokenKind.Arrow,
     };
 
     const nextTwo = ch + this.peek();

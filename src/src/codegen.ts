@@ -167,6 +167,9 @@ export class CodeGenerator {
     // Phase 4: Function definitions
     for (const decl of program.declarations) this.generateFunctionsRecursive(decl);
 
+    // Phase 5: Collect exported symbols
+    for (const decl of program.declarations) this.collectExportedSymbols(decl);
+
     // Finalize string literals
     const strLines: string[] = ['; String literals'];
     for (const [globalName, value] of this.stringLiterals) {
@@ -186,7 +189,6 @@ export class CodeGenerator {
   }
 
   private preScanDeclaration(decl: Declaration): void {
-    console.log(`DEBUG: preScanDeclaration processing ${decl.kind}`);
     if (decl.kind === ASTKind.ImportDecl) this.processImport(decl as ImportDecl);
     else if (decl.kind === ASTKind.TypeAliasDecl) this.typeAliases.set((decl as TypeAliasDecl).name, (decl as TypeAliasDecl).type);
     else if (decl.kind === ASTKind.VarDecl) {
@@ -304,9 +306,6 @@ export class CodeGenerator {
       this.scopeStack.pop();
     } else if (decl.kind === ASTKind.ExportDecl) {
         this.generateGlobalsRecursive((decl as ExportDecl).declaration);
-    } else {
-        const name = (decl as any).name || 'unnamed';
-        console.log(`DEBUG: generateGlobalsRecursive processing ${decl.kind} (${name})`);
     }
   }
 
@@ -321,6 +320,34 @@ export class CodeGenerator {
       for (const sub of (decl as NamespaceDecl).body) this.generateFunctionsRecursive(sub);
       this.scopeStack.pop();
     } else if (decl.kind === ASTKind.ExportDecl) this.generateFunctionsRecursive((decl as ExportDecl).declaration);
+  }
+
+  private collectExportedSymbols(decl: Declaration): void {
+    if (decl.kind === ASTKind.ExportDecl) {
+      const exportDecl = decl as ExportDecl;
+      const innerDecl = exportDecl.declaration;
+      
+      if (innerDecl.kind === ASTKind.FunctionDecl) {
+        const fn = innerDecl as FunctionDecl;
+        this.exportedSymbols.push({
+          name: fn.name,
+          kind: 'function',
+          ast: fn
+        });
+      } else if (innerDecl.kind === ASTKind.ClassDecl) {
+        const cls = innerDecl as ClassDecl;
+        this.exportedSymbols.push({
+          name: cls.name,
+          kind: 'class',
+          ast: cls
+        });
+      }
+    } else if (decl.kind === ASTKind.NamespaceDecl) {
+      const ns = decl as NamespaceDecl;
+      for (const sub of ns.body) {
+        this.collectExportedSymbols(sub);
+      }
+    }
   }
 
   private generateClassStruct(c: ClassDecl, customName?: string): void {
@@ -404,51 +431,21 @@ export class CodeGenerator {
   }
 
   private processImport(decl: ImportDecl): void {
-    console.log(`DEBUG processImport: source=${decl.source}`);
     const exports = this.moduleResolver.resolveModule(decl.source);
-    if (!exports) {
-      console.log(`DEBUG processImport: No exports found for ${decl.source}`);
-      return;
-    }
-    console.log(`DEBUG processImport: exports.symbols = ${exports.symbols.map(s => `${s.name}(${s.kind})`).join(', ')}`);
-    
-    // Load all exported classes from the module's program
-    if (exports.program) {
-      console.log(`DEBUG processImport: Scanning module program for exported classes, declarations count: ${exports.program.declarations.length}`);
-      for (const decl of exports.program.declarations) {
-        console.log(`DEBUG processImport: Declaration kind: ${decl.kind}`);
-        if (decl.kind === ASTKind.ExportDecl) {
-          const exportDecl = decl as ExportDecl;
-          console.log(`DEBUG processImport: ExportDecl, inner kind: ${exportDecl.declaration.kind}`);
-          if (exportDecl.declaration.kind === ASTKind.ClassDecl) {
-            const cls = exportDecl.declaration as ClassDecl;
-            console.log(`DEBUG processImport: Found exported class ${cls.name}, has typeParameters: ${!!cls.typeParameters}, length: ${cls.typeParameters?.length || 0}`);
-            if (cls.typeParameters && cls.typeParameters.length > 0) {
-              console.log(`DEBUG processImport: Found exported generic class ${cls.name}`);
-              this.genericClasses.set(cls.name, cls);
-            }
-          }
-        }
-      }
-    }
+    if (!exports) return;
     
     this.importedModules.set(decl.source, exports);
     const imported = this.moduleResolver.getImportedSymbols(decl, exports);
-    console.log(`DEBUG processImport: Found ${imported.size} imported symbols`);
+    
     for (const [name, sym] of imported) {
-        console.log(`DEBUG processImport: symbol ${name}, kind=${sym.kind}, has ast=${!!sym.ast}`);
         this.importedSymbols.set(name, sym);
         if (sym.kind === 'class' && sym.ast) {
             const cls = sym.ast as ClassDecl;
             
-            console.log(`DEBUG processImport: class ${name}, has typeParameters: ${!!cls.typeParameters}, length: ${cls.typeParameters?.length || 0}`);
-            
             // Only add to genericClasses if it has type parameters
             if (cls.typeParameters && cls.typeParameters.length > 0) {
-                console.log(`DEBUG processImport: Adding ${name} to genericClasses`);
                 this.genericClasses.set(name, cls);
             } else {
-                console.log(`DEBUG processImport: Adding ${name} to classDecls`);
                 this.classDecls.set(name, cls);
                 this.buildVTable(cls, name); // Build namespaced VTable
             }
@@ -477,20 +474,15 @@ export class CodeGenerator {
         } else if (sym.kind === 'function' && sym.ast) {
             const fn = sym.ast as FunctionDecl;
             
-            console.log(`DEBUG processImport: function ${name}, returnType=${fn.returnType?.name}, has genericArgs=${!!fn.returnType?.genericArgs}`);
-            
             // Auto-import generic classes used in return type
             if (fn.returnType && fn.returnType.name && fn.returnType.genericArgs) {
                 const returnClassName = fn.returnType.name;
-                console.log(`DEBUG processImport: Checking return type ${returnClassName} for auto-import`);
                 if (!this.genericClasses.has(returnClassName)) {
                     // Find the class in exports.symbols
                     const classSymbol = exports.symbols.find(s => s.kind === 'class' && s.name === returnClassName);
-                    console.log(`DEBUG processImport: Found class symbol: ${!!classSymbol}`);
                     if (classSymbol && classSymbol.ast) {
                         const cls = classSymbol.ast as ClassDecl;
                         if (cls.typeParameters && cls.typeParameters.length > 0) {
-                            console.log(`DEBUG processImport: Auto-importing generic class ${returnClassName} from return type`);
                             this.genericClasses.set(returnClassName, cls);
                         }
                     }
@@ -610,10 +602,6 @@ export class CodeGenerator {
     const mName = this.scopeStack.length > 0 ? this.scopeStack.join('_') + '_' + decl.name : decl.name;
     const isPointerLike = !!decl.type && (decl.type.isPointer || decl.type.isRawPointer || decl.type.name === 'string' || decl.type.name === 'ptr' || t === 'ptr');
     
-    if (this.scopeStack.length === 0 && decl.name === 'p') {
-        console.log(`DEBUG: Generating global 'p'. scopeStack is empty! Source: ${decl.line}:${decl.column}`);
-    }
-
     if (decl.type?.isArray) {
       const size = decl.type.arraySize || 0, et = this.getLLVMType({ name: decl.type.name, isPointer: false, isArray: false });
       this.globals.set(decl.name, { name: mName, type: `[${size} x ${et}]`, isConst: decl.isConst });
@@ -2325,17 +2313,14 @@ export class CodeGenerator {
 
   private instantiateClass(className: string, args: TypeAnnotation[]): string {
     const mangledName = className + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
-    console.log(`DEBUG instantiateClass: className=${className}, mangledName=${mangledName}, already instantiated=${this.instantiatedNames.has(mangledName)}`);
     if (this.instantiatedNames.has(mangledName)) return mangledName;
 
     const baseDecl = this.genericClasses.get(className);
     if (!baseDecl) {
-      console.log(`DEBUG instantiateClass: No baseDecl found for ${className}`);
       return className;
     }
 
     this.instantiatedNames.add(mangledName);
-    console.log(`DEBUG instantiateClass: Starting instantiation of ${mangledName}`);
 
     const oldOutput = this.currentOutput;
     this.currentOutput = this.globalBuffer;

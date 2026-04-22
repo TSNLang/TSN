@@ -158,16 +158,17 @@ export class ModuleResolver {
         const symbols: ExportedSymbol[] = [];
         const codegen = new CodeGenerator(); // Use CodeGenerator to check target OS
         
-        for (let decl of program.declarations) {
-            if (decl.kind === ASTKind.ExportDecl) {
-                decl = (decl as ExportDecl).declaration;
-            }
+        for (const decl of program.declarations) {
+            // Only process exported declarations
+            if (decl.kind !== ASTKind.ExportDecl) continue;
             
-            if (decl.kind === ASTKind.ClassDecl) {
-                const c = decl as ClassDecl;
+            const innerDecl = (decl as ExportDecl).declaration;
+            
+            if (innerDecl.kind === ASTKind.ClassDecl) {
+                const c = innerDecl as ClassDecl;
                 symbols.push({ name: c.name, kind: 'class', ast: c });
-            } else if (decl.kind === ASTKind.FunctionDecl) {
-                const f = decl as FunctionDecl;
+            } else if (innerDecl.kind === ASTKind.FunctionDecl) {
+                const f = innerDecl as FunctionDecl;
                 if (!codegen.isTargetOSMatch(f.targetOS)) continue;
                 
                 symbols.push({
@@ -177,8 +178,8 @@ export class ModuleResolver {
                   paramTypes: f.params.map((p) => toLLVMTypeName(p.type)),
                   ast: f,
                 });
-            } else if (decl.kind === ASTKind.VarDecl) {
-                const v = decl as VarDecl;
+            } else if (innerDecl.kind === ASTKind.VarDecl) {
+                const v = innerDecl as VarDecl;
                 symbols.push({
                     name: v.name,
                     kind: v.isConst ? 'const' : 'let',

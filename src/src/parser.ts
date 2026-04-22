@@ -788,6 +788,26 @@ export class Parser {
       return { name: this.previous().text.toLowerCase(), isPointer: false, isArray: false };
     }
 
+    if (this.match(TokenKind.LParen)) {
+      const paramTypes: TypeAnnotation[] = [];
+      if (!this.check(TokenKind.RParen)) {
+        do {
+          paramTypes.push(this.parseType());
+        } while (this.match(TokenKind.Comma));
+      }
+      this.consume(TokenKind.RParen, "Expected ')' after function type parameters");
+      if (this.match(TokenKind.Arrow)) {
+        const returnType = this.parseType();
+        return {
+          name: 'fn',
+          isPointer: false,
+          isArray: false,
+          genericArgs: [...paramTypes, returnType],
+        };
+      }
+      throw this.error('Expected function type arrow');
+    }
+
     if (this.match(TokenKind.LBracket)) {
       const tupleElements: TypeAnnotation[] = [];
       if (!this.check(TokenKind.RBracket)) {
