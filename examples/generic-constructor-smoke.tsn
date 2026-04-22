@@ -1,0 +1,25 @@
+import * as console from "std:console";
+import * as str from "std:string";
+
+// Simple test: Constructor that works like a factory method
+class Box {
+    private value: i32;
+
+    constructor(val: i32) {
+        this.value = val;
+    }
+
+    get(): i32 {
+        return this.value;
+    }
+}
+
+function main(): i32 {
+    let box = new Box(42);
+    console.log(str.fromInt(box.get() as i64));
+
+    let box2 = new Box(100);
+    console.log(str.fromInt(box2.get() as i64));
+
+    return 0;
+}

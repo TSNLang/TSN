@@ -240,13 +240,21 @@ export class Parser {
       const startToken = this.peek();
       if (this.match(TokenKind.Constructor)) {
         if (constructorDecl) this.error('Duplicate constructor');
+        
+        // Parse optional type parameters for constructor
+        let constructorTypeParameters: string[] | undefined;
+        if (this.match(TokenKind.Less)) {
+          constructorTypeParameters = this.parseTypeParameters();
+        }
+        
         const cParams = this.parseMethodParams();
         this.consume(TokenKind.LBrace, "Expected '{'");
         const cBody = this.parseBlock();
         this.consume(TokenKind.RBrace, "Expected '}'");
         constructorDecl = { 
           kind: ASTKind.ClassMethod,
-          name: 'constructor', 
+          name: 'constructor',
+          typeParameters: constructorTypeParameters,
           isPublic: true, 
           params: cParams, 
           returnType: { name: 'void', isPointer: false, isRawPointer: false, isArray: false }, 

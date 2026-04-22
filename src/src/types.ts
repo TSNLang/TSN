@@ -485,17 +485,6 @@ export interface ClassDecl extends ASTNode {
   constructorDecl?: ClassMethod;
 }
 
-export interface NewExpr extends ASTNode {
-  kind: ASTKind.NewExpr;
-  className: string;
-  genericArgs?: TypeAnnotation[];
-  args: Expression[];
-}
-
-export interface ThisExpr extends ASTNode {
-  kind: ASTKind.ThisExpr;
-}
-
 export interface SuperExpr extends ASTNode {
   kind: ASTKind.SuperExpr;
 }
