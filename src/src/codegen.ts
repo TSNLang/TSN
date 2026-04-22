@@ -1,4 +1,4 @@
-import { Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, ExprStmt, BreakStmt, ContinueStmt, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ASTKind, TypeAnnotation, ImportDecl, ExportDecl, EnumDecl, NamespaceDecl, Parameter, ClassDecl, ClassField, ClassMethod, NewExpr, ThisExpr } from './types.ts';
+import { Program, Declaration, Statement, Expression, FunctionDecl, InterfaceDecl, VarDecl, Assignment, ReturnStmt, IfStmt, WhileStmt, ForStmt, ExprStmt, BreakStmt, ContinueStmt, BinaryExpr, UnaryExpr, CallExpr, IndexExpr, MemberExpr, Identifier, NumberLiteral, StringLiteral, BoolLiteral, NullLiteral, AddressofExpr, ASTKind, TypeAnnotation, ImportDecl, ExportDecl, EnumDecl, NamespaceDecl, Parameter, ClassDecl, ClassField, ClassMethod, NewExpr, ThisExpr, BlockStmt, ExpressionStmt } from './types.ts';
 import { ModuleResolver, ExportedSymbol, ModuleExports } from './module-resolver.ts';
 
 interface StructInfo {
@@ -404,21 +404,58 @@ export class CodeGenerator {
   }
 
   private processImport(decl: ImportDecl): void {
+    console.log(`DEBUG processImport: source=${decl.source}`);
     const exports = this.moduleResolver.resolveModule(decl.source);
-    if (!exports) return;
+    if (!exports) {
+      console.log(`DEBUG processImport: No exports found for ${decl.source}`);
+      return;
+    }
+    console.log(`DEBUG processImport: exports.symbols = ${exports.symbols.map(s => `${s.name}(${s.kind})`).join(', ')}`);
+    
+    // Load all exported classes from the module's program
+    if (exports.program) {
+      console.log(`DEBUG processImport: Scanning module program for exported classes, declarations count: ${exports.program.declarations.length}`);
+      for (const decl of exports.program.declarations) {
+        console.log(`DEBUG processImport: Declaration kind: ${decl.kind}`);
+        if (decl.kind === ASTKind.ExportDecl) {
+          const exportDecl = decl as ExportDecl;
+          console.log(`DEBUG processImport: ExportDecl, inner kind: ${exportDecl.declaration.kind}`);
+          if (exportDecl.declaration.kind === ASTKind.ClassDecl) {
+            const cls = exportDecl.declaration as ClassDecl;
+            console.log(`DEBUG processImport: Found exported class ${cls.name}, has typeParameters: ${!!cls.typeParameters}, length: ${cls.typeParameters?.length || 0}`);
+            if (cls.typeParameters && cls.typeParameters.length > 0) {
+              console.log(`DEBUG processImport: Found exported generic class ${cls.name}`);
+              this.genericClasses.set(cls.name, cls);
+            }
+          }
+        }
+      }
+    }
+    
     this.importedModules.set(decl.source, exports);
     const imported = this.moduleResolver.getImportedSymbols(decl, exports);
+    console.log(`DEBUG processImport: Found ${imported.size} imported symbols`);
     for (const [name, sym] of imported) {
+        console.log(`DEBUG processImport: symbol ${name}, kind=${sym.kind}, has ast=${!!sym.ast}`);
         this.importedSymbols.set(name, sym);
         if (sym.kind === 'class' && sym.ast) {
             const cls = sym.ast as ClassDecl;
-            this.genericClasses.set(name, cls);
-            this.classDecls.set(name, cls);
-            this.buildVTable(cls, name); // Build namespaced VTable
+            
+            console.log(`DEBUG processImport: class ${name}, has typeParameters: ${!!cls.typeParameters}, length: ${cls.typeParameters?.length || 0}`);
+            
+            // Only add to genericClasses if it has type parameters
+            if (cls.typeParameters && cls.typeParameters.length > 0) {
+                console.log(`DEBUG processImport: Adding ${name} to genericClasses`);
+                this.genericClasses.set(name, cls);
+            } else {
+                console.log(`DEBUG processImport: Adding ${name} to classDecls`);
+                this.classDecls.set(name, cls);
+                this.buildVTable(cls, name); // Build namespaced VTable
+            }
             
             // Register methods and constructor for the imported class name
             // e.g. if name is "time.StopWatch", register "time.StopWatch.elapsed"
-            if (cls.constructorDecl) {
+            if (cls.constructorDecl && (!cls.typeParameters || cls.typeParameters.length === 0)) {
                 const ctorName = `${name}.constructor`;
                 this.scopeStack.push(cls.name);
                 const mName = this.mangleName('constructor', cls.constructorDecl.params);
@@ -426,17 +463,40 @@ export class CodeGenerator {
                 const pts = ['ptr', ...cls.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
                 this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts });
             }
-            for (const m of cls.methods) {
-                this.scopeStack.push(cls.name);
-                const mName = this.mangleName(m.name, m.params);
-                this.scopeStack.pop();
-                
-                const rt = this.getLLVMType(m.returnType);
-                const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
-                this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
+            if (!cls.typeParameters || cls.typeParameters.length === 0) {
+                for (const m of cls.methods) {
+                    this.scopeStack.push(cls.name);
+                    const mName = this.mangleName(m.name, m.params);
+                    this.scopeStack.pop();
+                    
+                    const rt = this.getLLVMType(m.returnType);
+                    const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
+                    this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
+                }
             }
         } else if (sym.kind === 'function' && sym.ast) {
             const fn = sym.ast as FunctionDecl;
+            
+            console.log(`DEBUG processImport: function ${name}, returnType=${fn.returnType?.name}, has genericArgs=${!!fn.returnType?.genericArgs}`);
+            
+            // Auto-import generic classes used in return type
+            if (fn.returnType && fn.returnType.name && fn.returnType.genericArgs) {
+                const returnClassName = fn.returnType.name;
+                console.log(`DEBUG processImport: Checking return type ${returnClassName} for auto-import`);
+                if (!this.genericClasses.has(returnClassName)) {
+                    // Find the class in exports.symbols
+                    const classSymbol = exports.symbols.find(s => s.kind === 'class' && s.name === returnClassName);
+                    console.log(`DEBUG processImport: Found class symbol: ${!!classSymbol}`);
+                    if (classSymbol && classSymbol.ast) {
+                        const cls = classSymbol.ast as ClassDecl;
+                        if (cls.typeParameters && cls.typeParameters.length > 0) {
+                            console.log(`DEBUG processImport: Auto-importing generic class ${returnClassName} from return type`);
+                            this.genericClasses.set(returnClassName, cls);
+                        }
+                    }
+                }
+            }
+            
             if (fn.typeParameters && fn.typeParameters.length > 0) {
                 this.genericFunctions.set(name, fn);
             } else {
@@ -2265,12 +2325,17 @@ export class CodeGenerator {
 
   private instantiateClass(className: string, args: TypeAnnotation[]): string {
     const mangledName = className + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
+    console.log(`DEBUG instantiateClass: className=${className}, mangledName=${mangledName}, already instantiated=${this.instantiatedNames.has(mangledName)}`);
     if (this.instantiatedNames.has(mangledName)) return mangledName;
 
     const baseDecl = this.genericClasses.get(className);
-    if (!baseDecl) return className;
+    if (!baseDecl) {
+      console.log(`DEBUG instantiateClass: No baseDecl found for ${className}`);
+      return className;
+    }
 
     this.instantiatedNames.add(mangledName);
+    console.log(`DEBUG instantiateClass: Starting instantiation of ${mangledName}`);
 
     const oldOutput = this.currentOutput;
     this.currentOutput = this.globalBuffer;
@@ -2326,6 +2391,39 @@ export class CodeGenerator {
     return mangledName;
   }
 
+  private instantiateTypeAnnotationClasses(type: TypeAnnotation): void {
+    if (!type) return;
+    
+    // Check if this is a generic class that needs instantiation
+    if (type.genericArgs && type.genericArgs.length > 0) {
+      const className = type.name;
+      if (this.genericClasses.has(className)) {
+        this.instantiateClass(className, type.genericArgs);
+      }
+    }
+    
+    // Recursively check generic arguments
+    if (type.genericArgs) {
+      for (const arg of type.genericArgs) {
+        this.instantiateTypeAnnotationClasses(arg);
+      }
+    }
+    
+    // Check union types
+    if (type.unionTypes) {
+      for (const ut of type.unionTypes) {
+        this.instantiateTypeAnnotationClasses(ut);
+      }
+    }
+    
+    // Check tuple elements
+    if (type.tupleElements) {
+      for (const elem of type.tupleElements) {
+        this.instantiateTypeAnnotationClasses(elem);
+      }
+    }
+  }
+
   private instantiateFunction(fnName: string, args: TypeAnnotation[]): string {
     const mangledName = fnName + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
     if (this.instantiatedNames.has(mangledName)) return mangledName;
@@ -2342,6 +2440,17 @@ export class CodeGenerator {
     instantiatedDecl.name = mangledName;
     instantiatedDecl.typeParameters = [];
 
+    // Instantiate generic classes used in return type
+    this.instantiateTypeAnnotationClasses(instantiatedDecl.returnType);
+
+    // Instantiate generic classes used in parameter types
+    for (const param of instantiatedDecl.params) {
+      this.instantiateTypeAnnotationClasses(param.type);
+    }
+
+    // Scan function body for NewExpr and instantiate generic classes
+    this.scanAndInstantiateNewExpr(instantiatedDecl.body);
+
     const mName = this.mangleName(instantiatedDecl.name, instantiatedDecl.params);
     const rt = this.getLLVMType(instantiatedDecl.returnType);
     const pts = instantiatedDecl.params.map(p => this.getFunctionParamStorageType(p));
@@ -2353,6 +2462,88 @@ export class CodeGenerator {
     this.currentOutput = oldOutput;
 
     return mangledName;
+  }
+
+  private scanAndInstantiateNewExpr(stmts: Statement[]): void {
+    const scanExpr = (expr: Expression): void => {
+      if (!expr) return;
+      
+      if (expr.kind === ASTKind.NewExpr) {
+        const newExpr = expr as NewExpr;
+        if (newExpr.genericArgs && newExpr.genericArgs.length > 0) {
+          this.instantiateClass(newExpr.className, newExpr.genericArgs);
+        }
+        // Scan constructor arguments
+        if (newExpr.args) {
+          for (const arg of newExpr.args) {
+            scanExpr(arg);
+          }
+        }
+      } else if (expr.kind === ASTKind.CallExpr) {
+        const callExpr = expr as CallExpr;
+        if (callExpr.args) {
+          for (const arg of callExpr.args) {
+            scanExpr(arg);
+          }
+        }
+      } else if (expr.kind === ASTKind.BinaryExpr) {
+        const binExpr = expr as BinaryExpr;
+        scanExpr(binExpr.left);
+        scanExpr(binExpr.right);
+      } else if (expr.kind === ASTKind.UnaryExpr) {
+        const unExpr = expr as UnaryExpr;
+        scanExpr(unExpr.operand);
+      } else if (expr.kind === ASTKind.MemberExpr) {
+        const memExpr = expr as MemberExpr;
+        scanExpr(memExpr.object);
+      } else if (expr.kind === ASTKind.IndexExpr) {
+        const idxExpr = expr as IndexExpr;
+        scanExpr(idxExpr.object);
+        scanExpr(idxExpr.index);
+      }
+    };
+
+    const scanStmt = (stmt: Statement): void => {
+      if (!stmt) return;
+      
+      if (stmt.kind === ASTKind.VarDecl) {
+        const varDecl = stmt as VarDecl;
+        if (varDecl.init) scanExpr(varDecl.init);
+      } else if (stmt.kind === ASTKind.ReturnStmt) {
+        const retStmt = stmt as ReturnStmt;
+        if (retStmt.value) scanExpr(retStmt.value);
+      } else if (stmt.kind === ASTKind.IfStmt) {
+        const ifStmt = stmt as IfStmt;
+        scanExpr(ifStmt.condition);
+        scanStmt(ifStmt.thenBranch);
+        if (ifStmt.elseBranch) scanStmt(ifStmt.elseBranch);
+      } else if (stmt.kind === ASTKind.WhileStmt) {
+        const whileStmt = stmt as WhileStmt;
+        scanExpr(whileStmt.condition);
+        scanStmt(whileStmt.body);
+      } else if (stmt.kind === ASTKind.ForStmt) {
+        const forStmt = stmt as ForStmt;
+        if (forStmt.init) scanStmt(forStmt.init);
+        if (forStmt.condition) scanExpr(forStmt.condition);
+        if (forStmt.update) scanExpr(forStmt.update);
+        scanStmt(forStmt.body);
+      } else if (stmt.kind === ASTKind.BlockStmt) {
+        const blockStmt = stmt as BlockStmt;
+        for (const s of blockStmt.statements) {
+          scanStmt(s);
+        }
+      } else if (stmt.kind === ASTKind.Assignment) {
+        const assign = stmt as Assignment;
+        scanExpr(assign.value);
+      } else if (stmt.kind === ASTKind.ExpressionStmt) {
+        const exprStmt = stmt as ExpressionStmt;
+        scanExpr(exprStmt.expression);
+      }
+    };
+
+    for (const stmt of stmts) {
+      scanStmt(stmt);
+    }
   }
 
   private instantiateMethod(className: string, methodName: string, args: TypeAnnotation[]): string {

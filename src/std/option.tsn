@@ -19,6 +19,34 @@ export class Optional<T> {
         // TODO: Panic if none
         return this.value;
     }
+
+    unwrapOr(defaultValue: T): T {
+        if (this.hasValue) {
+            return this.value;
+        }
+        return defaultValue;
+    }
+
+    map<U>(f: (T) => U): Optional<U> {
+        if (this.hasValue) {
+            return Some<U>(f(this.value));
+        }
+        return None<U>();
+    }
+
+    flatMap<U>(f: (T) => Optional<U>): Optional<U> {
+        if (this.hasValue) {
+            return f(this.value);
+        }
+        return None<U>();
+    }
+
+    filter(predicate: (T) => bool): Optional<T> {
+        if (this.hasValue && predicate(this.value)) {
+            return Some<T>(this.value);
+        }
+        return None<T>();
+    }
 }
 
 export function Some<T>(v: T): Optional<T> {

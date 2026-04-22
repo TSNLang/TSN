@@ -1,0 +1,21 @@
+import { log } from "std:console";
+import { Optional, Some, None } from "std:option";
+import { Result, Ok, Err } from "std:result";
+
+function main(): i32 {
+    // Test Optional.unwrapOr
+    let opt1 = Some<i32>(10);
+    log(opt1.unwrap()); // Should print 10
+
+    let opt2 = None<i32>();
+    log(opt2.unwrapOr(99)); // Should print 99
+
+    // Test Result.unwrapOr
+    let res1 = Ok<i32, i32>(5);
+    log(res1.unwrap()); // Should print 5
+
+    let res2 = Err<i32, i32>(404);
+    log(res2.unwrapOr(0)); // Should print 0
+
+    return 0;
+}

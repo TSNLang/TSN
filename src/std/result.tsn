@@ -25,6 +25,34 @@ export class Result<T, E> {
     unwrapErr(): E {
         return this.error;
     }
+
+    unwrapOr(defaultValue: T): T {
+        if (this.ok) {
+            return this.value;
+        }
+        return defaultValue;
+    }
+
+    map<U>(f: (T) => U): Result<U, E> {
+        if (this.ok) {
+            return Ok<U, E>(f(this.value));
+        }
+        return Err<U, E>(this.error);
+    }
+
+    mapErr<F>(f: (E) => F): Result<T, F> {
+        if (this.ok) {
+            return Ok<T, F>(this.value);
+        }
+        return Err<T, F>(f(this.error));
+    }
+
+    flatMap<U>(f: (T) => Result<U, E>): Result<U, E> {
+        if (this.ok) {
+            return f(this.value);
+        }
+        return Err<U, E>(this.error);
+    }
 }
 
 export function Ok<T, E>(v: T): Result<T, E> {

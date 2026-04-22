@@ -1,4 +1,5 @@
 import * as memory from "std:memory";
+import { Optional, Some, None } from "std:option";
 
 /**
  * Array<T> - Một mảng động tương tự std::vector hoặc mảng trong JavaScript/TypeScript.
@@ -76,6 +77,51 @@ export class Array<T> {
             this.capacity = 0;
         }
     }
+
+    /**
+     * Ánh xạ mỗi phần tử sang kiểu mới với hàm transform.
+     */
+    @unsafe map<U>(f: (T) => U): Array<U> {
+        let result = new Array<U>();
+        let i = 0;
+        while (i < this.length) {
+            result.push(f(this.get(i)));
+            i = i + 1;
+        }
+        return result;
+    }
+
+    /**
+     * Lọc các phần tử thỏa mãn điều kiện.
+     */
+    @unsafe filter(predicate: (T) => bool): Array<T> {
+        let result = new Array<T>();
+        let i = 0;
+        while (i < this.length) {
+            let item = this.get(i);
+            if (predicate(item)) {
+                result.push(item);
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    /**
+     * Tìm phần tử đầu tiên thỏa mãn điều kiện.
+     */
+    @unsafe find(predicate: (T) => bool): Optional<T> {
+        let i = 0;
+        while (i < this.length) {
+            let item = this.get(i);
+            if (predicate(item)) {
+                return Some<T>(item);
+            }
+            i = i + 1;
+        }
+        return None<T>();
+    }
+}
 
     /**
      * Tăng gấp đôi dung lượng bộ nhớ.
