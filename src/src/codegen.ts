@@ -21,6 +21,8 @@ interface FunctionInfo {
   name: string;
   returnType: string;
   paramTypes: string[];
+  restParamIndex?: number;
+  restElementType?: string;
 }
 
 interface VTableInfo {
@@ -244,10 +246,13 @@ export class CodeGenerator {
         return;
       }
       const mName = this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare);
-      const rt = this.getLLVMType(fn.returnType), pts = fn.params.map(p => this.getLLVMType(p.type));
-      this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts, isExternal: !!fn.ffiLib || fn.isDeclare } as any);
+      const rt = this.getLLVMType(fn.returnType);
+      const restParamIndex = fn.params.findIndex(p => !!p.isRest);
+      const pts = fn.params.map(p => this.getFunctionParamStorageType(p));
+      const restElementType = restParamIndex !== -1 ? this.getRestArrayClassName(fn.params[restParamIndex].type) : undefined;
+      this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal: !!fn.ffiLib || fn.isDeclare } as any);
       const scopedName = this.scopeStack.length > 0 ? this.scopeStack.join('.') + '.' + fn.name : fn.name;
-      this.functions.set(scopedName, { name: mName, returnType: rt, paramTypes: pts, isExternal: !!fn.ffiLib || fn.isDeclare } as any);
+      this.functions.set(scopedName, { name: mName, returnType: rt, paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal: !!fn.ffiLib || fn.isDeclare } as any);
     } else if (decl.kind === ASTKind.ExportDecl) this.preScanDeclaration((decl as ExportDecl).declaration);
   }
 
@@ -439,7 +444,7 @@ export class CodeGenerator {
     res += `${name.length}${name}E`;
     if (params.length > 0) {
       res += '_';
-      for (const p of params) res += this.getLLVMType(p.type).replace(/ptr/g, 'p').replace(/\[|\]|<|>| /g, '');
+      for (const p of params) res += this.getFunctionParamRuntimeType(p).replace(/ptr/g, 'p').replace(/\[|\]|<|>|%| /g, '');
     }
     return res;
   }
@@ -480,6 +485,38 @@ export class CodeGenerator {
     }
   }
 
+  private ensureGenericArrayAvailable(): void {
+    if (this.genericClasses.has('Array')) return;
+    const arrayModule = this.moduleResolver.resolveModule('std:array');
+    const arrayClass = arrayModule?.symbols.find(sym => sym.kind === 'class' && sym.name === 'Array');
+    if (arrayClass?.ast) {
+      const cls = arrayClass.ast as ClassDecl;
+      this.genericClasses.set('Array', cls);
+      this.classDecls.set('Array', cls);
+      this.buildVTable(cls, 'Array');
+    }
+  }
+
+  private getRestArrayClassName(t: TypeAnnotation): string {
+    this.ensureGenericArrayAvailable();
+    const elementType = this.getLLVMTypeByName(t.name);
+    const className = `Array_${elementType}`;
+    if (!this.classDecls.has(className) && this.genericClasses.has('Array')) {
+      this.instantiateClass('Array', [{ name: elementType, isPointer: false, isArray: false }]);
+    }
+    return className;
+  }
+
+  private getFunctionParamRuntimeType(p: Parameter): string {
+    if (p.isRest) return `%${this.getRestArrayClassName(p.type)}`;
+    return p.type.name === 'string' ? 'string' : this.getLLVMType(p.type);
+  }
+
+  private getFunctionParamStorageType(p: Parameter): string {
+    if (p.isRest) return 'ptr';
+    return this.getFunctionParamRuntimeType(p);
+  }
+
   private generateGlobalConst(decl: VarDecl): void {
     const t = decl.type ? this.getLLVMType(decl.type) : 'i32';
     const mName = this.scopeStack.length > 0 ? this.scopeStack.join('_') + '_' + decl.name : decl.name;
@@ -515,7 +552,7 @@ export class CodeGenerator {
 
     const mName = this.mangleName(decl.name, decl.params, !!decl.ffiLib || decl.isDeclare);
     const rt = this.getLLVMType(decl.returnType);
-    let paramsStr = decl.params.map(p => `${this.toLLVMType(this.getLLVMType(p.type))} %${p.name}`).join(', ');
+    let paramsStr = decl.params.map(p => `${this.toLLVMType(this.getFunctionParamStorageType(p))} %${p.name}`).join(', ');
     if (isMethod) paramsStr = `ptr %this${paramsStr ? ', ' + paramsStr : ''}`;
 
     if (decl.isDeclare || decl.ffiLib) {
@@ -523,7 +560,7 @@ export class CodeGenerator {
         name: decl.name,
         kind: 'function',
         llvmType: rt,
-        paramTypes: decl.params.map(p => this.getLLVMType(p.type)),
+        paramTypes: decl.params.map(p => this.getFunctionParamStorageType(p)),
       } as any);
       return;
     }
@@ -548,7 +585,7 @@ export class CodeGenerator {
     }
     for (const p of decl.params) { 
       this.currentFunctionParams.add(p.name); 
-      const pt = p.type.name === 'string' ? 'string' : this.getLLVMType(p.type);
+      const pt = this.getFunctionParamRuntimeType(p);
       this.currentFunctionParamTypes.set(p.name, pt); 
     }
 
@@ -567,7 +604,7 @@ export class CodeGenerator {
       this.emit(`store ptr %this, ptr %this.addr, align 8`);
     }
     for (const p of decl.params) {
-      const t = this.getLLVMType(p.type);
+      const t = this.getFunctionParamStorageType(p);
       this.emit(`%${p.name}.addr = alloca ${this.toLLVMType(t)}, align ${this.getAlignment(t)}`);
       this.emit(`store ${this.toLLVMType(t)} %${p.name}, ptr %${p.name}.addr, align ${this.getAlignment(t)}`);
     }
@@ -739,7 +776,8 @@ export class CodeGenerator {
   }
 
   private toLLVMType(t: string): string {
-    if (this.isPointerType(t)) return 'ptr';
+    if (this.isPointerType(t) || this.isClassType(t)) return 'ptr';
+    if (t.startsWith('%') && this.interfaceDecls.has(t.substring(1))) return 'ptr';
     return t;
   }
 
@@ -968,6 +1006,75 @@ export class CodeGenerator {
     return lastTemp;
   }
 
+  private createRuntimeArray(tsnType: string, elements: Expression[]): string {
+    this.ensureGenericArrayAvailable();
+    const className = `Array_${tsnType}`;
+    if (!this.classDecls.has(className) && this.genericClasses.has('Array')) {
+        this.instantiateClass('Array', [{ name: tsnType, isPointer: false, isArray: false }]);
+    }
+    const arraySize = this.getTypeSize(`%${className}`, true);
+    const arrPtr = this.newTemp();
+    this.ensureExternalDeclaration('class_alloc', { name: 'class_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] });
+    this.emit(`${arrPtr} = call ptr @class_alloc(i32 ${arraySize})`);
+
+    const vinfo = this.vTables.get(className);
+    if (vinfo) {
+        const vtablePtr = this.newTemp();
+        this.emit(`${vtablePtr} = getelementptr inbounds %${className}, ptr ${arrPtr}, i32 0, i32 1`);
+        this.emit(`store ptr @_VTable.${className}, ptr ${vtablePtr}, align 8`);
+    }
+
+    const ctorMangled = this.mangleNameWithScope(className, 'constructor', []);
+    this.emit(`call void @${ctorMangled}(ptr ${arrPtr})`);
+    this.tempTypes.set(arrPtr, `%${className}`);
+
+    for (const el of elements) {
+        if (el.kind === ASTKind.SpreadElementExpr) {
+            const spread = el as SpreadElementExpr;
+            const iterVal = this.generateExpression(spread.expr);
+            const iterClass = this.tempTypes.get(iterVal) || this.inferExprType(spread.expr);
+            const iterClassName = iterClass.startsWith('%') ? iterClass.substring(1) : iterClass;
+
+            const loopCond = this.newLabel('spread.cond');
+            const loopBody = this.newLabel('spread.body');
+            const loopEnd = this.newLabel('spread.end');
+
+            this.emit('br label %' + loopCond);
+            this.emit(loopCond + ':');
+
+            const optVal = this.newTemp();
+            const optClass = `Optional_${tsnType}`;
+            const nextMangled = this.mangleNameWithScope(iterClassName, 'next', []);
+            this.emit(`${optVal} = call ptr @${nextMangled}(ptr ${iterVal})`);
+
+            const isSomeMangled = this.mangleNameWithScope(optClass, 'isSome', []);
+            const isSomeRes = this.newTemp();
+            this.emit(`${isSomeRes} = call i1 @${isSomeMangled}(ptr ${optVal})`);
+
+            this.emit(`br i1 ${isSomeRes}, label %${loopBody}, label %${loopEnd}`);
+
+            this.emit(loopBody + ':');
+            const unwrapMangled = this.mangleNameWithScope(optClass, 'unwrap', []);
+            const unwrapRes = this.newTemp();
+            const unwrapRetT = this.toLLVMType(tsnType);
+            this.emit(`${unwrapRes} = call ${unwrapRetT} @${unwrapMangled}(ptr ${optVal})`);
+
+            const pushMangled = this.mangleNameWithScope(className, 'push', [{ name: 'item', type: { name: tsnType, isPointer: false, isArray: false } }]);
+            this.emit(`call void @${pushMangled}(ptr ${arrPtr}, ${unwrapRetT} ${unwrapRes})`);
+
+            this.emit(`br label %${loopCond}`);
+            this.emit(loopEnd + ':');
+        } else {
+            const val = this.generateExpression(el);
+            const pushMangled = this.mangleNameWithScope(className, 'push', [{ name: 'item', type: { name: tsnType, isPointer: false, isArray: false } }]);
+            const valRetT = this.toLLVMType(tsnType);
+            this.emit(`call void @${pushMangled}(ptr ${arrPtr}, ${valRetT} ${val})`);
+        }
+    }
+
+    return arrPtr;
+  }
+
   private generateArrayLiteralExpr(e: ArrayLiteralExpr): string {
     let tsnType = 'i32'; // Default
     
@@ -1000,85 +1107,7 @@ export class CodeGenerator {
         }
     }
 
-    // 1. Instantiate Array<T>
-    const className = `Array_${tsnType}`;
-    if (!this.classDecls.has(className) && this.genericClasses.has('Array')) {
-        this.instantiateClass('Array', [{ name: tsnType, isPointer: false, isArray: false }]);
-    }
-    const arraySize = this.getTypeSize(`%${className}`, true);
-    const arrPtr = this.newTemp();
-    this.ensureExternalDeclaration('class_alloc', { name: 'class_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] });
-    this.emit(`${arrPtr} = call ptr @class_alloc(i32 ${arraySize})`);
-    
-    // Assign VTable!!!
-    const vinfo = this.vTables.get(className);
-    if (vinfo) {
-        const vtablePtr = this.newTemp();
-        this.emit(`${vtablePtr} = getelementptr inbounds %${className}, ptr ${arrPtr}, i32 0, i32 1`); // VTable is at index 1 due to refCount wait
-        // Wait, VTable in struct is ALWAYS at index 1.
-        this.emit(`store ptr @_VTable.${className}, ptr ${vtablePtr}, align 8`);
-    }
-
-    const arrInitType = `ptr`;
-    const arrMethod = `@_T12Array_${tsnType}11constructorE`;
-    this.emit(`call void ${arrMethod}(ptr ${arrPtr})`);
-    this.tempTypes.set(arrPtr, `%${className}`);
-
-    // 2. Push elements
-    for (const el of e.elements) {
-        if (el.kind === ASTKind.SpreadElementExpr) {
-            const spread = el as SpreadElementExpr;
-            const iterVal = this.generateExpression(spread.expr);
-            const iterClass = this.tempTypes.get(iterVal) || this.inferExprType(spread.expr);
-            const iterClassName = iterClass.startsWith('%') ? iterClass.substring(1) : iterClass;
-            
-            // Loop: while (true) { let opt = iter.next(); if (opt.isSome()) arr.push(opt.unwrap()); else break; }
-            const loopCond = this.newLabel('spread.cond');
-            const loopBody = this.newLabel('spread.body');
-            const loopEnd = this.newLabel('spread.end');
-            
-            this.emit('br label %' + loopCond);
-            this.emit(loopCond + ':');
-            
-            // Call next()
-            const optVal = this.newTemp();
-            const optClass = `Optional_${tsnType}`;
-            
-            // Since next() returns an Object (struct), it usually returns by value, but in TSN objects are pointers
-            // Wait, Optional<T> is a Class! So it's a pointer.
-            const nextMangled = this.mangleNameWithScope(iterClassName, 'next', []);
-            this.emit(`${optVal} = call ptr @${nextMangled}(ptr ${iterVal})`);
-            
-            // Check isSome
-            const isSomeMangled = this.mangleNameWithScope(optClass, 'isSome', []);
-            const isSomeRes = this.newTemp();
-            this.emit(`${isSomeRes} = call i1 @${isSomeMangled}(ptr ${optVal})`);
-            
-            this.emit(`br i1 ${isSomeRes}, label %${loopBody}, label %${loopEnd}`);
-            
-            this.emit(loopBody + ':');
-            // Call unwrap()
-            const unwrapMangled = this.mangleNameWithScope(optClass, 'unwrap', []);
-            const unwrapRes = this.newTemp();
-            const unwrapRetT = this.toLLVMType(tsnType);
-            this.emit(`${unwrapRes} = call ${unwrapRetT} @${unwrapMangled}(ptr ${optVal})`);
-            
-            // Call Array.push()
-            const pushMangled = this.mangleNameWithScope(className, 'push', [{ name: 'item', type: { name: tsnType, isPointer: false, isArray: false } }]);
-            // Push signature in LLVM? Push takes `ptr this, ty item`!
-            this.emit(`call void @${pushMangled}(ptr ${arrPtr}, ${unwrapRetT} ${unwrapRes})`);
-            
-            this.emit(`br label %${loopCond}`);
-            this.emit(loopEnd + ':');
-        } else {
-            const val = this.generateExpression(el);
-            const pushMangled = this.mangleNameWithScope(className, 'push', [{ name: 'item', type: { name: tsnType, isPointer: false, isArray: false } }]);
-            const valRetT = this.toLLVMType(tsnType);
-            this.emit(`call void @${pushMangled}(ptr ${arrPtr}, ${valRetT} ${val})`);
-        }
-    }
-    
-    return arrPtr;
+    return this.createRuntimeArray(tsnType, e.elements);
   }
 
   private generateThis(): string {
@@ -1335,12 +1364,30 @@ export class CodeGenerator {
         this.ensureExternalDeclaration(actualName, info as any);
     }
     
-    const args = e.args.map((arg, i) => {
-      const v = this.generateExpression(arg);
-      const actualT = this.getValueType(v);
-      const expectedT = info && info.paramTypes[i] ? info.paramTypes[i] : actualT;
-      return `${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`;
-    }).join(', ');
+    let mappedArgs: string[] = [];
+    if (info && info.restParamIndex !== undefined) {
+      const fixedCount = info.restParamIndex;
+      for (let i = 0; i < fixedCount; i++) {
+        const arg = e.args[i];
+        const v = this.generateExpression(arg);
+        const actualT = this.getValueType(v);
+        const expectedT = info.paramTypes[i] || actualT;
+        mappedArgs.push(`${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`);
+      }
+      const restArgs = e.args.slice(fixedCount);
+      const restType = info.restElementType || 'Array_i32';
+      const elementType = restType.startsWith('Array_') ? restType.substring(6) : 'i32';
+      const restArray = this.createRuntimeArray(elementType, restArgs);
+      mappedArgs.push(`ptr ${restArray}`);
+    } else {
+      mappedArgs = e.args.map((arg, i) => {
+        const v = this.generateExpression(arg);
+        const actualT = this.getValueType(v);
+        const expectedT = info && info.paramTypes[i] ? info.paramTypes[i] : actualT;
+        return `${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`;
+      });
+    }
+    const args = mappedArgs.join(', ');
     const rt = info ? info.returnType : 'i32';
     const llvmRt = this.toLLVMType(rt);
     if (llvmRt === 'void') { this.emit(`call void @${actualName}(${args})`); return '0'; }

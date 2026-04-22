@@ -347,6 +347,7 @@ export type Statement =
 export interface Parameter {
   name: string;
   type: TypeAnnotation;
+  isRest?: boolean;
 }
 
 export interface FunctionDecl extends ASTNode {

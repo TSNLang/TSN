@@ -332,12 +332,23 @@ export class Parser {
   private parseMethodParams(): Parameter[] {
     this.consume(TokenKind.LParen, "Expected '('");
     const params: Parameter[] = [];
+    let seenRest = false;
     if (!this.check(TokenKind.RParen)) {
       do {
+        const isRest = this.match(TokenKind.Ellipsis);
+        if (seenRest) {
+          this.error('Rest parameter must be the last parameter');
+        }
         const pName = this.consume(TokenKind.Identifier, 'Expected parameter name').text;
         this.consume(TokenKind.Colon, "Expected ':'");
         const pType = this.parseType();
-        params.push({ name: pName, type: pType });
+        if (isRest) {
+          seenRest = true;
+          if (!pType.isArray) {
+            this.error('Rest parameter type must use array syntax, e.g. ...args: i32[]');
+          }
+        }
+        params.push({ name: pName, type: pType, isRest });
       } while (this.match(TokenKind.Comma));
     }
     this.consume(TokenKind.RParen, "Expected ')'");
@@ -623,9 +634,7 @@ export class Parser {
   private parsePostfix(): Expression {
     let expr = this.parsePrimary();
     while (true) {
-      if (this.check(TokenKind.Less)) {
-          // Potential generic call: foo<i32>(...)
-          // We look ahead to see if it's followed by types and then a '('
+      if (this.check(TokenKind.Less) && this.isGenericCallAhead()) {
           const snapshot = this.pos;
           try {
               this.advance(); // consume '<'
@@ -634,19 +643,15 @@ export class Parser {
                   gArgs.push(this.parseType());
               } while (this.match(TokenKind.Comma));
               this.consume(TokenKind.Greater, "Expected '>'");
-              
-              if (this.match(TokenKind.LParen)) {
-                  const args: Expression[] = [];
-                  if (!this.check(TokenKind.RParen)) {
-                    do { args.push(this.parseExpression()); } while (this.match(TokenKind.Comma));
-                  }
-                  this.consume(TokenKind.RParen, "Expected ')' after arguments");
-                  expr = { kind: ASTKind.CallExpr, callee: expr, genericArgs: gArgs, args, line: expr.line, column: expr.column };
-                  continue;
-              } else {
-                  // Not a call, backtrack
-                  this.pos = snapshot;
+
+              this.consume(TokenKind.LParen, "Expected '(' after generic arguments");
+              const args: Expression[] = [];
+              if (!this.check(TokenKind.RParen)) {
+                do { args.push(this.parseExpression()); } while (this.match(TokenKind.Comma));
               }
+              this.consume(TokenKind.RParen, "Expected ')' after arguments");
+              expr = { kind: ASTKind.CallExpr, callee: expr, genericArgs: gArgs, args, line: expr.line, column: expr.column };
+              continue;
           } catch (e) {
               this.pos = snapshot;
           }
@@ -817,6 +822,27 @@ export class Parser {
     } while (this.match(TokenKind.Comma));
     this.consume(TokenKind.Greater, "Expected '>' after type parameters");
     return params;
+  }
+
+  private isGenericCallAhead(): boolean {
+    let i = this.pos;
+    if (this.tokens[i]?.kind !== TokenKind.Less) return false;
+
+    let depth = 0;
+    while (i < this.tokens.length) {
+      const kind = this.tokens[i].kind;
+      if (kind === TokenKind.Less) depth++;
+      else if (kind === TokenKind.Greater) {
+        depth--;
+        if (depth === 0) {
+          return this.tokens[i + 1]?.kind === TokenKind.LParen;
+        }
+      } else if (kind === TokenKind.Semicolon || kind === TokenKind.LBrace || kind === TokenKind.RBrace) {
+        return false;
+      }
+      i++;
+    }
+    return false;
   }
 
   private match(...kinds: TokenKind[]): boolean {

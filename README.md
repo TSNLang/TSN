@@ -8,7 +8,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.16.11--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Version](https://img.shields.io/badge/version-0.16.12--indev-orange)](https://github.com/TSNLang/TSN)
   [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
@@ -21,6 +21,16 @@
 **TSN** is a systems programming language that maintains the elegant syntax of TypeScript while compiling directly to native code via **LLVM IR**.
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
+
+## 🚀 Version 0.16.12-indev: Rest Parameters (...)
+
+TSN 0.16.12-indev is planned to prioritize Rest Parameters (`...`) so the language can express flexible APIs without multiplying one-off helper overloads.
+
+Key highlights:
+- **Rest Parameters First**: Instead of adding `hashCombine3`, `hashCombine4`, and more fixed-arity helpers, TSN will move toward variadic-style source ergonomics through rest parameters.
+- **`std:hash` Roadmap**: This feature is the preferred foundation for future APIs such as `hash.combine(a, b, c, d)` and broader multi-value hashing utilities.
+- **Compiler Reuse Strategy**: TSN already supports the `...` token and spread lowering in array literals, so the next step is extending that groundwork into function parameter lists and call lowering.
+- **Container-Based Lowering**: The current implementation direction is to lower rest arguments into `Array<T>` so the feature stays aligned with existing TSN ownership and collection rules.
 
 ## 🚀 Version 0.16.11-indev: `std:hash` Foundation
 

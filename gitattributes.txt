@@ -1,0 +1,2 @@
+# TSN files should be treated as TypeScript for syntax highlighting
+*.tsn linguist-language=TypeScript
