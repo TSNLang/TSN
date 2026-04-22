@@ -7,8 +7,12 @@ function main(): i32 {
     let b = hash.hashString("tsn");
     let c = hash.hashF32(3.25 as f32);
     let d = hash.hashF64(6.5 as f64);
-    let e = hash.finalize(hash.combine(hash.combine(a, b), hash.combine(c, d)), str.byteLength("tsn"));
+    let e = hash.combineMany(a, b, c, d);
+    let f = hash.hashI32Many(1, 2, 3, 4, 5);
+    let g = hash.combineStrings("tsn", "std", "hash");
 
     console.log(str.fromInt(e as i64));
+    console.log(str.fromInt(f as i64));
+    console.log(str.fromInt(g as i64));
     return 0;
 }

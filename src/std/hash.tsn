@@ -29,6 +29,33 @@ export function combine(a: i32, b: i32): i32 {
 }
 
 /**
+ * Trộn nhiều giá trị hash đã được chuẩn hóa sẵn.
+ * Đây là API variadic nền tảng cho 0.16.13-indev.
+ */
+export function combineMany(...parts: i32[]): i32 {
+    let h = SEED;
+    let i: i32 = 0;
+    while (i < parts.length) {
+        h = combine(h, parts.get(i));
+        i = i + 1;
+    }
+    return finalize(h, parts.length);
+}
+
+/**
+ * Băm trực tiếp nhiều giá trị i32 rồi gộp chúng lại.
+ */
+export function hashI32Many(...values: i32[]): i32 {
+    let h = SEED;
+    let i: i32 = 0;
+    while (i < values.length) {
+        h = combine(h, hashI32(values.get(i)));
+        i = i + 1;
+    }
+    return finalize(h, values.length);
+}
+
+/**
  * Trộn một số nguyên 32-bit để giảm các pattern tuyến tính.
  */
 export function hashI32(value: i32): i32 {
@@ -126,6 +153,24 @@ export @unsafe function hashString(value: string): i32 {
     if (value == null) return 0;
     let length = str.byteLength(value);
     return hashBytes(value as rawPtr<void>, length);
+}
+
+/**
+ * Băm nhiều chuỗi theo thứ tự truyền vào.
+ * Hữu ích cho compound key dạng text mà không cần tự lồng combine(...).
+ */
+export @unsafe function combineStrings(...values: string[]): i32 {
+    let h = SEED;
+    let totalLength: i32 = 0;
+    let i: i32 = 0;
+    while (i < values.length) {
+        let current = values.get(i);
+        let currentHash = hashString(current);
+        h = combine(h, currentHash);
+        totalLength = totalLength + str.byteLength(current);
+        i = i + 1;
+    }
+    return finalize(h, totalLength);
 }
 
 /**

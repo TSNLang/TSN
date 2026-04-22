@@ -424,8 +424,20 @@ export class CodeGenerator {
                 const pts = ['ptr', ...m.params.map(p => this.getLLVMType(p.type))];
                 this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
             }
-        } else if (sym.kind === 'function' && sym.ast && sym.ast.typeParameters && sym.ast.typeParameters.length > 0) {
-            this.genericFunctions.set(name, sym.ast);
+        } else if (sym.kind === 'function' && sym.ast) {
+            const fn = sym.ast as FunctionDecl;
+            if (fn.typeParameters && fn.typeParameters.length > 0) {
+                this.genericFunctions.set(name, fn);
+            } else {
+                const mName = this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare);
+                const rt = this.getLLVMType(fn.returnType);
+                const restParamIndex = fn.params.findIndex(p => !!p.isRest);
+                const pts = fn.params.map(p => this.getFunctionParamStorageType(p));
+                const restElementType = restParamIndex !== -1 ? this.getRestArrayClassName(fn.params[restParamIndex].type) : undefined;
+                const isExternal = !!fn.ffiLib || fn.isDeclare;
+                this.functions.set(name, { name: mName, returnType: rt, paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal } as any);
+                this.functions.set(fn.name, { name: mName, returnType: rt, paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal } as any);
+            }
         }
     }
   }
@@ -488,6 +500,11 @@ export class CodeGenerator {
   private ensureGenericArrayAvailable(): void {
     if (this.genericClasses.has('Array')) return;
     const arrayModule = this.moduleResolver.resolveModule('std:array');
+    if (arrayModule?.program) {
+      for (const decl of arrayModule.program.declarations) {
+        if (decl.kind === ASTKind.ImportDecl) this.processImport(decl as ImportDecl);
+      }
+    }
     const arrayClass = arrayModule?.symbols.find(sym => sym.kind === 'class' && sym.name === 'Array');
     if (arrayClass?.ast) {
       const cls = arrayClass.ast as ClassDecl;
@@ -1309,10 +1326,30 @@ export class CodeGenerator {
 
   private generateInternalCall(name: string, args: Expression[]): string {
     const info = this.functions.get(name);
-    const aStr = args.map((arg, i) => {
-      const v = this.generateExpression(arg), t = info && info.paramTypes[i] ? info.paramTypes[i] : this.getValueType(v);
-      return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
-    }).join(', ');
+    let mappedArgs: string[] = [];
+
+    if (info && info.restParamIndex !== undefined) {
+      const fixedCount = info.restParamIndex;
+      for (let i = 0; i < fixedCount; i++) {
+        const arg = args[i];
+        const v = this.generateExpression(arg);
+        const actualT = this.getValueType(v);
+        const expectedT = info.paramTypes[i] || actualT;
+        mappedArgs.push(`${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`);
+      }
+      const restArgs = args.slice(fixedCount);
+      const restType = info.restElementType || 'Array_i32';
+      const elementType = restType.startsWith('Array_') ? restType.substring(6) : 'i32';
+      const restArray = this.createRuntimeArray(elementType, restArgs);
+      mappedArgs.push(`ptr ${restArray}`);
+    } else {
+      mappedArgs = args.map((arg, i) => {
+        const v = this.generateExpression(arg), t = info && info.paramTypes[i] ? info.paramTypes[i] : this.getValueType(v);
+        return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
+      });
+    }
+
+    const aStr = mappedArgs.join(', ');
     const rt = info ? info.returnType : 'i32';
     const llvmRt = this.toLLVMType(rt);
     const actualName = info ? info.name : name;
