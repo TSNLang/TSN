@@ -121,7 +121,6 @@ export class Array<T> {
         }
         return None<T>();
     }
-}
 
     /**
      * Tăng gấp đôi dung lượng bộ nhớ.

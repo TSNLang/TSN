@@ -1,0 +1,41 @@
+import { log } from "std:console";
+import { Some, None } from "std:option";
+import { Ok, Err } from "std:result";
+import { Array } from "std:array";
+
+function main(): i32 {
+    let opt = Some<i32>(10);
+    let mappedOpt = opt.map<i32>(double);
+    log(mappedOpt.unwrap());
+
+    let noneOpt = None<i32>();
+    log(noneOpt.unwrapOr(7));
+
+    let ok = Ok<i32, i32>(5);
+    let mappedOk = ok.map<i32>(double);
+    log(mappedOk.unwrap());
+
+    let err = Err<i32, i32>(404);
+    log(err.unwrapOr(0));
+
+    let arr = new Array<i32>();
+    arr.push(1);
+    arr.push(2);
+    arr.push(3);
+
+    let doubled = arr.map<i32>(double);
+    log(doubled.get(1));
+
+    let found = arr.find(isTwo);
+    log(found.unwrapOr(99));
+
+    return 0;
+}
+
+function double(x: i32): i32 {
+    return x * 2;
+}
+
+function isTwo(x: i32): bool {
+    return x == 2;
+}

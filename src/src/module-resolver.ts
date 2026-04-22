@@ -157,20 +157,19 @@ export class ModuleResolver {
         
         const symbols: ExportedSymbol[] = [];
         const codegen = new CodeGenerator(); // Use CodeGenerator to check target OS
-        
-        for (const decl of program.declarations) {
-            // Only process exported declarations
-            if (decl.kind !== ASTKind.ExportDecl) continue;
-            
-            const innerDecl = (decl as ExportDecl).declaration;
-            
+        const sourceLines = content.split(/\r?\n/);
+        const seenSymbols = new Set<string>();
+
+        const addExportedSymbol = (innerDecl: FunctionDecl | ClassDecl | VarDecl) => {
             if (innerDecl.kind === ASTKind.ClassDecl) {
                 const c = innerDecl as ClassDecl;
+                if (seenSymbols.has(`class:${c.name}`)) return;
+                seenSymbols.add(`class:${c.name}`);
                 symbols.push({ name: c.name, kind: 'class', ast: c });
             } else if (innerDecl.kind === ASTKind.FunctionDecl) {
                 const f = innerDecl as FunctionDecl;
-                if (!codegen.isTargetOSMatch(f.targetOS)) continue;
-                
+                if (!codegen.isTargetOSMatch(f.targetOS) || seenSymbols.has(`function:${f.name}`)) return;
+                seenSymbols.add(`function:${f.name}`);
                 symbols.push({
                   name: f.name,
                   kind: 'function',
@@ -180,12 +179,35 @@ export class ModuleResolver {
                 });
             } else if (innerDecl.kind === ASTKind.VarDecl) {
                 const v = innerDecl as VarDecl;
+                if (seenSymbols.has(`var:${v.name}`)) return;
+                seenSymbols.add(`var:${v.name}`);
                 symbols.push({
                     name: v.name,
                     kind: v.isConst ? 'const' : 'let',
                     varType: toLLVMTypeName(v.type || { name: 'i32' } as any),
                     ast: v
                 });
+            }
+        };
+
+        const isInlineExportedDecl = (decl: FunctionDecl | ClassDecl | VarDecl): boolean => {
+          const lineText = sourceLines[decl.line - 1] || '';
+          return /\bexport\b/.test(lineText);
+        };
+        
+        for (const decl of program.declarations) {
+            if (decl.kind === ASTKind.ExportDecl) {
+                addExportedSymbol((decl as ExportDecl).declaration as FunctionDecl | ClassDecl | VarDecl);
+                continue;
+            }
+
+            // Some stdlib declarations are parsed as plain declarations when `export`
+            // shares the line with decorators. Detect those from the original source line.
+            if (
+              (decl.kind === ASTKind.ClassDecl || decl.kind === ASTKind.FunctionDecl || decl.kind === ASTKind.VarDecl)
+              && isInlineExportedDecl(decl as FunctionDecl | ClassDecl | VarDecl)
+            ) {
+                addExportedSymbol(decl as FunctionDecl | ClassDecl | VarDecl);
             }
         }
         
