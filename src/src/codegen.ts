@@ -486,6 +486,8 @@ export class CodeGenerator {
                     this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
                 }
             }
+        } else if (sym.kind === 'enum' && sym.ast) {
+            this.processEnum(sym.ast as EnumDecl);
         } else if (sym.kind === 'function' && sym.ast) {
             const fn = sym.ast as FunctionDecl;
             
@@ -756,7 +758,18 @@ export class CodeGenerator {
   private inferExprType(e: Expression): string {
       if (e.kind === ASTKind.Identifier) {
           const id = (e as Identifier).name;
-          return this.localVarTypes.get(id) || (this.currentFunctionParams.has(id) ? this.currentFunctionParamTypes.get(id)! : 'i32');
+          const localType = this.localVarTypes.get(id);
+          if (localType) return localType;
+          if (this.currentFunctionParams.has(id)) return this.currentFunctionParamTypes.get(id)!;
+          const global = this.globals.get(id);
+          if (global) return global.type;
+          const imported = this.importedSymbols.get(id);
+          if (imported) {
+              if (imported.kind === 'class' || imported.kind === 'interface') return `%${imported.name}`;
+              if (imported.kind === 'const' || imported.kind === 'let') return imported.varType || 'i32';
+              if (imported.kind === 'enum') return imported.name;
+          }
+          return 'i32';
       }
       if (e.kind === ASTKind.ThisExpr) return `%${this.currentClassName}`;
       if (e.kind === ASTKind.ArrayLiteralExpr) {
@@ -1360,6 +1373,8 @@ export class CodeGenerator {
 
   private generateBinaryExpr(e: BinaryExpr): string {
     const l = this.generateExpression(e.left), r = this.generateExpression(e.right);
+    const leftType = this.getValueType(l);
+    const rightType = this.getValueType(r);
     const opMap: Record<string, string> = { 
         '+': 'add', '-': 'sub', '*': 'mul', '/': 'sdiv', '%': 'srem',
         '==': 'icmp eq', '!=': 'icmp ne', '<': 'icmp slt', '<=': 'icmp sle', '>': 'icmp sgt', '>=': 'icmp sge', 
@@ -1368,6 +1383,43 @@ export class CodeGenerator {
         '<<': 'shl', '>>': 'ashr'
     };
     const op = opMap[e.operator] || 'add';
+
+    if (e.operator === '+' && (leftType === 'string' || rightType === 'string' || (this.toLLVMType(leftType) === 'ptr' && this.toLLVMType(rightType) === 'ptr'))) {
+      this.ensureExternalDeclaration('string_concat', { name: 'string_concat', kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'ptr'] } as any);
+      const result = this.newTemp();
+      this.emit(`${result} = call ptr @string_concat(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
+      this.tempTypes.set(result, 'string');
+      return result;
+    }
+
+    if ((e.operator === '+' || e.operator === '-') && this.toLLVMType(leftType) === 'ptr' && rightType.startsWith('i')) {
+      const baseInt = this.newTemp();
+      this.emit(`${baseInt} = ptrtoint ptr ${l} to i64`);
+      const offset = this.coerceToType(r, rightType, 'i64');
+      const resultInt = this.newTemp();
+      const llvmOp = e.operator === '+' ? 'add' : 'sub';
+      this.emit(`${resultInt} = ${llvmOp} i64 ${baseInt}, ${offset}`);
+      const resultPtr = this.newTemp();
+      this.emit(`${resultPtr} = inttoptr i64 ${resultInt} to ptr`);
+      this.tempTypes.set(baseInt, 'i64');
+      this.tempTypes.set(resultInt, 'i64');
+      this.tempTypes.set(resultPtr, leftType);
+      return resultPtr;
+    }
+
+    if ((e.operator === '+' || e.operator === '-') && this.toLLVMType(rightType) === 'ptr' && leftType.startsWith('i') && e.operator === '+') {
+      const baseInt = this.newTemp();
+      this.emit(`${baseInt} = ptrtoint ptr ${r} to i64`);
+      const offset = this.coerceToType(l, leftType, 'i64');
+      const resultInt = this.newTemp();
+      this.emit(`${resultInt} = add i64 ${baseInt}, ${offset}`);
+      const resultPtr = this.newTemp();
+      this.emit(`${resultPtr} = inttoptr i64 ${resultInt} to ptr`);
+      this.tempTypes.set(baseInt, 'i64');
+      this.tempTypes.set(resultInt, 'i64');
+      this.tempTypes.set(resultPtr, rightType);
+      return resultPtr;
+    }
     if (e.operator === '&&' || e.operator === '||') {
       const l1 = this.coerceToType(l, this.getValueType(l), 'i1');
       const r1 = this.coerceToType(r, this.getValueType(r), 'i1');
@@ -1642,7 +1694,7 @@ export class CodeGenerator {
     }
 
     const obj = this.generateExpression(m.object);
-    const objType = this.tempTypes.get(obj) || 'ptr';
+    const objType = this.tempTypes.get(obj) || this.inferExprType(m.object) || 'ptr';
     
     // Handle .set(val) and .get() for pointers
     if (this.isPointerType(objType)) {
@@ -1663,13 +1715,38 @@ export class CodeGenerator {
     }
 
     // Built-in string methods
-    if (objType === 'string') {
+    if (objType === 'string' || (objType === 'ptr' && (m.member === 'slice' || m.member === 'includes' || m.member === 'indexOf' || m.member === 'startsWith' || m.member === 'endsWith'))) {
         const stringMethods: Record<string, { func: string, rt: string, pts: string[] }> = {
             'includes':   { func: 'string_includes',   rt: 'i1',  pts: ['ptr', 'ptr'] },
             'indexOf':    { func: 'string_indexOf',    rt: 'i32', pts: ['ptr', 'ptr'] },
             'startsWith': { func: 'string_startsWith', rt: 'i1',  pts: ['ptr', 'ptr'] },
             'endsWith':   { func: 'string_endsWith',   rt: 'i1',  pts: ['ptr', 'ptr'] },
         };
+
+        if (m.member === 'slice') {
+            this.ensureExternalDeclaration('string_substr', { name: 'string_substr', kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'i32', 'i32'] } as any);
+            const start = this.generateExpression(args[0]);
+            const startType = this.getValueType(start);
+            const end = args.length > 1 ? this.generateExpression(args[1]) : null;
+            const endType = end ? this.getValueType(end) : 'i32';
+            const startI32 = this.coerceToType(start, startType, 'i32');
+            const len = this.newTemp();
+            if (end) {
+                const endI32 = this.coerceToType(end, endType, 'i32');
+                this.emit(`${len} = sub i32 ${endI32}, ${startI32}`);
+            } else {
+                const totalLen = this.newTemp();
+                this.ensureExternalDeclaration('string_length', { name: 'string_length', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+                this.emit(`${totalLen} = call i32 @string_length(ptr ${obj})`);
+                this.emit(`${len} = sub i32 ${totalLen}, ${startI32}`);
+                this.tempTypes.set(totalLen, 'i32');
+            }
+            const t = this.newTemp();
+            this.emit(`${t} = call ptr @string_substr(ptr ${obj}, i32 ${startI32}, i32 ${len})`);
+            this.tempTypes.set(len, 'i32');
+            this.tempTypes.set(t, 'string');
+            return t;
+        }
 
         const method = stringMethods[m.member];
         if (method) {
@@ -1938,14 +2015,25 @@ export class CodeGenerator {
 
   private generateMemberExpr(e: MemberExpr): string {
     if (e.object.kind === ASTKind.Identifier) {
-      const en = this.enums.get((e.object as Identifier).name);
+      const enumName = (e.object as Identifier).name;
+      const en = this.enums.get(enumName);
       if (en && en.has(e.member)) return en.get(e.member)!.toString();
+      const importedEnum = this.importedSymbols.get(enumName);
+      if (importedEnum?.kind === 'enum' && importedEnum.ast) {
+        const enumDecl = importedEnum.ast as EnumDecl;
+        const member = enumDecl.members.find(m => m.name === e.member);
+        if (member) {
+          if (!this.enums.has(enumName)) this.processEnum(enumDecl);
+          const resolved = this.enums.get(enumName);
+          if (resolved && resolved.has(e.member)) return resolved.get(e.member)!.toString();
+        }
+      }
     }
     const obj = this.generateExpression(e.object);
     const objType = this.tempTypes.get(obj) || 'ptr';
 
     // Built-in string properties
-    if (objType === 'string') {
+    if (objType === 'string' || (objType === 'ptr' && (e.member === 'length' || e.member === 'byteLength'))) {
         if (e.member === 'length') {
             this.ensureExternalDeclaration('string_length', { name: 'string_length', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
             const t = this.newTemp();
@@ -2359,7 +2447,18 @@ export class CodeGenerator {
     return v;
   }
 
-  private escapeString(s: string): string { return s.replace(/\\/g, '\\\\').replace(/\n/g, '\\0A').replace(/\t/g, '\\09').replace(/"/g, '\\"'); }
+  private escapeString(s: string): string {
+    const bytes = new TextEncoder().encode(s);
+    let escaped = '';
+    for (const byte of bytes) {
+      if (byte >= 32 && byte <= 126 && byte !== 34 && byte !== 92) {
+        escaped += String.fromCharCode(byte);
+      } else {
+        escaped += `\\${byte.toString(16).toUpperCase().padStart(2, '0')}`;
+      }
+    }
+    return escaped;
+  }
   private newTemp(): string { return `%${this.tempCounter++}`; }
   private newLabel(p: string): string { return `${p}.${this.labelCounter++}`; }
   private emit(l: string): void { (this.currentOutput ?? this.output).push('  '.repeat(this.indent) + l); }

@@ -8,8 +8,8 @@
   
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)](https://github.com/TSNLang/TSN)
-  [![Version](https://img.shields.io/badge/version-0.16.13--indev-orange)](https://github.com/TSNLang/TSN)
-  [![Self-Hosting](https://img.shields.io/badge/self--hosting-ACTIVE-%E2%9C%85-green)](src/README.md)
+  [![Version](https://img.shields.io/badge/version-0.17.0--indev-orange)](https://github.com/TSNLang/TSN)
+  [![Self-Hosting](https://img.shields.io/badge/self--hosting-BOOTSTRAP-%E2%9C%85-green)](self-hosting/README.md)
   
   *Made with ❤️ in Ho Chi Minh City, Vietnam by [Sao Tin Developers](https://github.com/SaoTin)*
 </div>
@@ -22,31 +22,45 @@
 
 Unlike standard TypeScript which runs on a VM (V8/JSC) with a Garbage Collector, TSN is designed for performance-critical applications, providing deterministic memory management and zero-overhead abstractions.
 
-## 🚀 Version 0.16.14-indev: Generic for Everything (In Progress)
+## 🚀 Version 0.17.0-indev: Self-Hosting Bootstrap
 
-TSN 0.16.14-indev focuses on making generics work reliably across the whole language before pushing deeper into full self-hosting.
+TSN 0.17.0-indev shifts the active focus from generic stabilization to the first real self-hosting bootstrap path.
 
-**Completed:**
+**Completed foundation:**
+- ✅ **Generic Stabilization Landed**: Cross-module generics, generic methods, generic constructors, and nested generic instantiation are stable enough to support compiler migration work
+- ✅ **Stdlib Generic Coverage Path**: Core generic stdlib flows such as `std:array`, `std:option`, and `std:result` compile and validate through the documented `deno -> clang` path
+- ✅ **Ownership-Oriented Cleanup**: Compiler cleanup logic now follows TSN ownership/borrowing semantics instead of older ARC-style assumptions
+- ✅ **Use-After-Move Checks**: Owner values now trigger compile-time diagnostics after destructive move
+- ✅ **Self-Hosting Scaffold**: Minimal `self-hosting/` bootstrap layout exists for AST, lexer, parser, and main entry
+- ✅ **Compiler Can Build Self-Hosting Bootstrap**: `self-hosting/main.tsn` now compiles to LLVM IR, links with `clang`, and runs successfully
+- ✅ **Bootstrap Lexer Subset**: The TSN lexer subset handles identifiers, numbers, strings, comments, punctuation, decorators, and initial keyword coverage needed for early compiler source parsing
+
+**Active 0.17.0 direction:**
+- 🔄 **Expand Self-Hosting Parser**: Grow `self-hosting/parser.tsn` from skeleton into a useful compiler subset parser
+- 🔄 **Broaden Self-Hosting Coverage**: Continue moving compiler knowledge from TypeScript bootstrap code into TSN modules incrementally
+- 🔄 **Keep Build Path Honest**: Validate progress with the real documented `deno run ... -> clang ...` workflow, not hand-edited LLVM IR
+
+Key highlights:
+- **0.17.x = Self-Hosting**: The main roadmap is now practical self-host migration rather than adding unrelated surface-area features first
+- **Minimal Bootstrap First**: AST, lexer, parser, and bootstrap entry stay intentionally small so the compiler can begin proving itself in TSN step by step
+- **Compiler Fixes Over IR Patches**: Self-hosting work only fixes the compiler and runtime path, never generated `.ll` files directly
+- **Ownership/Borrowing Alignment**: Self-hosting progress follows TSN's ownership and automated borrowing model, not CRuntime-era mental models
+- **Roadmap Available**: See `self-hosting/README.md` for the current bootstrap plan and milestones
+
+## 🚀 Version 0.16.14-indev: Generic for Everything (Completed)
+
+TSN 0.16.14-indev focused on making generics work reliably across the whole language before pushing deeper into self-hosting.
+
+Completed highlights:
 - ✅ **Nested Generic Support**: `Optional<Array<i32>>`, `Array<Optional<T>>` now work correctly
 - ✅ **Cross-Module Generic Instantiation**: Imported generic functions and classes instantiate cleanly
 - ✅ **Parser Enhancement**: `>>` token splitting for nested generic close (`Optional<Array<i32>>`)
 - ✅ **Type Substitution**: Cycle-safe nested generic parameter replacement in monomorphization
 - ✅ **Generic Function Inference**: `inferExprType()` now handles generic function calls with `genericArgs`
 - ✅ **Generic Class Methods**: Methods on generic classes work correctly (e.g., `Container<T>.get()`, `Container<T>.set()`)
-- ✅ **Generic Methods**: Methods with their own type parameters (e.g., `identity<T>(value: T): T`) now work on non-generic classes
-- ✅ **Generic Methods on Generic Classes**: Methods with type parameters on generic classes (e.g., `Box<T>.map<U>()`) fully functional
-- ✅ **Generic Constructors**: Generic classes with constructors (e.g., `new Box<i32>(42)`) work correctly
-
-**Completed!** TSN 0.16.14-indev "Generic for Everything" is feature-complete. Next focus:
-- 🔄 **Stdlib Generic Coverage**: Expanding generic patterns across `std:*` modules
-- 🔄 **Self-Hosting**: Migrating compiler components to TSN
-
-Key highlights:
-- **Generic Stabilization First**: The priority is to make generic classes, generic functions, and monomorphization behave consistently across local code, stdlib modules, and imported modules.
-- **Nested Generic Coverage**: Patterns such as `Array<Optional<T>>`, generic methods, generic constructors, and generic stdlib utilities are becoming routine instead of edge cases.
-- **Self-Hosting Prerequisite**: A stronger generic foundation is treated as the required step before serious self-host migration of compiler pieces into TSN.
-- **Collections Later**: General containers such as `std:map` remain postponed until the generic model is strong enough to support them cleanly.
-- **Design Note Available**: See `docs/generic_stabilization.md` for the detailed checklist and technical direction.
+- ✅ **Generic Methods**: Methods with their own type parameters now work on non-generic classes
+- ✅ **Generic Methods on Generic Classes**: Methods with type parameters on generic classes are fully functional
+- ✅ **Generic Constructors**: Generic classes with constructors work correctly
 
 ## 🚀 Version 0.16.13-indev: `std:hash` Completion
 

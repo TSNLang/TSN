@@ -1,0 +1,272 @@
+import { Array } from "std:array";
+import { Token, TokenKind } from "./ast.tsn";
+
+export class Lexer {
+    private source: string;
+    private pos: i32;
+    private line: i32;
+    private column: i32;
+
+    constructor(source: string) {
+        this.source = source;
+        this.pos = 0;
+        this.line = 1;
+        this.column = 1;
+    }
+
+    tokenize(): Array<Token> {
+        let tokens = new Array<Token>();
+
+        while (this.pos < this.source.length) {
+            this.skipWhitespaceAndComments();
+            if (this.pos >= this.source.length) {
+                break;
+            }
+
+            let token = this.nextToken();
+            tokens.push(token);
+        }
+
+        tokens.push(new Token(TokenKind.EOF, "", this.line, this.column));
+        return tokens;
+    }
+
+    private nextToken(): Token {
+        let line = this.line;
+        let column = this.column;
+        let ch = this.current();
+
+        if (this.isDigit(ch)) {
+            return this.readNumber(line, column);
+        }
+
+        if (this.isAlpha(ch)) {
+            return this.readIdentifierOrKeyword(line, column);
+        }
+
+        if (ch == '"' || ch == "'") {
+            return this.readString(ch, line, column);
+        }
+
+        if (ch == '@') {
+            this.advance();
+            return new Token(TokenKind.At, "@", line, column);
+        }
+        if (ch == '<') {
+            this.advance();
+            return new Token(TokenKind.Less, "<", line, column);
+        }
+        if (ch == '>') {
+            this.advance();
+            return new Token(TokenKind.Greater, ">", line, column);
+        }
+        if (ch == '(') {
+            this.advance();
+            return new Token(TokenKind.LParen, "(", line, column);
+        }
+        if (ch == ')') {
+            this.advance();
+            return new Token(TokenKind.RParen, ")", line, column);
+        }
+        if (ch == '{') {
+            this.advance();
+            return new Token(TokenKind.LBrace, "{", line, column);
+        }
+        if (ch == '}') {
+            this.advance();
+            return new Token(TokenKind.RBrace, "}", line, column);
+        }
+        if (ch == '[') {
+            this.advance();
+            return new Token(TokenKind.LBracket, "[", line, column);
+        }
+        if (ch == ']') {
+            this.advance();
+            return new Token(TokenKind.RBracket, "]", line, column);
+        }
+        if (ch == ':') {
+            this.advance();
+            return new Token(TokenKind.Colon, ":", line, column);
+        }
+        if (ch == ';') {
+            this.advance();
+            return new Token(TokenKind.Semicolon, ";", line, column);
+        }
+        if (ch == ',') {
+            this.advance();
+            return new Token(TokenKind.Comma, ",", line, column);
+        }
+        if (ch == '.') {
+            this.advance();
+            return new Token(TokenKind.Dot, ".", line, column);
+        }
+        if (ch == '=') {
+            this.advance();
+            return new Token(TokenKind.Equal, "=", line, column);
+        }
+
+        this.advance();
+        return new Token(TokenKind.Unknown, ch, line, column);
+    }
+
+    private readNumber(line: i32, column: i32): Token {
+        let text = "";
+
+        while (this.pos < this.source.length && this.isDigit(this.current())) {
+            text = text + this.current();
+            this.advance();
+        }
+
+        if (this.pos < this.source.length && this.current() == '.' && this.isDigit(this.peek())) {
+            text = text + ".";
+            this.advance();
+            while (this.pos < this.source.length && this.isDigit(this.current())) {
+                text = text + this.current();
+                this.advance();
+            }
+        }
+
+        return new Token(TokenKind.Number, text, line, column);
+    }
+
+    private readIdentifierOrKeyword(line: i32, column: i32): Token {
+        let text = "";
+
+        while (this.pos < this.source.length && (this.isAlpha(this.current()) || this.isDigit(this.current()))) {
+            text = text + this.current();
+            this.advance();
+        }
+
+        return new Token(this.getKeywordKind(text), text, line, column);
+    }
+
+    private readString(quote: string, line: i32, column: i32): Token {
+        let text = "";
+        this.advance();
+
+        while (this.pos < this.source.length && this.current() != quote) {
+            if (this.current() == "\\") {
+                this.advance();
+                if (this.pos >= this.source.length) {
+                    break;
+                }
+
+                let escaped = this.current();
+                if (escaped == 'n') {
+                    text = text + "\n";
+                } else if (escaped == 't') {
+                    text = text + "\t";
+                } else if (escaped == '"') {
+                    text = text + '"';
+                } else if (escaped == "'") {
+                    text = text + "'";
+                } else if (escaped == "\\") {
+                    text = text + "\\";
+                } else {
+                    text = text + escaped;
+                }
+                this.advance();
+            } else {
+                text = text + this.current();
+                this.advance();
+            }
+        }
+
+        if (this.current() == quote) {
+            this.advance();
+        }
+
+        return new Token(TokenKind.String, text, line, column);
+    }
+
+    private getKeywordKind(text: string): i32 {
+        if (text == "import") return TokenKind.Import;
+        if (text == "export") return TokenKind.Export;
+        if (text == "from") return TokenKind.From;
+        if (text == "function") return TokenKind.Function;
+        if (text == "class") return TokenKind.Class;
+        if (text == "let") return TokenKind.Let;
+        if (text == "return") return TokenKind.Return;
+        if (text == "if") return TokenKind.If;
+        if (text == "else") return TokenKind.Else;
+        if (text == "while") return TokenKind.While;
+        if (text == "for") return TokenKind.For;
+        if (text == "new") return TokenKind.New;
+        if (text == "this") return TokenKind.This;
+        return TokenKind.Identifier;
+    }
+
+    private skipWhitespaceAndComments(): void {
+        while (this.pos < this.source.length) {
+            let ch = this.current();
+
+            if (ch == ' ' || ch == '\t' || ch == '\r') {
+                this.advance();
+                continue;
+            }
+
+            if (ch == '\n') {
+                this.pos = this.pos + 1;
+                this.line = this.line + 1;
+                this.column = 1;
+                continue;
+            }
+
+            if (ch == '/' && this.peek() == '/') {
+                while (this.pos < this.source.length && this.current() != '\n') {
+                    this.advance();
+                }
+                continue;
+            }
+
+            if (ch == '/' && this.peek() == '*') {
+                this.advance();
+                this.advance();
+                while (this.pos < this.source.length) {
+                    if (this.current() == '*' && this.peek() == '/') {
+                        this.advance();
+                        this.advance();
+                        break;
+                    }
+                    if (this.current() == '\n') {
+                        this.pos = this.pos + 1;
+                        this.line = this.line + 1;
+                        this.column = 1;
+                    } else {
+                        this.advance();
+                    }
+                }
+                continue;
+            }
+
+            break;
+        }
+    }
+
+    private current(): string {
+        return this.sliceChar(this.pos);
+    }
+
+    private peek(): string {
+        return this.sliceChar(this.pos + 1);
+    }
+
+    private sliceChar(index: i32): string {
+        return this.source.slice(index, index + 1);
+    }
+
+    private advance(): void {
+        if (this.pos < this.source.length) {
+            this.pos = this.pos + 1;
+            this.column = this.column + 1;
+        }
+    }
+
+    private isDigit(ch: string): bool {
+        return ch >= "0" && ch <= "9";
+    }
+
+    private isAlpha(ch: string): bool {
+        return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch == "_";
+    }
+}

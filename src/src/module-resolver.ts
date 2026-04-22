@@ -3,7 +3,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { ImportDecl, ExportDecl, FunctionDecl, VarDecl, InterfaceDecl, ClassDecl, ASTKind, TypeAnnotation, Program } from './types.ts';
+import { ImportDecl, ExportDecl, FunctionDecl, VarDecl, InterfaceDecl, ClassDecl, EnumDecl, ASTKind, TypeAnnotation, Program } from './types.ts';
 import { Lexer } from './lexer.ts';
 import { Parser } from './parser.ts';
 import { Reporter } from './diagnostics.ts';
@@ -35,7 +35,7 @@ function toLLVMNamedBaseType(name: string): string {
 // Represents an exported symbol from a module
 export interface ExportedSymbol {
   name: string;            // Symbol name
-  kind: 'function' | 'const' | 'let' | 'interface' | 'class';
+  kind: 'function' | 'const' | 'let' | 'interface' | 'class' | 'enum';
   llvmType?: string;       // LLVM type for functions: return type
   paramTypes?: string[];   // Parameter types for functions
   varType?: string;        // Variable type
@@ -160,7 +160,7 @@ export class ModuleResolver {
         const sourceLines = content.split(/\r?\n/);
         const seenSymbols = new Set<string>();
 
-        const addExportedSymbol = (innerDecl: FunctionDecl | ClassDecl | VarDecl) => {
+        const addExportedSymbol = (innerDecl: FunctionDecl | ClassDecl | VarDecl | EnumDecl) => {
             if (innerDecl.kind === ASTKind.ClassDecl) {
                 const c = innerDecl as ClassDecl;
                 if (seenSymbols.has(`class:${c.name}`)) return;
@@ -187,27 +187,32 @@ export class ModuleResolver {
                     varType: toLLVMTypeName(v.type || { name: 'i32' } as any),
                     ast: v
                 });
+            } else if (innerDecl.kind === ASTKind.EnumDecl) {
+                const enumDecl = innerDecl as EnumDecl;
+                if (seenSymbols.has(`enum:${enumDecl.name}`)) return;
+                seenSymbols.add(`enum:${enumDecl.name}`);
+                symbols.push({ name: enumDecl.name, kind: 'enum', ast: enumDecl });
             }
         };
 
-        const isInlineExportedDecl = (decl: FunctionDecl | ClassDecl | VarDecl): boolean => {
+        const isInlineExportedDecl = (decl: FunctionDecl | ClassDecl | VarDecl | EnumDecl): boolean => {
           const lineText = sourceLines[decl.line - 1] || '';
           return /\bexport\b/.test(lineText);
         };
         
         for (const decl of program.declarations) {
             if (decl.kind === ASTKind.ExportDecl) {
-                addExportedSymbol((decl as ExportDecl).declaration as FunctionDecl | ClassDecl | VarDecl);
+                addExportedSymbol((decl as ExportDecl).declaration as FunctionDecl | ClassDecl | VarDecl | EnumDecl);
                 continue;
             }
 
             // Some stdlib declarations are parsed as plain declarations when `export`
             // shares the line with decorators. Detect those from the original source line.
             if (
-              (decl.kind === ASTKind.ClassDecl || decl.kind === ASTKind.FunctionDecl || decl.kind === ASTKind.VarDecl)
-              && isInlineExportedDecl(decl as FunctionDecl | ClassDecl | VarDecl)
+              (decl.kind === ASTKind.ClassDecl || decl.kind === ASTKind.FunctionDecl || decl.kind === ASTKind.VarDecl || decl.kind === ASTKind.EnumDecl)
+              && isInlineExportedDecl(decl as FunctionDecl | ClassDecl | VarDecl | EnumDecl)
             ) {
-                addExportedSymbol(decl as FunctionDecl | ClassDecl | VarDecl);
+                addExportedSymbol(decl as FunctionDecl | ClassDecl | VarDecl | EnumDecl);
             }
         }
         
@@ -235,9 +240,96 @@ export class ModuleResolver {
       this.moduleCache.set(modulePath, meta);
       return meta;
     } catch {
-      console.warn(`Module not compiled: ${modulePath} (${metaPath})`);
-      return null;
+      const sourcePath = this.resolveSourcePath(modulePath);
+
+      try {
+        const content = readFileSync(sourcePath, 'utf8');
+        const lexer = new Lexer(content);
+        const tokens = lexer.tokenize();
+        const reporter = new Reporter(content, sourcePath);
+        const parser = new Parser(tokens, reporter);
+        const program = parser.parse();
+
+        const symbols: ExportedSymbol[] = [];
+        const seenSymbols = new Set<string>();
+        const codegen = new CodeGenerator(new ModuleResolver(this.baseDir));
+        const sourceLines = content.split(/\r?\n/);
+
+        const addExportedSymbol = (innerDecl: FunctionDecl | ClassDecl | VarDecl | EnumDecl) => {
+          if (innerDecl.kind === ASTKind.ClassDecl) {
+            const c = innerDecl as ClassDecl;
+            if (seenSymbols.has(`class:${c.name}`)) return;
+            seenSymbols.add(`class:${c.name}`);
+            symbols.push({ name: c.name, kind: 'class', ast: c });
+          } else if (innerDecl.kind === ASTKind.FunctionDecl) {
+            const f = innerDecl as FunctionDecl;
+            if (!codegen.isTargetOSMatch(f.targetOS) || seenSymbols.has(`function:${f.name}`)) return;
+            seenSymbols.add(`function:${f.name}`);
+            symbols.push({
+              name: f.name,
+              kind: 'function',
+              llvmType: toLLVMTypeName(f.returnType),
+              paramTypes: f.params.map((p) => toLLVMTypeName(p.type)),
+              ast: f,
+            });
+          } else if (innerDecl.kind === ASTKind.VarDecl) {
+            const v = innerDecl as VarDecl;
+            if (seenSymbols.has(`var:${v.name}`)) return;
+            seenSymbols.add(`var:${v.name}`);
+            symbols.push({
+              name: v.name,
+              kind: v.isConst ? 'const' : 'let',
+              varType: toLLVMTypeName(v.type || { name: 'i32' } as any),
+              ast: v,
+            });
+          } else if (innerDecl.kind === ASTKind.EnumDecl) {
+            const enumDecl = innerDecl as EnumDecl;
+            if (seenSymbols.has(`enum:${enumDecl.name}`)) return;
+            seenSymbols.add(`enum:${enumDecl.name}`);
+            symbols.push({ name: enumDecl.name, kind: 'enum', ast: enumDecl });
+          }
+        };
+
+        const isInlineExportedDecl = (decl: FunctionDecl | ClassDecl | VarDecl | EnumDecl): boolean => {
+          const lineText = sourceLines[decl.line - 1] || '';
+          return /\bexport\b/.test(lineText);
+        };
+
+        for (const decl of program.declarations) {
+          if (decl.kind === ASTKind.ExportDecl) {
+            addExportedSymbol((decl as ExportDecl).declaration as FunctionDecl | ClassDecl | VarDecl | EnumDecl);
+            continue;
+          }
+
+          if (
+            (decl.kind === ASTKind.ClassDecl || decl.kind === ASTKind.FunctionDecl || decl.kind === ASTKind.VarDecl || decl.kind === ASTKind.EnumDecl)
+            && isInlineExportedDecl(decl as FunctionDecl | ClassDecl | VarDecl | EnumDecl)
+          ) {
+            addExportedSymbol(decl as FunctionDecl | ClassDecl | VarDecl | EnumDecl);
+          }
+        }
+
+        const exports: ModuleExports = {
+          modulePath: sourcePath,
+          llFilePath: sourcePath.replace(/\.tsn$/, '.ll'),
+          symbols,
+          program,
+        };
+
+        this.moduleCache.set(modulePath, exports);
+        return exports;
+      } catch {
+        console.warn(`Module not compiled: ${modulePath} (${metaPath})`);
+        return null;
+      }
     }
+  }
+
+  private resolveSourcePath(modulePath: string): string {
+    if (!modulePath.startsWith('/') && !modulePath.match(/^[A-Z]:/)) {
+      return `${this.baseDir}/${modulePath}`;
+    }
+    return modulePath;
   }
 
   // Generate .meta file path from .tsn path

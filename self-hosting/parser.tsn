@@ -1,0 +1,17 @@
+import { Array } from "std:array";
+import { Program, Token } from "./ast.tsn";
+
+export class Parser {
+    private tokens: Array<Token>;
+
+    constructor(tokens: Array<Token>) {
+        this.tokens = tokens;
+    }
+
+    parse(): Program {
+        let program = new Program();
+
+        // Skeleton bootstrap: parser subset se duoc mo rong o 0.17.0.
+        return program;
+    }
+}

@@ -175,13 +175,12 @@ export class Parser {
     const name = this.consume(TokenKind.Identifier, 'Expected enum name').text;
     this.consume(TokenKind.LBrace, "Expected '{'");
     const members: EnumMember[] = [];
-    if (!this.check(TokenKind.RBrace)) {
-      do {
-        const mName = this.consume(TokenKind.Identifier, 'Expected enum member name').text;
-        let value: number | undefined;
-        if (this.match(TokenKind.Equal)) value = parseInt(this.consume(TokenKind.Number, 'Expected enum member value').text);
-        members.push({ name: mName, value });
-      } while (this.match(TokenKind.Comma));
+    while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+      const mName = this.consume(TokenKind.Identifier, 'Expected enum member name').text;
+      let value: number | undefined;
+      if (this.match(TokenKind.Equal)) value = parseInt(this.consume(TokenKind.Number, 'Expected enum member value').text);
+      members.push({ name: mName, value });
+      if (!this.match(TokenKind.Comma)) break;
     }
     this.consume(TokenKind.RBrace, "Expected '}'");
     return { kind: ASTKind.EnumDecl, name, members, line: token.line, column: token.column };

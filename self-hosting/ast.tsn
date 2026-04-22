@@ -1,0 +1,64 @@
+export enum TokenKind {
+    EOF,
+    Unknown,
+    Identifier,
+    Number,
+    String,
+    Import,
+    Export,
+    From,
+    Function,
+    Class,
+    Let,
+    Return,
+    If,
+    Else,
+    While,
+    For,
+    New,
+    This,
+    At,
+    Less,
+    Greater,
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    LBracket,
+    RBracket,
+    Colon,
+    Semicolon,
+    Comma,
+    Dot,
+    Equal,
+}
+
+export class Token {
+    public kind: i32;
+    public lexeme: string;
+    public line: i32;
+    public column: i32;
+
+    constructor(kind: i32, lexeme: string, line: i32, column: i32) {
+        this.kind = kind;
+        this.lexeme = lexeme;
+        this.line = line;
+        this.column = column;
+    }
+}
+
+export class FunctionDecl {
+    public name: string;
+
+    constructor(name: string) {
+        this.name = name;
+    }
+}
+
+export class Program {
+    public functionCount: i32;
+
+    constructor() {
+        this.functionCount = 0;
+    }
+}
