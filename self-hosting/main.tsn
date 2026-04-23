@@ -21,6 +21,12 @@ function main(): i32 {
     log(program.letCount);
     log("return parsed");
     log(program.returnCount);
+    log("if parsed");
+    log(program.ifCount);
+    log("while parsed");
+    log(program.whileCount);
+    log("for parsed");
+    log(program.forCount);
     log("tokens ready");
 
     return 0;
