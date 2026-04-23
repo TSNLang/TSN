@@ -11,7 +11,10 @@ function main(): i32 {
 
     log("TSN self-hosting bootstrap scaffold ready");
     log("0.17.x focus: lexer -> parser -> AST -> bootstrap compiler");
-    log("functions parsed: 0");
+    log("functions parsed");
+    log(program.functionCount);
+    log("imports parsed");
+    log(program.importCount);
     log("tokens ready");
 
     return 0;

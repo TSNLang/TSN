@@ -63,6 +63,11 @@ int string_compare(const char* a, const char* b) {
     return strcmp(a, b);
 }
 
+int string_equals(const char* a, const char* b) {
+    if (a == NULL || b == NULL) return a == b;
+    return strcmp(a, b) == 0;
+}
+
 char* string_substr(const char* str, int start, int len) {
     char* result = (char*)malloc(len + 1);
     if (!result) return NULL;

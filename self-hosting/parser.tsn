@@ -1,17 +1,164 @@
 import { Array } from "std:array";
-import { Program, Token } from "./ast.tsn";
+import { Program, Token, TokenKind } from "./ast.tsn";
 
 export class Parser {
     private tokens: Array<Token>;
+    private pos: i32;
 
     constructor(tokens: Array<Token>) {
         this.tokens = tokens;
+        this.pos = 0;
     }
 
     parse(): Program {
-        let program = new Program();
+        let importCount: i32 = 0;
+        let functionCount: i32 = 0;
 
-        // Skeleton bootstrap: parser subset se duoc mo rong o 0.17.0.
-        return program;
+        while (!this.isAtEnd()) {
+            if (this.matchKind(TokenKind.Import)) {
+                this.parseImportDecl();
+                importCount = importCount + 1;
+                continue;
+            }
+
+            if (this.matchKind(TokenKind.Export)) {
+                continue;
+            }
+
+            if (this.matchKind(TokenKind.Function)) {
+                this.parseFunctionDecl();
+                functionCount = functionCount + 1;
+                continue;
+            }
+
+            this.advance();
+        }
+
+        return new Program(importCount, functionCount);
+    }
+
+    private parseImportDecl(): void {
+        while (!this.isAtEnd()) {
+            if (this.matchKind(TokenKind.Semicolon)) {
+                return;
+            }
+            this.advance();
+        }
+    }
+
+    private parseFunctionDecl(): void {
+        if (!this.isAtEnd()) {
+            this.advance();
+        }
+
+        if (this.matchKind(TokenKind.Less)) {
+            this.skipAngleBlock();
+        }
+
+        if (this.matchKind(TokenKind.LParen)) {
+            this.skipParenBlock();
+        }
+
+        if (this.matchKind(TokenKind.Colon)) {
+            this.skipReturnType();
+        }
+
+        if (this.matchKind(TokenKind.LBrace)) {
+            this.skipBraceBlock();
+        }
+    }
+
+    private skipReturnType(): void {
+        while (!this.isAtEnd()) {
+            if (this.checkKind(TokenKind.LBrace) || this.checkKind(TokenKind.Semicolon)) {
+                return;
+            }
+            this.advance();
+        }
+    }
+
+    private skipParenBlock(): void {
+        let depth = 1;
+
+        while (!this.isAtEnd() && depth > 0) {
+            if (this.matchKind(TokenKind.LParen)) {
+                depth = depth + 1;
+                continue;
+            }
+            if (this.matchKind(TokenKind.RParen)) {
+                depth = depth - 1;
+                continue;
+            }
+            this.advance();
+        }
+    }
+
+    private skipBraceBlock(): void {
+        let depth = 1;
+
+        while (!this.isAtEnd() && depth > 0) {
+            if (this.matchKind(TokenKind.LBrace)) {
+                depth = depth + 1;
+                continue;
+            }
+            if (this.matchKind(TokenKind.RBrace)) {
+                depth = depth - 1;
+                continue;
+            }
+            this.advance();
+        }
+    }
+
+    private skipAngleBlock(): void {
+        let depth = 1;
+
+        while (!this.isAtEnd() && depth > 0) {
+            if (this.matchKind(TokenKind.Less)) {
+                depth = depth + 1;
+                continue;
+            }
+            if (this.matchKind(TokenKind.Greater)) {
+                depth = depth - 1;
+                continue;
+            }
+            this.advance();
+        }
+    }
+
+    private matchKind(kind: i32): bool {
+        if (!this.checkKind(kind)) {
+            return false;
+        }
+        this.pos = this.pos + 1;
+        return true;
+    }
+
+    private checkKind(kind: i32): bool {
+        if (this.isAtEnd()) {
+            return false;
+        }
+        return this.peek().kind == kind;
+    }
+
+    private advance(): Token {
+        if (!this.isAtEnd()) {
+            this.pos = this.pos + 1;
+        }
+        return this.previous();
+    }
+
+    private isAtEnd(): bool {
+        if (this.pos >= this.tokens.length) {
+            return true;
+        }
+        return this.peek().kind == TokenKind.EOF;
+    }
+
+    private peek(): Token {
+        return this.tokens.get(this.pos);
+    }
+
+    private previous(): Token {
+        return this.tokens.get(this.pos - 1);
     }
 }
