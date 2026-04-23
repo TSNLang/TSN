@@ -13,9 +13,9 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 
 ### 0.17.0
 - `ast.tsn`: cac kieu du lieu cot loi cho token va AST
-- `lexer.tsn`: lexer subset du cho compiler source
-- `parser.tsn`: parser subset cho function/import/class co ban
-- `main.tsn`: diem vao bootstrap, doc file va parse
+- `lexer.tsn`: lexer subset da tokenize duoc identifier, number, string, comment, decorator va keyword co ban cho bootstrap
+- `parser.tsn`: parser subset da dem duoc `import`, `function`, `class`, `let`, `return` tren tap mau bootstrap
+- `main.tsn`: diem vao bootstrap, build qua TypeScript compiler hien tai va xac nhan runtime qua `deno -> clang -> exe`
 
 ### 0.17.1
 - parser/lexer tu-host cho tap mau nho
@@ -30,8 +30,19 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 ## Cau truc hien tai
 
 - `self-hosting/ast.tsn`: token va AST toi thieu
-- `self-hosting/lexer.tsn`: bo khung lexer TSN subset
-- `self-hosting/parser.tsn`: bo khung parser TSN subset
+- `self-hosting/lexer.tsn`: lexer subset TSN cho bootstrap compiler source
+- `self-hosting/parser.tsn`: parser subset dang duoc mo rong theo cach toi thieu, uu tien token count va structure count truoc
 - `self-hosting/main.tsn`: diem vao bootstrap parser
 
-Day la skeleton toi thieu de chot huong `0.17.x = self-hosting`.
+## Trang thai hien tai
+
+- build path that su da duoc xac nhan qua `deno run ... -> clang ... -> self-hosting/main.exe`
+- tap mau bootstrap hien tai da dem dung:
+  - `import = 1`
+  - `function = 1`
+  - `class = 1`
+  - `let = 1`
+  - `return = 2`
+- huong di van giu toi gian: parser subset truoc, diagnostics/module loading sau
+
+Day khong con chi la skeleton ban dau nua ma la mot bootstrap subset dang chay duoc qua compiler hien tai.
