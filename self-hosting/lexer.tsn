@@ -185,6 +185,7 @@ export class Lexer {
         if (text == "from") return TokenKind.From;
         if (text == "function") return TokenKind.Function;
         if (text == "class") return TokenKind.Class;
+        if (text == "constructor") return TokenKind.Constructor;
         if (text == "let") return TokenKind.Let;
         if (text == "return") return TokenKind.Return;
         if (text == "if") return TokenKind.If;

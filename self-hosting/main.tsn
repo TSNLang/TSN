@@ -33,6 +33,8 @@ function main(): i32 {
     log(program.methodCount);
     log("fields parsed");
     log(program.fieldCount);
+    log("constructors parsed");
+    log(program.constructorCount);
     log("tokens ready");
 
     return 0;
