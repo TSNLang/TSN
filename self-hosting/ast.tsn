@@ -64,8 +64,10 @@ export class Program {
     public ifCount: i32;
     public whileCount: i32;
     public forCount: i32;
+    public paramCount: i32;
+    public methodCount: i32;
 
-    constructor(importCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32) {
+    constructor(importCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32) {
         this.importCount = importCount;
         this.functionCount = functionCount;
         this.classCount = classCount;
@@ -74,5 +76,7 @@ export class Program {
         this.ifCount = ifCount;
         this.whileCount = whileCount;
         this.forCount = forCount;
+        this.paramCount = paramCount;
+        this.methodCount = methodCount;
     }
 }

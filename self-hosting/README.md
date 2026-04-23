@@ -12,9 +12,9 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 ## Lo trinh toi thieu
 
 ### 0.17.0
-- `ast.tsn`: cac kieu du lieu cot loi cho token va AST
+- `ast.tsn`: cac kieu du lieu cot loi cho token va AST, bao gom counter toi thieu cho parser subset
 - `lexer.tsn`: lexer subset da tokenize duoc identifier, number, string, comment, decorator va keyword co ban cho bootstrap
-- `parser.tsn`: parser subset da dem duoc `import`, `function`, `class`, `let`, `return` tren tap mau bootstrap
+- `parser.tsn`: parser subset da dem duoc `import`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` theo huong token-driven toi thieu
 - `main.tsn`: diem vao bootstrap, build qua TypeScript compiler hien tai va xac nhan runtime qua `deno -> clang -> exe`
 
 ### 0.17.1
@@ -41,8 +41,14 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
   - `import = 1`
   - `function = 1`
   - `class = 1`
-  - `let = 1`
-  - `return = 2`
+  - `let = 2`
+  - `return = 3`
+  - `if = 1`
+  - `while = 0`
+  - `for = 0`
+  - `param = 5`
+  - `method = 2`
+- parser subset da bat dau chuyen tu raw keyword count sang declaration-body structure count toi thieu
 - huong di van giu toi gian: parser subset truoc, diagnostics/module loading sau
 
 Day khong con chi la skeleton ban dau nua ma la mot bootstrap subset dang chay duoc qua compiler hien tai.
