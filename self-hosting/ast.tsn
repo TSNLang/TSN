@@ -58,9 +58,15 @@ export class FunctionDecl {
 export class Program {
     public importCount: i32;
     public functionCount: i32;
+    public classCount: i32;
+    public letCount: i32;
+    public returnCount: i32;
 
-    constructor(importCount: i32, functionCount: i32) {
+    constructor(importCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32) {
         this.importCount = importCount;
         this.functionCount = functionCount;
+        this.classCount = classCount;
+        this.letCount = letCount;
+        this.returnCount = returnCount;
     }
 }

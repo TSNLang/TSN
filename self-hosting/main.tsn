@@ -15,6 +15,12 @@ function main(): i32 {
     log(program.functionCount);
     log("imports parsed");
     log(program.importCount);
+    log("classes parsed");
+    log(program.classCount);
+    log("let parsed");
+    log(program.letCount);
+    log("return parsed");
+    log(program.returnCount);
     log("tokens ready");
 
     return 0;

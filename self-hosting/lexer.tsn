@@ -200,7 +200,7 @@ export class Lexer {
         while (this.pos < this.source.length) {
             let ch = this.current();
 
-            if (ch == ' ' || ch == '\t' || ch == '\r') {
+            if (ch == ' ' || ch == '\t') {
                 this.advance();
                 continue;
             }

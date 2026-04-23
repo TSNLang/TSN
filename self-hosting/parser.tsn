@@ -13,6 +13,9 @@ export class Parser {
     parse(): Program {
         let importCount: i32 = 0;
         let functionCount: i32 = 0;
+        let classCount: i32 = 0;
+        let letCount: i32 = 0;
+        let returnCount: i32 = 0;
 
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Import)) {
@@ -26,15 +29,32 @@ export class Parser {
             }
 
             if (this.matchKind(TokenKind.Function)) {
-                this.parseFunctionDecl();
+                let body = this.parseFunctionDecl();
                 functionCount = functionCount + 1;
+                letCount = letCount + body.letCount;
+                returnCount = returnCount + body.returnCount;
+                continue;
+            }
+
+            if (this.matchKind(TokenKind.Class)) {
+                classCount = classCount + 1;
+                continue;
+            }
+
+            if (this.matchKind(TokenKind.Let)) {
+                letCount = letCount + 1;
+                continue;
+            }
+
+            if (this.matchKind(TokenKind.Return)) {
+                returnCount = returnCount + 1;
                 continue;
             }
 
             this.advance();
         }
 
-        return new Program(importCount, functionCount);
+        return new Program(importCount, functionCount, classCount, letCount, returnCount);
     }
 
     private parseImportDecl(): void {
@@ -46,7 +66,10 @@ export class Parser {
         }
     }
 
-    private parseFunctionDecl(): void {
+    private parseFunctionDecl(): Program {
+        let letCount: i32 = 0;
+        let returnCount: i32 = 0;
+
         if (!this.isAtEnd()) {
             this.advance();
         }
@@ -64,8 +87,12 @@ export class Parser {
         }
 
         if (this.matchKind(TokenKind.LBrace)) {
-            this.skipBraceBlock();
+            let body = this.scanBlockCounts();
+            letCount = body.letCount;
+            returnCount = body.returnCount;
         }
+
+        return new Program(0, 0, 0, letCount, returnCount);
     }
 
     private skipReturnType(): void {
@@ -107,6 +134,41 @@ export class Parser {
             }
             this.advance();
         }
+    }
+
+    private scanBlockCounts(): Program {
+        let depth = 1;
+        let letCount: i32 = 0;
+        let returnCount: i32 = 0;
+
+        while (!this.isAtEnd() && depth > 0) {
+            let kind = this.peek().kind;
+
+            if (kind == TokenKind.LBrace) {
+                this.advance();
+                depth = depth + 1;
+                continue;
+            }
+            if (kind == TokenKind.RBrace) {
+                this.advance();
+                depth = depth - 1;
+                continue;
+            }
+            if (depth > 0 && kind == TokenKind.Let) {
+                this.advance();
+                letCount = letCount + 1;
+                continue;
+            }
+            if (depth > 0 && kind == TokenKind.Return) {
+                this.advance();
+                returnCount = returnCount + 1;
+                continue;
+            }
+
+            this.advance();
+        }
+
+        return new Program(0, 0, 0, letCount, returnCount);
     }
 
     private skipAngleBlock(): void {
