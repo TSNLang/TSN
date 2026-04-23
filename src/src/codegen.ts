@@ -249,7 +249,7 @@ export class CodeGenerator {
           continue;
         }
         const mName = this.mangleName(m.name, m.params);
-        const rt = this.getLLVMType(m.returnType);
+        const rt = this.getFunctionReturnRuntimeType(m.returnType);
         const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
         this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts });
         this.functions.set(this.scopeStack.join('.') + '.' + m.name, { name: mName, returnType: rt, paramTypes: pts });
@@ -270,7 +270,7 @@ export class CodeGenerator {
         return;
       }
       const mName = this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare);
-      const rt = this.getLLVMType(fn.returnType);
+      const rt = this.getFunctionReturnRuntimeType(fn.returnType);
       const restParamIndex = fn.params.findIndex(p => !!p.isRest);
       const pts = fn.params.map(p => this.getFunctionParamStorageType(p));
       const restElementType = restParamIndex !== -1 ? this.getRestArrayClassName(fn.params[restParamIndex].type) : undefined;
@@ -481,7 +481,7 @@ export class CodeGenerator {
                     const mName = this.mangleName(m.name, m.params);
                     this.scopeStack.pop();
                     
-                    const rt = this.getLLVMType(m.returnType);
+                    const rt = this.getFunctionReturnRuntimeType(m.returnType);
                     const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
                     this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
                 }
@@ -515,8 +515,8 @@ export class CodeGenerator {
                 const pts = fn.params.map(p => this.getFunctionParamStorageType(p));
                 const restElementType = restParamIndex !== -1 ? this.getRestArrayClassName(fn.params[restParamIndex].type) : undefined;
                 const isExternal = !!fn.ffiLib || fn.isDeclare;
-                this.functions.set(name, { name: mName, returnType: rt, paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal } as any);
-                this.functions.set(fn.name, { name: mName, returnType: rt, paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal } as any);
+                this.functions.set(name, { name: mName, returnType: this.getFunctionReturnRuntimeType(fn.returnType), paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal } as any);
+                this.functions.set(fn.name, { name: mName, returnType: this.getFunctionReturnRuntimeType(fn.returnType), paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal } as any);
             }
         }
     }
@@ -607,6 +607,19 @@ export class CodeGenerator {
   private getFunctionParamRuntimeType(p: Parameter): string {
     if (p.isRest) return `%${this.getRestArrayClassName(p.type)}`;
     return p.type.name === 'string' ? 'string' : this.getLLVMType(p.type);
+  }
+
+  private getFunctionReturnRuntimeType(t: TypeAnnotation): string {
+    const resolvedName = this.resolveTypeName(t);
+    if (resolvedName === 'string') return 'string';
+    if (resolvedName === 'fn') return 'ptr';
+
+    const llvmType = this.getLLVMType(t);
+    if (llvmType === 'ptr' && (this.classDecls.has(resolvedName) || this.interfaceDecls.has(resolvedName))) {
+      return `%${resolvedName}`;
+    }
+
+    return llvmType;
   }
 
   private getFunctionParamStorageType(p: Parameter): string {
@@ -858,6 +871,28 @@ export class CodeGenerator {
           }
       }
       if (e.kind === ASTKind.StringLiteral) return 'string';
+      if (e.kind === ASTKind.MemberExpr) {
+          const me = e as MemberExpr;
+          const objectType = this.inferExprType(me.object);
+
+          if (objectType === 'string') {
+              if (me.member === 'length' || me.member === 'byteLength') return 'i32';
+              return 'string';
+          }
+
+          const className = objectType.startsWith('%') ? objectType.substring(1) : objectType;
+          const structInfo = this.structs.get(className);
+          if (structInfo) {
+              const field = structInfo.fields.find(f => f.name === me.member);
+              if (field) return field.type;
+          }
+
+          const classDecl = this.classDecls.get(className);
+          if (classDecl) {
+              const fieldDecl = classDecl.fields.find(f => f.name === me.member);
+              if (fieldDecl) return this.getLLVMType(fieldDecl.type);
+          }
+      }
       if (e.kind === ASTKind.NewExpr) {
           const ne = e as NewExpr;
           if (ne.genericArgs && ne.genericArgs.length > 0) return `%${this.instantiateClass(ne.className, ne.genericArgs)}`;
@@ -1390,6 +1425,33 @@ export class CodeGenerator {
       this.emit(`${result} = call ptr @string_concat(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
       this.tempTypes.set(result, 'string');
       return result;
+    }
+
+    if ((e.operator === '==' || e.operator === '!=') && leftType === 'string' && rightType === 'string') {
+      this.ensureExternalDeclaration('string_equals', { name: 'string_equals', kind: 'function', llvmType: 'i1', paramTypes: ['ptr', 'ptr'] } as any);
+      const equalsResult = this.newTemp();
+      this.emit(`${equalsResult} = call i1 @string_equals(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
+      if (e.operator === '!=') {
+        const notResult = this.newTemp();
+        this.emit(`${notResult} = xor i1 ${equalsResult}, true`);
+        this.tempTypes.set(equalsResult, 'i1');
+        this.tempTypes.set(notResult, 'i1');
+        return notResult;
+      }
+      this.tempTypes.set(equalsResult, 'i1');
+      return equalsResult;
+    }
+
+    if ((e.operator === '<' || e.operator === '<=' || e.operator === '>' || e.operator === '>=') && leftType === 'string' && rightType === 'string') {
+      this.ensureExternalDeclaration('string_compare', { name: 'string_compare', kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr'] } as any);
+      const compareResult = this.newTemp();
+      this.emit(`${compareResult} = call i32 @string_compare(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
+      const comparison = this.newTemp();
+      const cmpMap: Record<string, string> = { '<': 'slt', '<=': 'sle', '>': 'sgt', '>=': 'sge' };
+      this.emit(`${comparison} = icmp ${cmpMap[e.operator]} i32 ${compareResult}, 0`);
+      this.tempTypes.set(compareResult, 'i32');
+      this.tempTypes.set(comparison, 'i1');
+      return comparison;
     }
 
     if ((e.operator === '+' || e.operator === '-') && this.toLLVMType(leftType) === 'ptr' && rightType.startsWith('i')) {
@@ -2740,7 +2802,7 @@ export class CodeGenerator {
     // Scan function body for NewExpr and instantiate generic classes
     this.scanAndInstantiateNewExpr(instantiatedDecl.body);
 
-    const rt = this.getLLVMType(instantiatedDecl.returnType);
+    const rt = this.getFunctionReturnRuntimeType(instantiatedDecl.returnType);
     this.functions.set(mangledName, { name: mName, returnType: rt, paramTypes: pts });
     this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts });
 
@@ -2873,7 +2935,7 @@ export class CodeGenerator {
     this.currentClassName = className;
 
     const mName = this.mangleName(instantiatedMethod.name, instantiatedMethod.params);
-    const rt = this.getLLVMType(instantiatedMethod.returnType);
+    const rt = this.getFunctionReturnRuntimeType(instantiatedMethod.returnType);
     const pts = ['ptr', ...instantiatedMethod.params.map(p => this.getFunctionParamStorageType(p))];
     this.functions.set(mangledName, { name: mName, returnType: rt, paramTypes: pts });
     this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts });
