@@ -313,10 +313,12 @@ TSN stands on the shoulders of giants. We acknowledge these pioneering projects 
 
 ## 📞 Contact & Community
 
-- **GitHub**: [TSNLang/TSN](https://github.com/TSNLang/TSN)
+- **Primary Repository**: [TSNLang/TSN on GitHub](https://github.com/TSNLang/TSN)
+- **Official Mirror**: [TSN/TSN on Codeberg](https://codeberg.org/TSN/TSN) is an official mirror/archive of the project
 - **Organization**: [Sao Tin Developer](https://github.com/SaoTin)
-- **Issues**: [Report bugs or request features](https://github.com/TSNLang/TSN/issues)
-- **Discussions**: [Join the conversation](https://github.com/TSNLang/TSN/discussions)
+- **Issues**: [Report bugs or request features](https://github.com/TSNLang/TSN/issues) on the primary GitHub repository only
+- **Discussions**: [Join the conversation](https://github.com/TSNLang/TSN/discussions) on the primary GitHub repository only
+- **Mirror Policy**: Please do not send issues, pull requests, or other contribution traffic to mirror repositories
 
 ---
 
