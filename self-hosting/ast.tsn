@@ -6,6 +6,8 @@ export enum TokenKind {
     String,
     Import,
     Export,
+    Public,
+    Static,
     From,
     Function,
     Class,
@@ -58,6 +60,7 @@ export class FunctionDecl {
 
 export class Program {
     public importCount: i32;
+    public exportCount: i32;
     public functionCount: i32;
     public classCount: i32;
     public letCount: i32;
@@ -69,9 +72,12 @@ export class Program {
     public methodCount: i32;
     public fieldCount: i32;
     public constructorCount: i32;
+    public publicCount: i32;
+    public staticCount: i32;
 
-    constructor(importCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32) {
+    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, staticCount: i32) {
         this.importCount = importCount;
+        this.exportCount = exportCount;
         this.functionCount = functionCount;
         this.classCount = classCount;
         this.letCount = letCount;
@@ -83,5 +89,7 @@ export class Program {
         this.methodCount = methodCount;
         this.fieldCount = fieldCount;
         this.constructorCount = constructorCount;
+        this.publicCount = publicCount;
+        this.staticCount = staticCount;
     }
 }

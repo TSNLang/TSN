@@ -13,8 +13,8 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 
 ### 0.17.0
 - `ast.tsn`: cac kieu du lieu cot loi cho token va AST, bao gom counter toi thieu cho parser subset
-- `lexer.tsn`: lexer subset da tokenize duoc identifier, number, string, comment, decorator va keyword co ban cho bootstrap, bao gom ca `constructor`
-- `parser.tsn`: parser subset da dem duoc `import`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` / `field` / `constructor` theo huong token-driven toi thieu
+- `lexer.tsn`: lexer subset da tokenize duoc identifier, number, string, comment, decorator va keyword co ban cho bootstrap, bao gom ca `constructor`, `public`, `static`, va `export`
+- `parser.tsn`: parser subset da dem duoc `import`, `export`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` / `field` / `constructor` / modifier co ban theo huong token-driven toi thieu
 - `main.tsn`: diem vao bootstrap, build qua TypeScript compiler hien tai va xac nhan runtime qua `deno -> clang -> exe`
 
 ### 0.17.1
@@ -37,8 +37,10 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 ## Trang thai hien tai
 
 - build path that su da duoc xac nhan qua `deno run ... -> clang ... -> self-hosting/main.exe`
+- build path that su da duoc xac nhan qua `deno run ... -> clang ... -> self-hosting/main.exe`
 - tap mau bootstrap hien tai da dem dung:
   - `import = 1`
+  - `export = 1`
   - `function = 1`
   - `class = 1`
   - `let = 2`
@@ -50,7 +52,9 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
   - `method = 1`
   - `field = 2`
   - `constructor = 1`
-- parser subset da bat dau chuyen tu raw keyword count sang declaration-body structure count toi thieu, trong do class body da tach duoc `field`, `method`, va `constructor` o muc co ban
+  - `public = 2`
+  - `static = 1`
+- parser subset da bat dau chuyen tu raw keyword count sang declaration-body structure count toi thieu, trong do class body da tach duoc `field`, `method`, `constructor`, va modifier co ban o muc co ban
 - huong di van giu toi gian: parser subset truoc, diagnostics/module loading sau
 
 Day khong con chi la skeleton ban dau nua ma la mot bootstrap subset dang chay duoc qua compiler hien tai.
