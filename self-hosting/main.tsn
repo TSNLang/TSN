@@ -63,6 +63,8 @@ function main(): i32 {
     log(program.firstMethodTypeParamSummary);
     log("first method summary");
     log(program.firstMethodName);
+    log("first method modifier summary");
+    log(program.firstMethodModifierSummary);
     log("first field summary");
     log(program.firstFieldName);
     log("first constructor summary");

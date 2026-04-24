@@ -86,6 +86,7 @@ export class Program {
     public firstClassTypeParamSummary: string;
     public firstMethodTypeParamSummary: string;
     public firstMethodName: string;
+    public firstMethodModifierSummary: string;
     public firstFieldName: string;
     public firstConstructorName: string;
     public firstConstructorModifierSummary: string;
@@ -98,7 +99,7 @@ export class Program {
     public firstFunctionParamSummary: string;
     public firstFunctionReturnSummary: string;
 
-    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, privateCount: i32, protectedCount: i32, staticCount: i32, asyncCount: i32, firstFunctionName: string, firstFunctionTypeParamSummary: string, firstClassName: string, firstClassTypeParamSummary: string, firstMethodTypeParamSummary: string, firstMethodName: string, firstFieldName: string, firstConstructorName: string, firstConstructorModifierSummary: string, firstMemberModifierSummary: string, firstMemberSummary: string, firstFieldTypeSummary: string, firstMethodReturnSummary: string, firstMethodParamSummary: string, firstConstructorParamSummary: string, firstFunctionParamSummary: string, firstFunctionReturnSummary: string) {
+    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, privateCount: i32, protectedCount: i32, staticCount: i32, asyncCount: i32, firstFunctionName: string, firstFunctionTypeParamSummary: string, firstClassName: string, firstClassTypeParamSummary: string, firstMethodTypeParamSummary: string, firstMethodName: string, firstMethodModifierSummary: string, firstFieldName: string, firstConstructorName: string, firstConstructorModifierSummary: string, firstMemberModifierSummary: string, firstMemberSummary: string, firstFieldTypeSummary: string, firstMethodReturnSummary: string, firstMethodParamSummary: string, firstConstructorParamSummary: string, firstFunctionParamSummary: string, firstFunctionReturnSummary: string) {
         this.importCount = importCount;
         this.exportCount = exportCount;
         this.functionCount = functionCount;
@@ -123,6 +124,7 @@ export class Program {
         this.firstClassTypeParamSummary = firstClassTypeParamSummary;
         this.firstMethodTypeParamSummary = firstMethodTypeParamSummary;
         this.firstMethodName = firstMethodName;
+        this.firstMethodModifierSummary = firstMethodModifierSummary;
         this.firstFieldName = firstFieldName;
         this.firstConstructorName = firstConstructorName;
         this.firstConstructorModifierSummary = firstConstructorModifierSummary;

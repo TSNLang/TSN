@@ -68,6 +68,7 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
   - `firstFieldName = value`
   - `firstConstructorName = constructor`
   - `firstConstructorModifierSummary = public`
+  - `firstMethodModifierSummary = public,async`
   - `firstMemberModifierSummary = public`
   - `firstMemberSummary = public field value`
   - `firstFieldTypeSummary = value: i32`
