@@ -47,6 +47,14 @@ function main(): i32 {
     log(program.staticCount);
     log("async modifiers parsed");
     log(program.asyncCount);
+    log("first function summary");
+    log(program.firstFunctionName);
+    log("first class summary");
+    log(program.firstClassName);
+    log("first method summary");
+    log(program.firstMethodName);
+    log("first field summary");
+    log(program.firstFieldName);
     log("tokens ready");
 
     return 0;
