@@ -270,4 +270,65 @@ For more details, see [Language Limitations](docs/limitations.md).
 
 ---
 
-## 🛠️ Project Structure
+## 📜 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+```
+Copyright 2024-2026 Sao Tin Developer
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+---
+
+## 🙏 Acknowledgments
+
+- **LLVM Project** - For the amazing compiler infrastructure
+- **TypeScript Team** - For the inspiration and syntax design
+- **Rust** - For systems programming language design patterns
+- **Mojo** - Because of the idea of ​​memory security
+
+## 🌟 Inspired By
+
+TSN stands on the shoulders of giants. We acknowledge these pioneering projects that explored TypeScript-to-native compilation:
+
+- **[TypeScriptCompiler](https://github.com/ASDAlexander77/TypeScriptCompiler)** by ASDAlexander77
+- **[tsll](https://github.com/sbip-sg/tsll)** by SBIP-SG
+- **[StaticScript](https://github.com/ovr/StaticScript)** by ovr
+- **[llts](https://github.com/bherbruck/llts)** by bherbruck
+- **[ts-llvm](https://github.com/emillaine/ts-llvm)** by emillaine
+
+---
+
+## 📞 Contact & Community
+
+- **GitHub**: [TSNLang/TSN](https://github.com/TSNLang/TSN)
+- **Organization**: [Sao Tin Developer](https://github.com/SaoTin)
+- **Issues**: [Report bugs or request features](https://github.com/TSNLang/TSN/issues)
+- **Discussions**: [Join the conversation](https://github.com/TSNLang/TSN/discussions)
+
+---
+
+<div align="center">
+  
+  **Made with ❤️ in Ho Chi Minh City, Vietnam**
+  
+  *Bringing TypeScript-inspired syntax to Systems Programming*
+  
+  ⭐ Star us on GitHub if you find TSN interesting!
+  
+  **Note**: TSN is inspired by TypeScript syntax but is an independent project not affiliated with or endorsed by Microsoft or the TypeScript team.
+  
+</div>
+
