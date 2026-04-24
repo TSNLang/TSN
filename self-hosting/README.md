@@ -51,7 +51,7 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
   - `method = 1`
   - `field = 4`
   - `constructor = 1`
-  - `public = 2`
+  - `public = 3`
   - `private = 1`
   - `protected = 1`
   - `static = 1`
@@ -67,6 +67,7 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
   - `firstMethodName = push`
   - `firstFieldName = value`
   - `firstConstructorName = constructor`
+  - `firstConstructorModifierSummary = public`
   - `firstMemberModifierSummary = public`
   - `firstMemberSummary = public field value`
   - `firstFieldTypeSummary = value: i32`
