@@ -36,6 +36,7 @@ export class Parser {
         let firstConstructorName = "";
         let firstMemberModifierSummary = "";
         let firstMemberSummary = "";
+        let firstFieldTypeSummary = "";
 
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Import)) {
@@ -106,6 +107,9 @@ export class Parser {
                 if (firstMemberSummary == "" && body.firstMemberSummary != "") {
                     firstMemberSummary = body.firstMemberSummary;
                 }
+                if (firstFieldTypeSummary == "" && body.firstFieldTypeSummary != "") {
+                    firstFieldTypeSummary = body.firstFieldTypeSummary;
+                }
                 continue;
             }
 
@@ -137,7 +141,7 @@ export class Parser {
             this.advance();
         }
 
-        return new Program(importCount, exportCount, functionCount, classCount, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, firstFunctionName, firstClassName, firstMethodName, firstFieldName, firstConstructorName, firstMemberModifierSummary, firstMemberSummary);
+        return new Program(importCount, exportCount, functionCount, classCount, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, firstFunctionName, firstClassName, firstMethodName, firstFieldName, firstConstructorName, firstMemberModifierSummary, firstMemberSummary, firstFieldTypeSummary);
     }
 
     private parseImportDecl(): void {
@@ -168,7 +172,7 @@ export class Parser {
             }
         }
 
-        return new Program(0, exportCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, asyncCount, "", "", "", "", "", "", "");
+        return new Program(0, exportCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, asyncCount, "", "", "", "", "", "", "", "");
     }
 
     private parseFunctionDecl(): Program {
@@ -206,7 +210,7 @@ export class Parser {
             forCount = body.forCount;
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, 0, 0, 0, 0, 0, 0, 0, 0, functionName, "", "", "", "", "", "");
+        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, 0, 0, 0, 0, 0, 0, 0, 0, functionName, "", "", "", "", "", "", "");
     }
 
     private parseClassDecl(): Program {
@@ -230,6 +234,7 @@ export class Parser {
         let firstConstructorName = "";
         let firstMemberModifierSummary = "";
         let firstMemberSummary = "";
+        let firstFieldTypeSummary = "";
 
         if (!this.isAtEnd()) {
             className = this.peek().lexeme;
@@ -241,7 +246,7 @@ export class Parser {
         }
 
         if (!this.matchKind(TokenKind.LBrace)) {
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", className, "", "", "", "", "");
+            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", className, "", "", "", "", "", "");
         }
 
         let depth: i32 = 1;
@@ -295,6 +300,9 @@ export class Parser {
                     if (firstMemberSummary == "" && member.firstMemberSummary != "") {
                         firstMemberSummary = member.firstMemberSummary;
                     }
+                    if (firstFieldTypeSummary == "" && member.firstFieldTypeSummary != "") {
+                        firstFieldTypeSummary = member.firstFieldTypeSummary;
+                    }
                     continue;
                 }
             }
@@ -302,7 +310,7 @@ export class Parser {
             this.advance();
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", className, firstMethodName, firstFieldName, firstConstructorName, firstMemberModifierSummary, firstMemberSummary);
+        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", className, firstMethodName, firstFieldName, firstConstructorName, firstMemberModifierSummary, firstMemberSummary, firstFieldTypeSummary);
     }
 
     private consumeClassModifiers(): Program {
@@ -348,7 +356,7 @@ export class Parser {
             }
         }
 
-        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", "", "", "", "", summary, "");
+        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", "", "", "", "", summary, "", "");
     }
 
     private parseClassMember(modifierSummary: string): Program {
@@ -402,16 +410,17 @@ export class Parser {
                 firstConstructorName = memberName;
             }
 
-            return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, 0, constructorCount, 0, 0, 0, 0, 0, "", "", firstMethodName, "", firstConstructorName, modifierSummary, memberLabel);
+            return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, 0, constructorCount, 0, 0, 0, 0, 0, "", "", firstMethodName, "", firstConstructorName, modifierSummary, memberLabel, "");
         }
 
         if (this.matchKind(TokenKind.Colon)) {
+            let fieldTypeSummary = this.readFieldTypeSummary(memberName);
             this.skipClassFieldTail();
             let fieldSummary = "field " + memberName;
             if (modifierSummary != "") {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", memberName, "", modifierSummary, fieldSummary);
+            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", memberName, "", modifierSummary, fieldSummary, fieldTypeSummary);
         }
 
         if (this.matchKind(TokenKind.Equal)) {
@@ -420,10 +429,50 @@ export class Parser {
             if (modifierSummary != "") {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", memberName, "", modifierSummary, fieldSummary);
+            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", memberName, "", modifierSummary, fieldSummary, "");
         }
 
-        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", modifierSummary, "");
+        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", modifierSummary, "", "");
+    }
+
+    private readFieldTypeSummary(memberName: string): string {
+        let parts = "";
+        let depth: i32 = 0;
+
+        while (!this.isAtEnd()) {
+            let kind = this.peek().kind;
+            if (depth == 0 && (kind == TokenKind.Semicolon || kind == TokenKind.Equal)) {
+                break;
+            }
+
+            let lexeme = this.peek().lexeme;
+            if (kind == TokenKind.Less) {
+                depth = depth + 1;
+            } else if (kind == TokenKind.Greater && depth > 0) {
+                depth = depth - 1;
+            }
+
+            if (parts == "") {
+                parts = lexeme;
+            } else if (kind == TokenKind.Comma) {
+                parts = parts + ", ";
+            } else if (kind == TokenKind.Less) {
+                parts = parts + "<";
+            } else if (kind == TokenKind.Greater) {
+                parts = parts + ">";
+            } else if (kind == TokenKind.Dot) {
+                parts = parts + ".";
+            } else {
+                parts = parts + lexeme;
+            }
+
+            this.advance();
+        }
+
+        if (parts == "") {
+            return "";
+        }
+        return memberName + ": " + parts;
     }
 
     private appendModifier(current: string, next: string): string {
@@ -588,7 +637,7 @@ export class Parser {
             this.advance();
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "");
+        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", "");
     }
 
     private skipAngleBlock(): void {

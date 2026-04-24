@@ -61,6 +61,8 @@ function main(): i32 {
     log(program.firstMemberModifierSummary);
     log("first member summary");
     log(program.firstMemberSummary);
+    log("first field type summary");
+    log(program.firstFieldTypeSummary);
     log("tokens ready");
 
     return 0;
