@@ -12,9 +12,9 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 ## Lo trinh toi thieu
 
 ### 0.17.0
-- `ast.tsn`: cac kieu du lieu cot loi cho token va AST, bao gom counter toi thieu va summary toi gian cho parser subset, ke ca constructor/member summary dau tien, summary gop cho member dau tien, field type summary dau tien, method return summary dau tien, va method param summary dau tien
+- `ast.tsn`: cac kieu du lieu cot loi cho token va AST, bao gom counter toi thieu va summary toi gian cho parser subset, ke ca constructor/member summary dau tien, summary gop cho member dau tien, field type summary dau tien, method return summary dau tien, method param summary dau tien, va constructor param summary dau tien
 - `lexer.tsn`: lexer subset da tokenize duoc identifier, number, string, comment, decorator va keyword co ban cho bootstrap, bao gom ca `constructor`, `public`, `private`, `protected`, `static`, `async`, va `export`
-- `parser.tsn`: parser subset da dem duoc `import`, `export`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` / `field` / `constructor` / modifier co ban theo huong token-driven toi thieu, dong thoi ghi lai summary dau tien cho function/class/member/modifier, mot member summary gop dang nho gon, field type summary dau tien khi gap type annotation ro rang, method return summary dau tien khi gap return type ro rang, va method param summary dau tien o muc chuoi toi thieu
+- `parser.tsn`: parser subset da dem duoc `import`, `export`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` / `field` / `constructor` / modifier co ban theo huong token-driven toi thieu, dong thoi ghi lai summary dau tien cho function/class/member/modifier, mot member summary gop dang nho gon, field type summary dau tien khi gap type annotation ro rang, method return summary dau tien khi gap return type ro rang, method param summary dau tien o muc chuoi toi thieu, va constructor param summary dau tien
 - `main.tsn`: diem vao bootstrap, build qua TypeScript compiler hien tai va xac nhan runtime qua `deno -> clang -> exe`
 
 ### 0.17.1
@@ -47,7 +47,7 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
   - `if = 1`
   - `while = 0`
   - `for = 0`
-  - `param = 5`
+  - `param = 6`
   - `method = 1`
   - `field = 4`
   - `constructor = 1`
@@ -67,7 +67,8 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
   - `firstFieldTypeSummary = value: i32`
   - `firstMethodReturnSummary = push: i32`
   - `firstMethodParamSummary = push(item: i32, count: i32)`
-- parser subset da bat dau chuyen tu raw keyword count sang declaration-body structure count toi thieu, trong do class body da tach duoc `field`, `method`, `constructor`, modifier co ban, va giu lai summary modifier/member dau tien theo dang gop don gian kem field type summary, method return summary, va method param summary toi thieu
+  - `firstConstructorParamSummary = constructor(seed: i32, enabled: bool)`
+- parser subset da bat dau chuyen tu raw keyword count sang declaration-body structure count toi thieu, trong do class body da tach duoc `field`, `method`, `constructor`, modifier co ban, va giu lai summary modifier/member dau tien theo dang gop don gian kem field type summary, method return summary, method param summary, va constructor param summary toi thieu
 - huong di van giu toi gian: parser subset truoc, diagnostics/module loading sau
 
 Day khong con chi la skeleton ban dau nua ma la mot bootstrap subset dang chay duoc qua compiler hien tai.
