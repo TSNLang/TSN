@@ -51,6 +51,8 @@ function main(): i32 {
     log(program.firstFunctionName);
     log("first function param summary");
     log(program.firstFunctionParamSummary);
+    log("first function return summary");
+    log(program.firstFunctionReturnSummary);
     log("first class summary");
     log(program.firstClassName);
     log("first method summary");
