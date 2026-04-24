@@ -80,8 +80,14 @@ export class Program {
     public protectedCount: i32;
     public staticCount: i32;
     public asyncCount: i32;
+    public firstFunctionName: string;
+    public firstClassName: string;
+    public firstMethodName: string;
+    public firstFieldName: string;
+    public firstConstructorName: string;
+    public firstMemberModifierSummary: string;
 
-    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, privateCount: i32, protectedCount: i32, staticCount: i32, asyncCount: i32) {
+    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, privateCount: i32, protectedCount: i32, staticCount: i32, asyncCount: i32, firstFunctionName: string, firstClassName: string, firstMethodName: string, firstFieldName: string, firstConstructorName: string, firstMemberModifierSummary: string) {
         this.importCount = importCount;
         this.exportCount = exportCount;
         this.functionCount = functionCount;
@@ -100,5 +106,11 @@ export class Program {
         this.protectedCount = protectedCount;
         this.staticCount = staticCount;
         this.asyncCount = asyncCount;
+        this.firstFunctionName = firstFunctionName;
+        this.firstClassName = firstClassName;
+        this.firstMethodName = firstMethodName;
+        this.firstFieldName = firstFieldName;
+        this.firstConstructorName = firstConstructorName;
+        this.firstMemberModifierSummary = firstMemberModifierSummary;
     }
 }

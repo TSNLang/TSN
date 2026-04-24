@@ -55,6 +55,10 @@ function main(): i32 {
     log(program.firstMethodName);
     log("first field summary");
     log(program.firstFieldName);
+    log("first constructor summary");
+    log(program.firstConstructorName);
+    log("first member modifier summary");
+    log(program.firstMemberModifierSummary);
     log("tokens ready");
 
     return 0;
