@@ -89,8 +89,9 @@ export class Program {
     public firstMemberSummary: string;
     public firstFieldTypeSummary: string;
     public firstMethodReturnSummary: string;
+    public firstMethodParamSummary: string;
 
-    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, privateCount: i32, protectedCount: i32, staticCount: i32, asyncCount: i32, firstFunctionName: string, firstClassName: string, firstMethodName: string, firstFieldName: string, firstConstructorName: string, firstMemberModifierSummary: string, firstMemberSummary: string, firstFieldTypeSummary: string, firstMethodReturnSummary: string) {
+    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, privateCount: i32, protectedCount: i32, staticCount: i32, asyncCount: i32, firstFunctionName: string, firstClassName: string, firstMethodName: string, firstFieldName: string, firstConstructorName: string, firstMemberModifierSummary: string, firstMemberSummary: string, firstFieldTypeSummary: string, firstMethodReturnSummary: string, firstMethodParamSummary: string) {
         this.importCount = importCount;
         this.exportCount = exportCount;
         this.functionCount = functionCount;
@@ -118,5 +119,6 @@ export class Program {
         this.firstMemberSummary = firstMemberSummary;
         this.firstFieldTypeSummary = firstFieldTypeSummary;
         this.firstMethodReturnSummary = firstMethodReturnSummary;
+        this.firstMethodParamSummary = firstMethodParamSummary;
     }
 }
