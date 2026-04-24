@@ -49,6 +49,8 @@ function main(): i32 {
     log(program.asyncCount);
     log("first function summary");
     log(program.firstFunctionName);
+    log("first function param summary");
+    log(program.firstFunctionParamSummary);
     log("first class summary");
     log(program.firstClassName);
     log("first method summary");

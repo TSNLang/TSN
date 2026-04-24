@@ -12,9 +12,9 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 ## Lo trinh toi thieu
 
 ### 0.17.0
-- `ast.tsn`: cac kieu du lieu cot loi cho token va AST, bao gom counter toi thieu va summary toi gian cho parser subset, ke ca constructor/member summary dau tien, summary gop cho member dau tien, field type summary dau tien, method return summary dau tien, method param summary dau tien, va constructor param summary dau tien
+- `ast.tsn`: cac kieu du lieu cot loi cho token va AST, bao gom counter toi thieu va summary toi gian cho parser subset, ke ca constructor/member summary dau tien, summary gop cho member dau tien, field type summary dau tien, method return summary dau tien, method param summary dau tien, constructor param summary dau tien, va function param summary dau tien
 - `lexer.tsn`: lexer subset da tokenize duoc identifier, number, string, comment, decorator va keyword co ban cho bootstrap, bao gom ca `constructor`, `public`, `private`, `protected`, `static`, `async`, va `export`
-- `parser.tsn`: parser subset da dem duoc `import`, `export`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` / `field` / `constructor` / modifier co ban theo huong token-driven toi thieu, dong thoi ghi lai summary dau tien cho function/class/member/modifier, mot member summary gop dang nho gon, field type summary dau tien khi gap type annotation ro rang, method return summary dau tien khi gap return type ro rang, method param summary dau tien o muc chuoi toi thieu, va constructor param summary dau tien
+- `parser.tsn`: parser subset da dem duoc `import`, `export`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` / `field` / `constructor` / modifier co ban theo huong token-driven toi thieu, dong thoi ghi lai summary dau tien cho function/class/member/modifier, mot member summary gop dang nho gon, field type summary dau tien khi gap type annotation ro rang, method return summary dau tien khi gap return type ro rang, method param summary dau tien o muc chuoi toi thieu, constructor param summary dau tien, va function param summary dau tien
 - `main.tsn`: diem vao bootstrap, build qua TypeScript compiler hien tai va xac nhan runtime qua `deno -> clang -> exe`
 
 ### 0.17.1
