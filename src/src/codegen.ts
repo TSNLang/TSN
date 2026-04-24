@@ -898,6 +898,23 @@ export class CodeGenerator {
           if (ne.genericArgs && ne.genericArgs.length > 0) return `%${this.instantiateClass(ne.className, ne.genericArgs)}`;
           return `%${ne.className}`;
       }
+      if (e.kind === ASTKind.BinaryExpr) {
+          const be = e as BinaryExpr;
+          const leftType = this.inferExprType(be.left);
+          const rightType = this.inferExprType(be.right);
+
+          if (be.operator === '+' && (leftType === 'string' || rightType === 'string')) {
+              return 'string';
+          }
+
+          if (['==', '!=', '<', '<=', '>', '>=', '&&', '||'].includes(be.operator)) {
+              return 'i1';
+          }
+
+          if (leftType === rightType) {
+              return leftType;
+          }
+      }
       return 'i32';
   }
 

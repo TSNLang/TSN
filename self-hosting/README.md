@@ -12,9 +12,9 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 ## Lo trinh toi thieu
 
 ### 0.17.0
-- `ast.tsn`: cac kieu du lieu cot loi cho token va AST, bao gom counter toi thieu va summary toi gian cho parser subset, ke ca constructor/member summary dau tien
+- `ast.tsn`: cac kieu du lieu cot loi cho token va AST, bao gom counter toi thieu va summary toi gian cho parser subset, ke ca constructor/member summary dau tien va summary gop cho member dau tien
 - `lexer.tsn`: lexer subset da tokenize duoc identifier, number, string, comment, decorator va keyword co ban cho bootstrap, bao gom ca `constructor`, `public`, `private`, `protected`, `static`, `async`, va `export`
-- `parser.tsn`: parser subset da dem duoc `import`, `export`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` / `field` / `constructor` / modifier co ban theo huong token-driven toi thieu, dong thoi ghi lai summary dau tien cho function/class/member/modifier
+- `parser.tsn`: parser subset da dem duoc `import`, `export`, `function`, `class`, `let`, `return`, va bat dau quet them `param` / `method` / `field` / `constructor` / modifier co ban theo huong token-driven toi thieu, dong thoi ghi lai summary dau tien cho function/class/member/modifier va mot member summary gop dang nho gon
 - `main.tsn`: diem vao bootstrap, build qua TypeScript compiler hien tai va xac nhan runtime qua `deno -> clang -> exe`
 
 ### 0.17.1
@@ -63,7 +63,8 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
   - `firstFieldName = value`
   - `firstConstructorName = constructor`
   - `firstMemberModifierSummary = public`
-- parser subset da bat dau chuyen tu raw keyword count sang declaration-body structure count toi thieu, trong do class body da tach duoc `field`, `method`, `constructor`, modifier co ban, va giu lai summary modifier/member dau tien
+  - `firstMemberSummary = public field value`
+- parser subset da bat dau chuyen tu raw keyword count sang declaration-body structure count toi thieu, trong do class body da tach duoc `field`, `method`, `constructor`, modifier co ban, va giu lai summary modifier/member dau tien theo dang gop don gian
 - huong di van giu toi gian: parser subset truoc, diagnostics/module loading sau
 
 Day khong con chi la skeleton ban dau nua ma la mot bootstrap subset dang chay duoc qua compiler hien tai.
