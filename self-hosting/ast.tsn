@@ -7,7 +7,10 @@ export enum TokenKind {
     Import,
     Export,
     Public,
+    Private,
+    Protected,
     Static,
+    Async,
     From,
     Function,
     Class,
@@ -73,9 +76,12 @@ export class Program {
     public fieldCount: i32;
     public constructorCount: i32;
     public publicCount: i32;
+    public privateCount: i32;
+    public protectedCount: i32;
     public staticCount: i32;
+    public asyncCount: i32;
 
-    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, staticCount: i32) {
+    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, privateCount: i32, protectedCount: i32, staticCount: i32, asyncCount: i32) {
         this.importCount = importCount;
         this.exportCount = exportCount;
         this.functionCount = functionCount;
@@ -90,6 +96,9 @@ export class Program {
         this.fieldCount = fieldCount;
         this.constructorCount = constructorCount;
         this.publicCount = publicCount;
+        this.privateCount = privateCount;
+        this.protectedCount = protectedCount;
         this.staticCount = staticCount;
+        this.asyncCount = asyncCount;
     }
 }

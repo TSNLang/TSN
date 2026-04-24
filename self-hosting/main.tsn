@@ -3,7 +3,7 @@ import { Lexer } from "./lexer.tsn";
 import { Parser } from "./parser.tsn";
 
 function main(): i32 {
-    let source = "@target_os(\"windows\") import { log } from \"std:console\"; export class Box<T> { public value: i32; static label = \"box\"; constructor(seed: i32) { let value = seed; } public push(item: i32, count: i32): i32 { return item; } } function main(value: i32, flag: bool): i32 { let xs = [1]; if (1) { return 0; } return 0; }";
+    let source = "@target_os(\"windows\") import { log } from \"std:console\"; export class Box<T> { public value: i32; private secret: i32; protected name = \"box\"; static label = \"box\"; constructor(seed: i32) { let value = seed; } public async push(item: i32, count: i32): i32 { return item; } } async function main(value: i32, flag: bool): i32 { let xs = [1]; if (1) { return 0; } return 0; }";
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
     let parser = new Parser(tokens);
@@ -39,8 +39,14 @@ function main(): i32 {
     log(program.constructorCount);
     log("public modifiers parsed");
     log(program.publicCount);
+    log("private modifiers parsed");
+    log(program.privateCount);
+    log("protected modifiers parsed");
+    log(program.protectedCount);
     log("static modifiers parsed");
     log(program.staticCount);
+    log("async modifiers parsed");
+    log(program.asyncCount);
     log("tokens ready");
 
     return 0;

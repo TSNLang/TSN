@@ -183,7 +183,10 @@ export class Lexer {
         if (text == "import") return TokenKind.Import;
         if (text == "export") return TokenKind.Export;
         if (text == "public") return TokenKind.Public;
+        if (text == "private") return TokenKind.Private;
+        if (text == "protected") return TokenKind.Protected;
         if (text == "static") return TokenKind.Static;
+        if (text == "async") return TokenKind.Async;
         if (text == "from") return TokenKind.From;
         if (text == "function") return TokenKind.Function;
         if (text == "class") return TokenKind.Class;
