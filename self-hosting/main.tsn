@@ -1,4 +1,5 @@
 import { log } from "std:console";
+import { readText } from "std:fs";
 import { Lexer } from "./lexer.tsn";
 import { Parser } from "./parser.tsn";
 
@@ -86,6 +87,52 @@ function main(): i32 {
     log("first constructor param summary");
     log(program.firstConstructorParamSummary);
     log("tokens ready");
+
+    log("---");
+    log("self-parse smoke test: parser.tsn");
+    let fsResult = readText("self-hosting/parser.tsn");
+    if (fsResult.isOk()) {
+        let selfSource = fsResult.value();
+        let selfLexer = new Lexer(selfSource);
+        let selfTokens = selfLexer.tokenize();
+        let selfParser = new Parser(selfTokens);
+        let selfProgram = selfParser.parse();
+        log("self-parse: import");
+        log(selfProgram.importCount);
+        log("self-parse: export");
+        log(selfProgram.exportCount);
+        log("self-parse: class");
+        log(selfProgram.classCount);
+        log("self-parse: constructor");
+        log(selfProgram.constructorCount);
+        log("self-parse: method");
+        log(selfProgram.methodCount);
+        log("self-parse: field");
+        log(selfProgram.fieldCount);
+        log("self-parse: let");
+        log(selfProgram.letCount);
+        log("self-parse: return");
+        log(selfProgram.returnCount);
+        log("self-parse: if");
+        log(selfProgram.ifCount);
+        log("self-parse: while");
+        log(selfProgram.whileCount);
+        log("self-parse: public");
+        log(selfProgram.publicCount);
+        log("self-parse: private");
+        log(selfProgram.privateCount);
+        log("self-parse: firstClassName");
+        log(selfProgram.firstClassName);
+        log("self-parse: firstMethodName");
+        log(selfProgram.firstMethodName);
+        log("self-parse: firstFieldName");
+        log(selfProgram.firstFieldName);
+        log("self-parse: firstConstructorParamSummary");
+        log(selfProgram.firstConstructorParamSummary);
+        log("self-parse OK");
+    } else {
+        log("self-parse FAILED: could not read parser.tsn");
+    }
 
     return 0;
 }

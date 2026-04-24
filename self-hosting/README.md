@@ -80,3 +80,23 @@ Muc tieu cua nhanh `0.17.x` la dua TSN vao giai doan self-hosting tung phan, bat
 - huong di van giu toi gian: parser subset truoc, diagnostics/module loading sau
 
 Day khong con chi la skeleton ban dau nua ma la mot bootstrap subset dang chay duoc qua compiler hien tai.
+
+## Self-parse smoke test (0.17.1)
+
+Parser subset da tu-parse chinh no (`parser.tsn`) va xac nhan cac ket qua sau:
+
+- `self-parse: import = 2`
+- `self-parse: export = 1`
+- `self-parse: class = 1`
+- `self-parse: constructor = 1`
+- `self-parse: method = 25`
+- `self-parse: field = 2`
+- `self-parse: let = 151`
+- `self-parse: return = 37`
+- `self-parse: if = 133`
+- `self-parse: while = 16`
+- `self-parse: private = 26`
+- `self-parse: firstClassName = Parser`
+- `self-parse: firstMethodName = parse`
+- `self-parse: firstFieldName = tokens`
+- `self-parse: firstConstructorParamSummary = constructor(tokens: Array<Token>)`
