@@ -30,6 +30,7 @@ export class Parser {
         let staticCount: i32 = 0;
         let asyncCount: i32 = 0;
         let firstFunctionName = "";
+        let firstFunctionTypeParamSummary = "";
         let firstClassName = "";
         let firstClassTypeParamSummary = "";
         let firstMethodTypeParamSummary = "";
@@ -75,6 +76,9 @@ export class Parser {
                 asyncCount = asyncCount + body.asyncCount;
                 if (firstFunctionName == "") {
                     firstFunctionName = body.firstFunctionName;
+                }
+                if (firstFunctionTypeParamSummary == "" && body.firstFunctionTypeParamSummary != "") {
+                    firstFunctionTypeParamSummary = body.firstFunctionTypeParamSummary;
                 }
                 if (firstFunctionParamSummary == "" && body.firstFunctionParamSummary != "") {
                     firstFunctionParamSummary = body.firstFunctionParamSummary;
@@ -169,7 +173,7 @@ export class Parser {
             this.advance();
         }
 
-        return new Program(importCount, exportCount, functionCount, classCount, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, firstFunctionName, firstClassName, firstClassTypeParamSummary, firstMethodTypeParamSummary, firstMethodName, firstFieldName, firstConstructorName, firstMemberModifierSummary, firstMemberSummary, firstFieldTypeSummary, firstMethodReturnSummary, firstMethodParamSummary, firstConstructorParamSummary, firstFunctionParamSummary, firstFunctionReturnSummary);
+        return new Program(importCount, exportCount, functionCount, classCount, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, firstFunctionName, firstFunctionTypeParamSummary, firstClassName, firstClassTypeParamSummary, firstMethodTypeParamSummary, firstMethodName, firstFieldName, firstConstructorName, firstMemberModifierSummary, firstMemberSummary, firstFieldTypeSummary, firstMethodReturnSummary, firstMethodParamSummary, firstConstructorParamSummary, firstFunctionParamSummary, firstFunctionReturnSummary);
     }
 
     private parseImportDecl(): void {
@@ -200,7 +204,7 @@ export class Parser {
             }
         }
 
-        return new Program(0, exportCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, asyncCount, "", "", "", "", "", "", "", "", "", "", "", "", "", "");
+        return new Program(0, exportCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, asyncCount, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "");
     }
 
     private parseFunctionDecl(): Program {
@@ -211,6 +215,7 @@ export class Parser {
         let whileCount: i32 = 0;
         let forCount: i32 = 0;
         let paramCount: i32 = 0;
+        let functionTypeParamSummary = "";
         let functionParamSummary = "";
         let functionReturnSummary = "";
 
@@ -220,7 +225,7 @@ export class Parser {
         }
 
         if (this.matchKind(TokenKind.Less)) {
-            this.skipAngleBlock();
+            functionTypeParamSummary = this.readTypeArgSummary(functionName);
         }
 
         if (this.matchKind(TokenKind.LParen)) {
@@ -241,7 +246,7 @@ export class Parser {
             forCount = body.forCount;
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, 0, 0, 0, 0, 0, 0, 0, 0, functionName, "", "", "", "", "", "", "", "", "", "", "", "", functionParamSummary, functionReturnSummary);
+        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, 0, 0, 0, 0, 0, 0, 0, 0, functionName, functionTypeParamSummary, "", "", "", "", "", "", "", "", "", "", "", "", functionParamSummary, functionReturnSummary);
     }
 
     private parseClassDecl(): Program {
@@ -282,7 +287,7 @@ export class Parser {
         }
 
         if (!this.matchKind(TokenKind.LBrace)) {
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", className, classTypeParamSummary, "", "", "", "", "", "", "", "", "", "", "", "");
+            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", className, classTypeParamSummary, "", "", "", "", "", "", "", "", "", "", "", "");
         }
 
         let depth: i32 = 1;
@@ -358,7 +363,7 @@ export class Parser {
             this.advance();
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", className, classTypeParamSummary, firstMethodTypeParamSummary, firstMethodName, firstFieldName, firstConstructorName, firstMemberModifierSummary, firstMemberSummary, firstFieldTypeSummary, firstMethodReturnSummary, firstMethodParamSummary, firstConstructorParamSummary, "", "");
+        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", "", className, classTypeParamSummary, firstMethodTypeParamSummary, firstMethodName, firstFieldName, firstConstructorName, firstMemberModifierSummary, firstMemberSummary, firstFieldTypeSummary, firstMethodReturnSummary, firstMethodParamSummary, firstConstructorParamSummary, "", "");
     }
 
     private consumeClassModifiers(): Program {
@@ -404,7 +409,7 @@ export class Parser {
             }
         }
 
-        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", "", "", "", "", "", "", summary, "", "", "", "", "", "", "");
+        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", "", "", "", "", "", "", "", summary, "", "", "", "", "", "", "");
     }
 
     private parseClassMember(modifierSummary: string): Program {
@@ -465,7 +470,7 @@ export class Parser {
                 firstConstructorName = memberName;
             }
 
-            return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, 0, constructorCount, 0, 0, 0, 0, 0, "", "", "", methodTypeParamSummary, firstMethodName, "", firstConstructorName, modifierSummary, memberLabel, "", methodReturnSummary, paramSummary, firstConstructorParamSummary, "", "");
+            return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, 0, constructorCount, 0, 0, 0, 0, 0, "", "", "", "", methodTypeParamSummary, firstMethodName, "", firstConstructorName, modifierSummary, memberLabel, "", methodReturnSummary, paramSummary, firstConstructorParamSummary, "", "");
         }
 
         if (this.matchKind(TokenKind.Colon)) {
@@ -475,7 +480,7 @@ export class Parser {
             if (modifierSummary != "") {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", "", "", memberName, "", modifierSummary, fieldSummary, fieldTypeSummary, "", "", "", "", "");
+            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", memberName, "", modifierSummary, fieldSummary, fieldTypeSummary, "", "", "", "", "");
         }
 
         if (this.matchKind(TokenKind.Equal)) {
@@ -484,10 +489,10 @@ export class Parser {
             if (modifierSummary != "") {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", "", "", memberName, "", modifierSummary, fieldSummary, "", "", "", "", "", "");
+            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", memberName, "", modifierSummary, fieldSummary, "", "", "", "", "", "");
         }
 
-        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", modifierSummary, "", "", "", "", "", "", "");
+        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", "", modifierSummary, "", "", "", "", "", "", "");
     }
 
     private readTypeArgSummary(typeName: string): string {
@@ -799,7 +804,7 @@ export class Parser {
             this.advance();
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", "", "", "", "", "", "", "");
+        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "");
     }
 
     private skipAngleBlock(): void {
