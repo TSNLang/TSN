@@ -134,5 +134,89 @@ function main(): i32 {
         log("self-parse FAILED: could not read parser.tsn");
     }
 
+    log("---");
+    log("self-parse smoke test: ast.tsn");
+    let fsResult0 = readText("self-hosting/ast.tsn");
+    if (fsResult0.isOk()) {
+        let selfSource0 = fsResult0.value();
+        let selfLexer0 = new Lexer(selfSource0);
+        let selfTokens0 = selfLexer0.tokenize();
+        let selfParser0 = new Parser(selfTokens0);
+        let selfProgram0 = selfParser0.parse();
+        log("self-parse ast: import");
+        log(selfProgram0.importCount);
+        log("self-parse ast: export");
+        log(selfProgram0.exportCount);
+        log("self-parse ast: class");
+        log(selfProgram0.classCount);
+        log("self-parse ast: constructor");
+        log(selfProgram0.constructorCount);
+        log("self-parse ast: method");
+        log(selfProgram0.methodCount);
+        log("self-parse ast: field");
+        log(selfProgram0.fieldCount);
+        log("self-parse ast: let");
+        log(selfProgram0.letCount);
+        log("self-parse ast: return");
+        log(selfProgram0.returnCount);
+        log("self-parse ast: if");
+        log(selfProgram0.ifCount);
+        log("self-parse ast: public");
+        log(selfProgram0.publicCount);
+        log("self-parse ast: firstClassName");
+        log(selfProgram0.firstClassName);
+        log("self-parse ast: firstFieldName");
+        log(selfProgram0.firstFieldName);
+        log("self-parse ast: firstConstructorParamSummary");
+        log(selfProgram0.firstConstructorParamSummary);
+        log("self-parse ast OK");
+    } else {
+        log("self-parse ast FAILED: could not read ast.tsn");
+    }
+
+    log("---");
+    log("self-parse smoke test: lexer.tsn");
+    let fsResult2 = readText("self-hosting/lexer.tsn");
+    if (fsResult2.isOk()) {
+        let selfSource2 = fsResult2.value();
+        let selfLexer2 = new Lexer(selfSource2);
+        let selfTokens2 = selfLexer2.tokenize();
+        let selfParser2 = new Parser(selfTokens2);
+        let selfProgram2 = selfParser2.parse();
+        log("self-parse lexer: import");
+        log(selfProgram2.importCount);
+        log("self-parse lexer: export");
+        log(selfProgram2.exportCount);
+        log("self-parse lexer: class");
+        log(selfProgram2.classCount);
+        log("self-parse lexer: constructor");
+        log(selfProgram2.constructorCount);
+        log("self-parse lexer: method");
+        log(selfProgram2.methodCount);
+        log("self-parse lexer: field");
+        log(selfProgram2.fieldCount);
+        log("self-parse lexer: let");
+        log(selfProgram2.letCount);
+        log("self-parse lexer: return");
+        log(selfProgram2.returnCount);
+        log("self-parse lexer: if");
+        log(selfProgram2.ifCount);
+        log("self-parse lexer: while");
+        log(selfProgram2.whileCount);
+        log("self-parse lexer: private");
+        log(selfProgram2.privateCount);
+        log("self-parse lexer: firstClassName");
+        log(selfProgram2.firstClassName);
+        log("self-parse lexer: firstMethodName");
+        log(selfProgram2.firstMethodName);
+        log("self-parse lexer: firstFieldName");
+        log(selfProgram2.firstFieldName);
+        log("self-parse lexer: firstConstructorParamSummary");
+        log(selfProgram2.firstConstructorParamSummary);
+        log("self-parse lexer OK");
+    } else {
+        log("self-parse lexer FAILED: could not read lexer.tsn");
+    }
+
     return 0;
 }

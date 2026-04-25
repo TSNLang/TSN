@@ -118,3 +118,19 @@ Parser subset cung da tu-parse `lexer.tsn` va xac nhan cac ket qua sau:
 - `self-parse lexer: firstMethodName = tokenize`
 - `self-parse lexer: firstFieldName = source`
 - `self-parse lexer: firstConstructorParamSummary = constructor(source: string)`
+
+Parser subset cung da tu-parse `ast.tsn` va xac nhan cac ket qua sau:
+
+- `self-parse ast: import = 0`
+- `self-parse ast: export = 4` (1 enum + 3 classes)
+- `self-parse ast: class = 3` (Token, FunctionDecl, Program)
+- `self-parse ast: constructor = 3`
+- `self-parse ast: method = 0`
+- `self-parse ast: field = 42` (Token=4, FunctionDecl=1, Program=37)
+- `self-parse ast: let = 0`
+- `self-parse ast: return = 0`
+- `self-parse ast: if = 0`
+- `self-parse ast: public = 42`
+- `self-parse ast: firstClassName = Token`
+- `self-parse ast: firstFieldName = kind`
+- `self-parse ast: firstConstructorParamSummary = constructor(kind: i32, lexeme: string, line: i32, column: i32)`
