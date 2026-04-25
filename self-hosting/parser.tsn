@@ -31,6 +31,11 @@ export class Parser {
         let asyncCount: i32 = 0;
         let newCount: i32 = 0;
         let thisCount: i32 = 0;
+        let dotCount: i32 = 0;
+        let bracketCount: i32 = 0;
+        let ampCount: i32 = 0;
+        let pipeCount: i32 = 0;
+        let assignCount: i32 = 0;
         let firstFunctionName = "";
         let firstFunctionTypeParamSummary = "";
         let firstClassName = "";
@@ -59,39 +64,44 @@ export class Parser {
             }
 
             let topModifiers = this.consumeTopLevelModifiers();
-            exportCount = exportCount + topModifiers.exportCount;
-            asyncCount = asyncCount + topModifiers.asyncCount;
+            exportCount = exportCount + topModifiers.counts.get(1);
+            asyncCount = asyncCount + topModifiers.counts.get(17);
 
             if (this.matchKind(TokenKind.Function)) {
                 let body = this.parseFunctionDecl();
                 functionCount = functionCount + 1;
-                letCount = letCount + body.letCount;
-                returnCount = returnCount + body.returnCount;
-                ifCount = ifCount + body.ifCount;
-                whileCount = whileCount + body.whileCount;
-                forCount = forCount + body.forCount;
-                paramCount = paramCount + body.paramCount;
-                methodCount = methodCount + body.methodCount;
-                fieldCount = fieldCount + body.fieldCount;
-                constructorCount = constructorCount + body.constructorCount;
-                publicCount = publicCount + body.publicCount;
-                privateCount = privateCount + body.privateCount;
-                protectedCount = protectedCount + body.protectedCount;
-                staticCount = staticCount + body.staticCount;
-                asyncCount = asyncCount + body.asyncCount;
-                newCount = newCount + body.newCount;
-                thisCount = thisCount + body.thisCount;
+                letCount = letCount + body.counts.get(4);
+                returnCount = returnCount + body.counts.get(5);
+                ifCount = ifCount + body.counts.get(6);
+                whileCount = whileCount + body.counts.get(7);
+                forCount = forCount + body.counts.get(8);
+                paramCount = paramCount + body.counts.get(9);
+                methodCount = methodCount + body.counts.get(10);
+                fieldCount = fieldCount + body.counts.get(11);
+                constructorCount = constructorCount + body.counts.get(12);
+                publicCount = publicCount + body.counts.get(13);
+                privateCount = privateCount + body.counts.get(14);
+                protectedCount = protectedCount + body.counts.get(15);
+                staticCount = staticCount + body.counts.get(16);
+                asyncCount = asyncCount + body.counts.get(17);
+                newCount = newCount + body.counts.get(18);
+                thisCount = thisCount + body.counts.get(19);
+                dotCount = dotCount + body.counts.get(20);
+                bracketCount = bracketCount + body.counts.get(21);
+                ampCount = ampCount + body.counts.get(22);
+                pipeCount = pipeCount + body.counts.get(23);
+                assignCount = assignCount + body.counts.get(24);
                 if (firstFunctionName == "") {
-                    firstFunctionName = body.firstFunctionName;
+                    firstFunctionName = body.summaries.get(0);
                 }
-                if (firstFunctionTypeParamSummary == "" && body.firstFunctionTypeParamSummary != "") {
-                    firstFunctionTypeParamSummary = body.firstFunctionTypeParamSummary;
+                if (firstFunctionTypeParamSummary == "" && body.summaries.get(1) != "") {
+                    firstFunctionTypeParamSummary = body.summaries.get(1);
                 }
-                if (firstFunctionParamSummary == "" && body.firstFunctionParamSummary != "") {
-                    firstFunctionParamSummary = body.firstFunctionParamSummary;
+                if (firstFunctionParamSummary == "" && body.summaries.get(17) != "") {
+                    firstFunctionParamSummary = body.summaries.get(17);
                 }
-                if (firstFunctionReturnSummary == "" && body.firstFunctionReturnSummary != "") {
-                    firstFunctionReturnSummary = body.firstFunctionReturnSummary;
+                if (firstFunctionReturnSummary == "" && body.summaries.get(18) != "") {
+                    firstFunctionReturnSummary = body.summaries.get(18);
                 }
                 continue;
             }
@@ -99,66 +109,71 @@ export class Parser {
             if (this.matchKind(TokenKind.Class)) {
                 let body = this.parseClassDecl();
                 classCount = classCount + 1;
-                letCount = letCount + body.letCount;
-                returnCount = returnCount + body.returnCount;
-                ifCount = ifCount + body.ifCount;
-                whileCount = whileCount + body.whileCount;
-                forCount = forCount + body.forCount;
-                paramCount = paramCount + body.paramCount;
-                methodCount = methodCount + body.methodCount;
-                fieldCount = fieldCount + body.fieldCount;
-                constructorCount = constructorCount + body.constructorCount;
-                publicCount = publicCount + body.publicCount;
-                privateCount = privateCount + body.privateCount;
-                protectedCount = protectedCount + body.protectedCount;
-                staticCount = staticCount + body.staticCount;
-                asyncCount = asyncCount + body.asyncCount;
-                newCount = newCount + body.newCount;
-                thisCount = thisCount + body.thisCount;
+                letCount = letCount + body.counts.get(4);
+                returnCount = returnCount + body.counts.get(5);
+                ifCount = ifCount + body.counts.get(6);
+                whileCount = whileCount + body.counts.get(7);
+                forCount = forCount + body.counts.get(8);
+                paramCount = paramCount + body.counts.get(9);
+                methodCount = methodCount + body.counts.get(10);
+                fieldCount = fieldCount + body.counts.get(11);
+                constructorCount = constructorCount + body.counts.get(12);
+                publicCount = publicCount + body.counts.get(13);
+                privateCount = privateCount + body.counts.get(14);
+                protectedCount = protectedCount + body.counts.get(15);
+                staticCount = staticCount + body.counts.get(16);
+                asyncCount = asyncCount + body.counts.get(17);
+                newCount = newCount + body.counts.get(18);
+                thisCount = thisCount + body.counts.get(19);
+                dotCount = dotCount + body.counts.get(20);
+                bracketCount = bracketCount + body.counts.get(21);
+                ampCount = ampCount + body.counts.get(22);
+                pipeCount = pipeCount + body.counts.get(23);
+                assignCount = assignCount + body.counts.get(24);
                 if (firstClassName == "") {
-                    firstClassName = body.firstClassName;
+                    firstClassName = body.summaries.get(2);
                 }
-                if (firstClassTypeParamSummary == "" && body.firstClassTypeParamSummary != "") {
-                    firstClassTypeParamSummary = body.firstClassTypeParamSummary;
+                if (firstClassTypeParamSummary == "" && body.summaries.get(3) != "") {
+                    firstClassTypeParamSummary = body.summaries.get(3);
                 }
-                if (firstMethodTypeParamSummary == "" && body.firstMethodTypeParamSummary != "") {
-                    firstMethodTypeParamSummary = body.firstMethodTypeParamSummary;
+                if (firstMethodTypeParamSummary == "" && body.summaries.get(4) != "") {
+                    firstMethodTypeParamSummary = body.summaries.get(4);
                 }
-                if (firstMethodName == "" && body.firstMethodName != "") {
-                    firstMethodName = body.firstMethodName;
+                if (firstMethodName == "" && body.summaries.get(5) != "") {
+                    firstMethodName = body.summaries.get(5);
                 }
-                if (firstMethodModifierSummary == "" && body.firstMethodModifierSummary != "") {
-                    firstMethodModifierSummary = body.firstMethodModifierSummary;
+                if (firstMethodModifierSummary == "" && body.summaries.get(6) != "") {
+                    firstMethodModifierSummary = body.summaries.get(6);
                 }
-                if (firstFieldName == "" && body.firstFieldName != "") {
-                    firstFieldName = body.firstFieldName;
+                if (firstFieldName == "" && body.summaries.get(7) != "") {
+                    firstFieldName = body.summaries.get(7);
                 }
-                if (firstFieldModifierSummary == "" && body.firstFieldModifierSummary != "") {
-                    firstFieldModifierSummary = body.firstFieldModifierSummary;
+                if (firstFieldModifierSummary == "" && body.summaries.get(8) != "") {
+                    firstFieldModifierSummary = body.summaries.get(8);
                 }
-                if (firstConstructorName == "" && body.firstConstructorName != "") {
-                    firstConstructorName = body.firstConstructorName;
+                if (firstConstructorName == "" && body.summaries.get(9) != "") {
+                    firstConstructorName = body.summaries.get(9);
                 }
-                if (firstConstructorModifierSummary == "" && body.firstConstructorModifierSummary != "") {
-                    firstConstructorModifierSummary = body.firstConstructorModifierSummary;
+                if (firstConstructorModifierSummary == "" && body.summaries.get(10) != "") {
+                    firstConstructorModifierSummary = body.summaries.get(10);
                 }
-                if (firstMemberModifierSummary == "" && body.firstMemberModifierSummary != "") {
-                    firstMemberModifierSummary = body.firstMemberModifierSummary;
+                if (firstMemberModifierSummary == "" && body.summaries.get(11) != "") {
+                    firstMemberModifierSummary = body.summaries.get(11);
                 }
-                if (firstMemberSummary == "" && body.firstMemberSummary != "") {
-                    firstMemberSummary = body.firstMemberSummary;
+                if (firstMemberSummary == "" && body.summaries.get(12) != "") {
+                    firstMemberSummary = body.summaries.get(12);
                 }
-                if (firstFieldTypeSummary == "" && body.firstFieldTypeSummary != "") {
-                    firstFieldTypeSummary = body.firstFieldTypeSummary;
+                if (firstFieldTypeSummary == "" && body.summaries.get(13) != "") {
+                    firstFieldTypeSummary = body.summaries.get(13);
                 }
-                if (firstMethodReturnSummary == "" && body.firstMethodReturnSummary != "") {
-                    firstMethodReturnSummary = body.firstMethodReturnSummary;
+                if (firstMethodReturnSummary == "" && body.summaries.get(14) != "") {
+                    firstMethodReturnSummary = body.summaries.get(14);
                 }
-                if (firstMethodParamSummary == "" && body.firstMethodParamSummary != "") {
-                    firstMethodParamSummary = body.firstMethodParamSummary;
+                if (firstMethodParamSummary == "" && body.summaries.get(15) != "") {
+                    firstMethodParamSummary = body.summaries.get(15);
                 }
-                if (firstConstructorParamSummary == "" && body.firstConstructorParamSummary != "") {
-                    firstConstructorParamSummary = body.firstConstructorParamSummary;
+                if (firstConstructorParamSummary == "" && body.summaries.get(16) != "") {
+                    firstConstructorParamSummary = body.summaries.get(16);
                 }
                 continue;
             }
@@ -191,7 +206,54 @@ export class Parser {
             this.advance();
         }
 
-        return new Program(importCount, exportCount, functionCount, classCount, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, firstFunctionName, firstFunctionTypeParamSummary, firstClassName, firstClassTypeParamSummary, firstMethodTypeParamSummary, firstMethodName, firstMethodModifierSummary, firstFieldName, firstFieldModifierSummary, firstConstructorName, firstConstructorModifierSummary, firstMemberModifierSummary, firstMemberSummary, firstFieldTypeSummary, firstMethodReturnSummary, firstMethodParamSummary, firstConstructorParamSummary, firstFunctionParamSummary, firstFunctionReturnSummary, newCount, thisCount);
+        let p = this.createEmptyProgram();
+        p.counts.set(0, importCount);
+        p.counts.set(1, exportCount);
+        p.counts.set(2, functionCount);
+        p.counts.set(3, classCount);
+        p.counts.set(4, letCount);
+        p.counts.set(5, returnCount);
+        p.counts.set(6, ifCount);
+        p.counts.set(7, whileCount);
+        p.counts.set(8, forCount);
+        p.counts.set(9, paramCount);
+        p.counts.set(10, methodCount);
+        p.counts.set(11, fieldCount);
+        p.counts.set(12, constructorCount);
+        p.counts.set(13, publicCount);
+        p.counts.set(14, privateCount);
+        p.counts.set(15, protectedCount);
+        p.counts.set(16, staticCount);
+        p.counts.set(17, asyncCount);
+        p.counts.set(18, newCount);
+        p.counts.set(19, thisCount);
+        p.counts.set(20, dotCount);
+        p.counts.set(21, bracketCount);
+        p.counts.set(22, ampCount);
+        p.counts.set(23, pipeCount);
+        p.counts.set(24, assignCount);
+
+        p.summaries.set(0, firstFunctionName);
+        p.summaries.set(1, firstFunctionTypeParamSummary);
+        p.summaries.set(2, firstClassName);
+        p.summaries.set(3, firstClassTypeParamSummary);
+        p.summaries.set(4, firstMethodTypeParamSummary);
+        p.summaries.set(5, firstMethodName);
+        p.summaries.set(6, firstMethodModifierSummary);
+        p.summaries.set(7, firstFieldName);
+        p.summaries.set(8, firstFieldModifierSummary);
+        p.summaries.set(9, firstConstructorName);
+        p.summaries.set(10, firstConstructorModifierSummary);
+        p.summaries.set(11, firstMemberModifierSummary);
+        p.summaries.set(12, firstMemberSummary);
+        p.summaries.set(13, firstFieldTypeSummary);
+        p.summaries.set(14, firstMethodReturnSummary);
+        p.summaries.set(15, firstMethodParamSummary);
+        p.summaries.set(16, firstConstructorParamSummary);
+        p.summaries.set(17, firstFunctionParamSummary);
+        p.summaries.set(18, firstFunctionReturnSummary);
+
+        return p;
     }
 
     private parseImportDecl(): void {
@@ -222,7 +284,10 @@ export class Parser {
             }
         }
 
-        return new Program(0, exportCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, asyncCount, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 0, 0);
+        let p = this.createEmptyProgram();
+        p.counts.set(1, exportCount);
+        p.counts.set(17, asyncCount);
+        return p;
     }
 
     private parseFunctionDecl(): Program {
@@ -235,6 +300,11 @@ export class Parser {
         let paramCount: i32 = 0;
         let newCount: i32 = 0;
         let thisCount: i32 = 0;
+        let dotCount: i32 = 0;
+        let bracketCount: i32 = 0;
+        let ampCount: i32 = 0;
+        let pipeCount: i32 = 0;
+        let assignCount: i32 = 0;
         let functionTypeParamSummary = "";
         let functionParamSummary = "";
         let functionReturnSummary = "";
@@ -259,16 +329,41 @@ export class Parser {
 
         if (this.matchKind(TokenKind.LBrace)) {
             let body = this.scanBlockCounts();
-            letCount = body.letCount;
-            returnCount = body.returnCount;
-            ifCount = body.ifCount;
-            whileCount = body.whileCount;
-            forCount = body.forCount;
-            newCount = body.newCount;
-            thisCount = body.thisCount;
+            letCount = body.counts.get(4);
+            returnCount = body.counts.get(5);
+            ifCount = body.counts.get(6);
+            whileCount = body.counts.get(7);
+            forCount = body.counts.get(8);
+            newCount = body.counts.get(18);
+            thisCount = body.counts.get(19);
+            dotCount = body.counts.get(20);
+            bracketCount = body.counts.get(21);
+            ampCount = body.counts.get(22);
+            pipeCount = body.counts.get(23);
+            assignCount = body.counts.get(24);
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, 0, 0, 0, 0, 0, 0, 0, 0, functionName, functionTypeParamSummary, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", functionParamSummary, functionReturnSummary, newCount, thisCount);
+        let p = this.createEmptyProgram();
+        p.counts.set(4, letCount);
+        p.counts.set(5, returnCount);
+        p.counts.set(6, ifCount);
+        p.counts.set(7, whileCount);
+        p.counts.set(8, forCount);
+        p.counts.set(9, paramCount);
+        p.counts.set(18, newCount);
+        p.counts.set(19, thisCount);
+        p.counts.set(20, dotCount);
+        p.counts.set(21, bracketCount);
+        p.counts.set(22, ampCount);
+        p.counts.set(23, pipeCount);
+        p.counts.set(24, assignCount);
+
+        p.summaries.set(0, functionName);
+        p.summaries.set(1, functionTypeParamSummary);
+        p.summaries.set(17, functionParamSummary);
+        p.summaries.set(18, functionReturnSummary);
+
+        return p;
     }
 
     private parseClassDecl(): Program {
@@ -290,6 +385,11 @@ export class Parser {
         let asyncCount: i32 = 0;
         let newCount: i32 = 0;
         let thisCount: i32 = 0;
+        let dotCount: i32 = 0;
+        let bracketCount: i32 = 0;
+        let ampCount: i32 = 0;
+        let pipeCount: i32 = 0;
+        let assignCount: i32 = 0;
         let firstMethodTypeParamSummary = "";
         let firstMethodName = "";
         let firstMethodModifierSummary = "";
@@ -314,7 +414,10 @@ export class Parser {
         }
 
         if (!this.matchKind(TokenKind.LBrace)) {
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", className, classTypeParamSummary, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", 0, 0);
+            let p = this.createEmptyProgram();
+            p.summaries.set(2, className);
+            p.summaries.set(3, classTypeParamSummary);
+            return p;
         }
 
         let depth: i32 = 1;
@@ -335,64 +438,69 @@ export class Parser {
 
             if (depth == 1) {
                 let modifierState = this.consumeClassModifiers();
-                publicCount = publicCount + modifierState.publicCount;
-                privateCount = privateCount + modifierState.privateCount;
-                protectedCount = protectedCount + modifierState.protectedCount;
-                staticCount = staticCount + modifierState.staticCount;
-                asyncCount = asyncCount + modifierState.asyncCount;
+                publicCount = publicCount + modifierState.counts.get(13);
+                privateCount = privateCount + modifierState.counts.get(14);
+                protectedCount = protectedCount + modifierState.counts.get(15);
+                staticCount = staticCount + modifierState.counts.get(16);
+                asyncCount = asyncCount + modifierState.counts.get(17);
 
                 kind = this.peek().kind;
                 if (kind == TokenKind.Identifier || kind == TokenKind.Constructor) {
-                    let member = this.parseClassMember(modifierState.firstMemberModifierSummary);
-                    letCount = letCount + member.letCount;
-                    returnCount = returnCount + member.returnCount;
-                    ifCount = ifCount + member.ifCount;
-                    whileCount = whileCount + member.whileCount;
-                    forCount = forCount + member.forCount;
-                    paramCount = paramCount + member.paramCount;
-                    methodCount = methodCount + member.methodCount;
-                    fieldCount = fieldCount + member.fieldCount;
-                    constructorCount = constructorCount + member.constructorCount;
-                    newCount = newCount + member.newCount;
-                    thisCount = thisCount + member.thisCount;
-                    if (firstMethodTypeParamSummary == "" && member.firstMethodTypeParamSummary != "") {
-                        firstMethodTypeParamSummary = member.firstMethodTypeParamSummary;
+                    let member = this.parseClassMember(modifierState.summaries.get(11));
+                    letCount = letCount + member.counts.get(4);
+                    returnCount = returnCount + member.counts.get(5);
+                    ifCount = ifCount + member.counts.get(6);
+                    whileCount = whileCount + member.counts.get(7);
+                    forCount = forCount + member.counts.get(8);
+                    paramCount = paramCount + member.counts.get(9);
+                    methodCount = methodCount + member.counts.get(10);
+                    fieldCount = fieldCount + member.counts.get(11);
+                    constructorCount = constructorCount + member.counts.get(12);
+                    newCount = newCount + member.counts.get(18);
+                    thisCount = thisCount + member.counts.get(19);
+                    dotCount = dotCount + member.counts.get(20);
+                    bracketCount = bracketCount + member.counts.get(21);
+                    ampCount = ampCount + member.counts.get(22);
+                    pipeCount = pipeCount + member.counts.get(23);
+                    assignCount = assignCount + member.counts.get(24);
+                    if (firstMethodTypeParamSummary == "" && member.summaries.get(4) != "") {
+                        firstMethodTypeParamSummary = member.summaries.get(4);
                     }
-                    if (firstMethodName == "" && member.firstMethodName != "") {
-                        firstMethodName = member.firstMethodName;
+                    if (firstMethodName == "" && member.summaries.get(5) != "") {
+                        firstMethodName = member.summaries.get(5);
                     }
-                    if (firstMethodModifierSummary == "" && member.firstMethodModifierSummary != "") {
-                        firstMethodModifierSummary = member.firstMethodModifierSummary;
+                    if (firstMethodModifierSummary == "" && member.summaries.get(6) != "") {
+                        firstMethodModifierSummary = member.summaries.get(6);
                     }
-                    if (firstFieldName == "" && member.firstFieldName != "") {
-                        firstFieldName = member.firstFieldName;
+                    if (firstFieldName == "" && member.summaries.get(7) != "") {
+                        firstFieldName = member.summaries.get(7);
                     }
-                    if (firstFieldModifierSummary == "" && member.firstFieldModifierSummary != "") {
-                        firstFieldModifierSummary = member.firstFieldModifierSummary;
+                    if (firstFieldModifierSummary == "" && member.summaries.get(8) != "") {
+                        firstFieldModifierSummary = member.summaries.get(8);
                     }
-                    if (firstConstructorName == "" && member.firstConstructorName != "") {
-                        firstConstructorName = member.firstConstructorName;
+                    if (firstConstructorName == "" && member.summaries.get(9) != "") {
+                        firstConstructorName = member.summaries.get(9);
                     }
-                    if (firstConstructorModifierSummary == "" && member.firstConstructorModifierSummary != "") {
-                        firstConstructorModifierSummary = member.firstConstructorModifierSummary;
+                    if (firstConstructorModifierSummary == "" && member.summaries.get(10) != "") {
+                        firstConstructorModifierSummary = member.summaries.get(10);
                     }
-                    if (firstMemberModifierSummary == "" && member.firstMemberModifierSummary != "") {
-                        firstMemberModifierSummary = member.firstMemberModifierSummary;
+                    if (firstMemberModifierSummary == "" && member.summaries.get(11) != "") {
+                        firstMemberModifierSummary = member.summaries.get(11);
                     }
-                    if (firstMemberSummary == "" && member.firstMemberSummary != "") {
-                        firstMemberSummary = member.firstMemberSummary;
+                    if (firstMemberSummary == "" && member.summaries.get(12) != "") {
+                        firstMemberSummary = member.summaries.get(12);
                     }
-                    if (firstFieldTypeSummary == "" && member.firstFieldTypeSummary != "") {
-                        firstFieldTypeSummary = member.firstFieldTypeSummary;
+                    if (firstFieldTypeSummary == "" && member.summaries.get(13) != "") {
+                        firstFieldTypeSummary = member.summaries.get(13);
                     }
-                    if (firstMethodReturnSummary == "" && member.firstMethodReturnSummary != "") {
-                        firstMethodReturnSummary = member.firstMethodReturnSummary;
+                    if (firstMethodReturnSummary == "" && member.summaries.get(14) != "") {
+                        firstMethodReturnSummary = member.summaries.get(14);
                     }
-                    if (firstMethodParamSummary == "" && member.firstMethodParamSummary != "") {
-                        firstMethodParamSummary = member.firstMethodParamSummary;
+                    if (firstMethodParamSummary == "" && member.summaries.get(15) != "") {
+                        firstMethodParamSummary = member.summaries.get(15);
                     }
-                    if (firstConstructorParamSummary == "" && member.firstConstructorParamSummary != "") {
-                        firstConstructorParamSummary = member.firstConstructorParamSummary;
+                    if (firstConstructorParamSummary == "" && member.summaries.get(16) != "") {
+                        firstConstructorParamSummary = member.summaries.get(16);
                     }
                     continue;
                 }
@@ -401,7 +509,46 @@ export class Parser {
             this.advance();
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, fieldCount, constructorCount, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", "", className, classTypeParamSummary, firstMethodTypeParamSummary, firstMethodName, firstMethodModifierSummary, firstFieldName, firstFieldModifierSummary, firstConstructorName, firstConstructorModifierSummary, firstMemberModifierSummary, firstMemberSummary, firstFieldTypeSummary, firstMethodReturnSummary, firstMethodParamSummary, firstConstructorParamSummary, "", "", newCount, thisCount);
+        let p = this.createEmptyProgram();
+        p.counts.set(4, letCount);
+        p.counts.set(5, returnCount);
+        p.counts.set(6, ifCount);
+        p.counts.set(7, whileCount);
+        p.counts.set(8, forCount);
+        p.counts.set(9, paramCount);
+        p.counts.set(10, methodCount);
+        p.counts.set(11, fieldCount);
+        p.counts.set(12, constructorCount);
+        p.counts.set(13, publicCount);
+        p.counts.set(14, privateCount);
+        p.counts.set(15, protectedCount);
+        p.counts.set(16, staticCount);
+        p.counts.set(17, asyncCount);
+        p.counts.set(18, newCount);
+        p.counts.set(19, thisCount);
+        p.counts.set(20, dotCount);
+        p.counts.set(21, bracketCount);
+        p.counts.set(22, ampCount);
+        p.counts.set(23, pipeCount);
+        p.counts.set(24, assignCount);
+
+        p.summaries.set(2, className);
+        p.summaries.set(3, classTypeParamSummary);
+        p.summaries.set(4, firstMethodTypeParamSummary);
+        p.summaries.set(5, firstMethodName);
+        p.summaries.set(6, firstMethodModifierSummary);
+        p.summaries.set(7, firstFieldName);
+        p.summaries.set(8, firstFieldModifierSummary);
+        p.summaries.set(9, firstConstructorName);
+        p.summaries.set(10, firstConstructorModifierSummary);
+        p.summaries.set(11, firstMemberModifierSummary);
+        p.summaries.set(12, firstMemberSummary);
+        p.summaries.set(13, firstFieldTypeSummary);
+        p.summaries.set(14, firstMethodReturnSummary);
+        p.summaries.set(15, firstMethodParamSummary);
+        p.summaries.set(16, firstConstructorParamSummary);
+
+        return p;
     }
 
     private consumeClassModifiers(): Program {
@@ -447,7 +594,14 @@ export class Parser {
             }
         }
 
-        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, publicCount, privateCount, protectedCount, staticCount, asyncCount, "", "", "", "", "", "", "", "", "", "", "", summary, "", "", "", "", "", "", "", 0, 0);
+        let p = this.createEmptyProgram();
+        p.counts.set(13, publicCount);
+        p.counts.set(14, privateCount);
+        p.counts.set(15, protectedCount);
+        p.counts.set(16, staticCount);
+        p.counts.set(17, asyncCount);
+        p.summaries.set(11, summary);
+        return p;
     }
 
     private parseClassMember(modifierSummary: string): Program {
@@ -476,6 +630,11 @@ export class Parser {
             let forCount: i32 = 0;
             let newCount: i32 = 0;
             let thisCount: i32 = 0;
+            let dotCount: i32 = 0;
+            let bracketCount: i32 = 0;
+            let ampCount: i32 = 0;
+            let pipeCount: i32 = 0;
+            let assignCount: i32 = 0;
             let firstMethodName = memberName;
             let firstConstructorName = "";
             let firstConstructorParamSummary = "";
@@ -494,13 +653,18 @@ export class Parser {
 
             if (this.matchKind(TokenKind.LBrace)) {
                 let body = this.scanBlockCounts();
-                letCount = body.letCount;
-                returnCount = body.returnCount;
-                ifCount = body.ifCount;
-                whileCount = body.whileCount;
-                forCount = body.forCount;
-                newCount = body.newCount;
-                thisCount = body.thisCount;
+                letCount = body.counts.get(4);
+                returnCount = body.counts.get(5);
+                ifCount = body.counts.get(6);
+                whileCount = body.counts.get(7);
+                forCount = body.counts.get(8);
+                newCount = body.counts.get(18);
+                thisCount = body.counts.get(19);
+                dotCount = body.counts.get(20);
+                bracketCount = body.counts.get(21);
+                ampCount = body.counts.get(22);
+                pipeCount = body.counts.get(23);
+                assignCount = body.counts.get(24);
             }
 
             let constructorCount: i32 = 0;
@@ -520,7 +684,35 @@ export class Parser {
                 firstMemberModifierSummary = modifierSummary;
             }
 
-            return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, paramCount, methodCount, 0, constructorCount, 0, 0, 0, 0, 0, "", "", "", "", methodTypeParamSummary, firstMethodName, firstMemberModifierSummary, "", "", firstConstructorName, firstConstructorModifierSummary, firstMemberModifierSummary, memberLabel, "", methodReturnSummary, paramSummary, firstConstructorParamSummary, "", "", newCount, thisCount);
+            let p = this.createEmptyProgram();
+            p.counts.set(4, letCount);
+            p.counts.set(5, returnCount);
+            p.counts.set(6, ifCount);
+            p.counts.set(7, whileCount);
+            p.counts.set(8, forCount);
+            p.counts.set(9, paramCount);
+            p.counts.set(10, methodCount);
+            p.counts.set(12, constructorCount);
+            p.counts.set(18, newCount);
+            p.counts.set(19, thisCount);
+            p.counts.set(20, dotCount);
+            p.counts.set(21, bracketCount);
+            p.counts.set(22, ampCount);
+            p.counts.set(23, pipeCount);
+            p.counts.set(24, assignCount);
+
+            p.summaries.set(4, methodTypeParamSummary);
+            p.summaries.set(5, firstMethodName);
+            p.summaries.set(6, firstMemberModifierSummary);
+            p.summaries.set(9, firstConstructorName);
+            p.summaries.set(10, firstConstructorModifierSummary);
+            p.summaries.set(11, firstMemberModifierSummary);
+            p.summaries.set(12, memberLabel);
+            p.summaries.set(14, methodReturnSummary);
+            p.summaries.set(15, paramSummary);
+            p.summaries.set(16, firstConstructorParamSummary);
+
+            return p;
         }
 
         if (this.matchKind(TokenKind.Colon)) {
@@ -530,7 +722,14 @@ export class Parser {
             if (modifierSummary != "") {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", memberName, modifierSummary, "", "", modifierSummary, fieldSummary, fieldTypeSummary, "", "", "", "", "", 0, 0);
+            let p = this.createEmptyProgram();
+            p.counts.set(11, 1);
+            p.summaries.set(7, memberName);
+            p.summaries.set(8, modifierSummary);
+            p.summaries.set(11, modifierSummary);
+            p.summaries.set(12, fieldSummary);
+            p.summaries.set(13, fieldTypeSummary);
+            return p;
         }
 
         if (this.matchKind(TokenKind.Equal)) {
@@ -539,10 +738,18 @@ export class Parser {
             if (modifierSummary != "") {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
-            return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", memberName, modifierSummary, "", "", modifierSummary, fieldSummary, "", "", "", "", "", "", 0, 0);
+            let p = this.createEmptyProgram();
+            p.counts.set(11, 1);
+            p.summaries.set(7, memberName);
+            p.summaries.set(8, modifierSummary);
+            p.summaries.set(11, modifierSummary);
+            p.summaries.set(12, fieldSummary);
+            return p;
         }
 
-        return new Program(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", "", "", "", "", modifierSummary, "", "", "", "", "", "", "", 0, 0);
+        let p = this.createEmptyProgram();
+        p.summaries.set(11, modifierSummary);
+        return p;
     }
 
     private readTypeArgSummary(typeName: string): string {
@@ -675,8 +882,21 @@ export class Parser {
         if (summary == "") {
             return 0;
         }
-        let openIndex = summary.indexOf("(");
-        let closeIndex = summary.indexOf(")");
+        let openIndex: i32 = -1;
+        let closeIndex: i32 = -1;
+        
+        let i = 0;
+        while (i < summary.length) {
+            let char = summary.slice(i, i + 1);
+            if (char == "(") {
+                openIndex = i;
+            }
+            if (char == ")") {
+                closeIndex = i;
+            }
+            i = i + 1;
+        }
+
         if (openIndex == -1 || closeIndex == -1 || closeIndex <= openIndex + 1) {
             return 0;
         }
@@ -813,6 +1033,11 @@ export class Parser {
         let forCount: i32 = 0;
         let newCount: i32 = 0;
         let thisCount: i32 = 0;
+        let dotCount: i32 = 0;
+        let bracketCount: i32 = 0;
+        let ampCount: i32 = 0;
+        let pipeCount: i32 = 0;
+        let assignCount: i32 = 0;
 
         while (!this.isAtEnd() && depth > 0) {
             let kind = this.peek().kind;
@@ -862,11 +1087,36 @@ export class Parser {
                 thisCount = thisCount + 1;
                 continue;
             }
+            if (depth > 0 && kind == TokenKind.Dot) {
+                this.advance();
+                dotCount = dotCount + 1;
+                continue;
+            }
+            if (depth > 0 && kind == TokenKind.LBracket) {
+                this.advance();
+                bracketCount = bracketCount + 1;
+                continue;
+            }
+            if (depth > 0 && kind == TokenKind.Amp) {
+                this.advance();
+                ampCount = ampCount + 1;
+                continue;
+            }
+            if (depth > 0 && kind == TokenKind.Pipe) {
+                this.advance();
+                pipeCount = pipeCount + 1;
+                continue;
+            }
+            if (depth > 0 && kind == TokenKind.Equal) {
+                this.advance();
+                assignCount = assignCount + 1;
+                continue;
+            }
 
             this.advance();
         }
 
-        return new Program(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", newCount, thisCount);
+        return this.createProgram(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", newCount, thisCount, dotCount, bracketCount, ampCount, pipeCount, assignCount);
     }
 
     private skipAngleBlock(): void {
@@ -936,5 +1186,15 @@ export class Parser {
 
     private previous(): Token {
         return this.tokens.get(this.pos - 1);
+    }
+
+    private createEmptyProgram(): Program {
+        let counts = new Array<i32>();
+        let i = 0;
+        while (i < 25) { counts.push(0); i = i + 1; }
+        let summaries = new Array<string>();
+        i = 0;
+        while (i < 19) { summaries.push(""); i = i + 1; }
+        return new Program(counts, summaries);
     }
 }

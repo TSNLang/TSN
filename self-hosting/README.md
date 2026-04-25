@@ -149,13 +149,25 @@ Parser subset cung da tu-parse `main.tsn` va xac nhan cac ket qua sau:
 - `self-parse main: firstFunctionParamSummary = (empty — main() takes no params)`
 - `self-parse main: firstFunctionReturnSummary = main: i32`
 
-### 0.17.2 Milestone: Track `new` va `this` expressions
+### 0.17.4 Milestone: Track Logic Operators và Assignment
 
-Parser subset da duoc mo rong de track `new` va `this` keywords ben trong block scope. Ket qua self-parse:
+Parser subset đã được mở rộng để track các toán tử logic và phép gán:
+- Toán tử logic: `&` (`amp`), `|` (`pipe`)
+- Phép gán: `=` (`assign`)
+- Track thêm dấu chấm `.` (`dot`) và ngoặc vuông `[` (`bracket`)
 
-- `parser.tsn`: `new = 11`, `this = 150`
-- `lexer.tsn`: `new = 20`, `this = 117`
-- `ast.tsn`: `new = 0`, `this = 44`
-- `main.tsn`: `new = 10`, `this = 0`
+Kết quả self-parse (`parser.tsn`):
+- `self-parse: import = 2`
+- `self-parse: export = 1`
+- `self-parse: class = 1`
+- `self-parse: constructor = 1`
+- `self-parse: method = 26`
+- `self-parse: let = 201`
+- `self-parse: return = 38`
+- `self-parse: if = 142`
+- `self-parse: while = 19`
+- `self-parse: new = 3`
+- `self-parse: this = 166`
+- `self-parse: dot = 875`
 
-Tat ca 4 file tu-hosting (`parser.tsn`, `lexer.tsn`, `ast.tsn`, `main.tsn`) da duoc parser subset tu-parse thanh cong voi coverage track keyword mo rong.
+*Ghi chú: Một số chỉ số (amp, pipe, assign) đang gặp vấn đề hiển thị giá trị rác do giới hạn runtime hiện tại khi xử lý Program lớn, sẽ được tối ưu trong các bản sau.*

@@ -37,6 +37,21 @@ export enum TokenKind {
     Comma,
     Dot,
     Equal,
+    Bang,
+    Amp,
+    Pipe,
+    Caret,
+    Tilde,
+    Question,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Percent,
+    EqualEqual,
+    BangEqual,
+    LessEqual,
+    GreaterEqual,
 }
 
 export class Token {
@@ -62,85 +77,11 @@ export class FunctionDecl {
 }
 
 export class Program {
-    public importCount: i32;
-    public exportCount: i32;
-    public functionCount: i32;
-    public classCount: i32;
-    public letCount: i32;
-    public returnCount: i32;
-    public ifCount: i32;
-    public whileCount: i32;
-    public forCount: i32;
-    public paramCount: i32;
-    public methodCount: i32;
-    public fieldCount: i32;
-    public constructorCount: i32;
-    public publicCount: i32;
-    public privateCount: i32;
-    public protectedCount: i32;
-    public staticCount: i32;
-    public asyncCount: i32;
-    public firstFunctionName: string;
-    public firstFunctionTypeParamSummary: string;
-    public firstClassName: string;
-    public firstClassTypeParamSummary: string;
-    public firstMethodTypeParamSummary: string;
-    public firstMethodName: string;
-    public firstMethodModifierSummary: string;
-    public firstFieldName: string;
-    public firstFieldModifierSummary: string;
-    public firstConstructorName: string;
-    public firstConstructorModifierSummary: string;
-    public firstMemberModifierSummary: string;
-    public firstMemberSummary: string;
-    public firstFieldTypeSummary: string;
-    public firstMethodReturnSummary: string;
-    public firstMethodParamSummary: string;
-    public firstConstructorParamSummary: string;
-    public firstFunctionParamSummary: string;
-    public firstFunctionReturnSummary: string;
-    public newCount: i32;
-    public thisCount: i32;
+    public counts: Array<i32>;
+    public summaries: Array<string>;
 
-    constructor(importCount: i32, exportCount: i32, functionCount: i32, classCount: i32, letCount: i32, returnCount: i32, ifCount: i32, whileCount: i32, forCount: i32, paramCount: i32, methodCount: i32, fieldCount: i32, constructorCount: i32, publicCount: i32, privateCount: i32, protectedCount: i32, staticCount: i32, asyncCount: i32, firstFunctionName: string, firstFunctionTypeParamSummary: string, firstClassName: string, firstClassTypeParamSummary: string, firstMethodTypeParamSummary: string, firstMethodName: string, firstMethodModifierSummary: string, firstFieldName: string, firstFieldModifierSummary: string, firstConstructorName: string, firstConstructorModifierSummary: string, firstMemberModifierSummary: string, firstMemberSummary: string, firstFieldTypeSummary: string, firstMethodReturnSummary: string, firstMethodParamSummary: string, firstConstructorParamSummary: string, firstFunctionParamSummary: string, firstFunctionReturnSummary: string, newCount: i32, thisCount: i32) {
-        this.importCount = importCount;
-        this.exportCount = exportCount;
-        this.functionCount = functionCount;
-        this.classCount = classCount;
-        this.letCount = letCount;
-        this.returnCount = returnCount;
-        this.ifCount = ifCount;
-        this.whileCount = whileCount;
-        this.forCount = forCount;
-        this.paramCount = paramCount;
-        this.methodCount = methodCount;
-        this.fieldCount = fieldCount;
-        this.constructorCount = constructorCount;
-        this.publicCount = publicCount;
-        this.privateCount = privateCount;
-        this.protectedCount = protectedCount;
-        this.staticCount = staticCount;
-        this.asyncCount = asyncCount;
-        this.firstFunctionName = firstFunctionName;
-        this.firstFunctionTypeParamSummary = firstFunctionTypeParamSummary;
-        this.firstClassName = firstClassName;
-        this.firstClassTypeParamSummary = firstClassTypeParamSummary;
-        this.firstMethodTypeParamSummary = firstMethodTypeParamSummary;
-        this.firstMethodName = firstMethodName;
-        this.firstMethodModifierSummary = firstMethodModifierSummary;
-        this.firstFieldName = firstFieldName;
-        this.firstFieldModifierSummary = firstFieldModifierSummary;
-        this.firstConstructorName = firstConstructorName;
-        this.firstConstructorModifierSummary = firstConstructorModifierSummary;
-        this.firstMemberModifierSummary = firstMemberModifierSummary;
-        this.firstMemberSummary = firstMemberSummary;
-        this.firstFieldTypeSummary = firstFieldTypeSummary;
-        this.firstMethodReturnSummary = firstMethodReturnSummary;
-        this.firstMethodParamSummary = firstMethodParamSummary;
-        this.firstConstructorParamSummary = firstConstructorParamSummary;
-        this.firstFunctionParamSummary = firstFunctionParamSummary;
-        this.firstFunctionReturnSummary = firstFunctionReturnSummary;
-        this.newCount = newCount;
-        this.thisCount = thisCount;
+    constructor(counts: Array<i32>, summaries: Array<string>) {
+        this.counts = counts;
+        this.summaries = summaries;
     }
 }

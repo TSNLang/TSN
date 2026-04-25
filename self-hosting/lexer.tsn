@@ -52,14 +52,6 @@ export class Lexer {
             this.advance();
             return new Token(TokenKind.At, "@", line, column);
         }
-        if (ch == '<') {
-            this.advance();
-            return new Token(TokenKind.Less, "<", line, column);
-        }
-        if (ch == '>') {
-            this.advance();
-            return new Token(TokenKind.Greater, ">", line, column);
-        }
         if (ch == '(') {
             this.advance();
             return new Token(TokenKind.LParen, "(", line, column);
@@ -102,7 +94,75 @@ export class Lexer {
         }
         if (ch == '=') {
             this.advance();
+            if (this.current() == '=') {
+                this.advance();
+                return new Token(TokenKind.EqualEqual, "==", line, column);
+            }
             return new Token(TokenKind.Equal, "=", line, column);
+        }
+        if (ch == '!') {
+            this.advance();
+            if (this.current() == '=') {
+                this.advance();
+                return new Token(TokenKind.BangEqual, "!=", line, column);
+            }
+            return new Token(TokenKind.Bang, "!", line, column);
+        }
+        if (ch == '<') {
+            this.advance();
+            if (this.current() == '=') {
+                this.advance();
+                return new Token(TokenKind.LessEqual, "<=", line, column);
+            }
+            return new Token(TokenKind.Less, "<", line, column);
+        }
+        if (ch == '>') {
+            this.advance();
+            if (this.current() == '=') {
+                this.advance();
+                return new Token(TokenKind.GreaterEqual, ">=", line, column);
+            }
+            return new Token(TokenKind.Greater, ">", line, column);
+        }
+        if (ch == '+') {
+            this.advance();
+            return new Token(TokenKind.Plus, "+", line, column);
+        }
+        if (ch == '-') {
+            this.advance();
+            return new Token(TokenKind.Minus, "-", line, column);
+        }
+        if (ch == '*') {
+            this.advance();
+            return new Token(TokenKind.Star, "*", line, column);
+        }
+        if (ch == '/') {
+            this.advance();
+            return new Token(TokenKind.Slash, "/", line, column);
+        }
+        if (ch == '%') {
+            this.advance();
+            return new Token(TokenKind.Percent, "%", line, column);
+        }
+        if (ch == '&') {
+            this.advance();
+            return new Token(TokenKind.Amp, "&", line, column);
+        }
+        if (ch == '|') {
+            this.advance();
+            return new Token(TokenKind.Pipe, "|", line, column);
+        }
+        if (ch == '^') {
+            this.advance();
+            return new Token(TokenKind.Caret, "^", line, column);
+        }
+        if (ch == '~') {
+            this.advance();
+            return new Token(TokenKind.Tilde, "~", line, column);
+        }
+        if (ch == '?') {
+            this.advance();
+            return new Token(TokenKind.Question, "?", line, column);
         }
 
         this.advance();
