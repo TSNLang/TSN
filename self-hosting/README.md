@@ -100,3 +100,21 @@ Parser subset da tu-parse chinh no (`parser.tsn`) va xac nhan cac ket qua sau:
 - `self-parse: firstMethodName = parse`
 - `self-parse: firstFieldName = tokens`
 - `self-parse: firstConstructorParamSummary = constructor(tokens: Array<Token>)`
+
+Parser subset cung da tu-parse `lexer.tsn` va xac nhan cac ket qua sau:
+
+- `self-parse lexer: import = 2`
+- `self-parse lexer: export = 1`
+- `self-parse lexer: class = 1`
+- `self-parse lexer: constructor = 1`
+- `self-parse lexer: method = 13`
+- `self-parse lexer: field = 4`
+- `self-parse lexer: let = 10`
+- `self-parse lexer: return = 47`
+- `self-parse lexer: if = 53`
+- `self-parse lexer: while = 8`
+- `self-parse lexer: private = 16`
+- `self-parse lexer: firstClassName = Lexer`
+- `self-parse lexer: firstMethodName = tokenize`
+- `self-parse lexer: firstFieldName = source`
+- `self-parse lexer: firstConstructorParamSummary = constructor(source: string)`
