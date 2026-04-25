@@ -1032,8 +1032,9 @@ export class CodeGenerator {
       const fieldType = (structInfo && structInfo.fields[fIdx]) ? structInfo.fields[fIdx].type : 'i32';
       
       const fPtr = this.newTemp();
+      const lType = this.toLLVMType(fieldType);
       this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
-      this.emit(`store ${this.toLLVMType(fieldType)} ${this.coerceToType(val, vt, fieldType)}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
+      this.emit(`store ${lType} ${this.coerceToType(val, vt, fieldType)}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
       return;
     }
     
@@ -1064,9 +1065,9 @@ export class CodeGenerator {
           }
       } else {
           const lType = this.toLLVMType(lt);
-          if (global) this.emit(`store ${this.toLLVMType(lType)} ${this.coerceToType(val, vt, lType)}, ptr @${global.name}, align 4`);
-          else if (this.currentFunctionParams.has(id)) this.emit(`store ${this.toLLVMType(lType)} ${this.coerceToType(val, vt, lType)}, ptr %${id}.addr, align 4`);
-          else this.emit(`store ${this.toLLVMType(lType)} ${this.coerceToType(val, vt, lType)}, ptr %${id}, align ${this.getAlignment(lt)}`);
+          if (global) this.emit(`store ${lType} ${this.coerceToType(val, vt, lt)}, ptr @${global.name}, align 4`);
+          else if (this.currentFunctionParams.has(id)) this.emit(`store ${lType} ${this.coerceToType(val, vt, lt)}, ptr %${id}.addr, align 4`);
+          else this.emit(`store ${lType} ${this.coerceToType(val, vt, lt)}, ptr %${id}, align ${this.getAlignment(lt)}`);
       }
       return;
     }
@@ -1365,6 +1366,28 @@ export class CodeGenerator {
         return `${this.toLLVMType(expectedT)} ${this.coerceToType(a, actualT, expectedT)}`;
       })].join(', ');
       this.emit(`call void @${info.name}(${aStr})`);
+
+      // Constructor arguments that are owning locals are transferred into the new instance.
+      for (let i = 0; i < e.args.length; i++) {
+        const argExpr = e.args[i];
+        if (argExpr.kind !== ASTKind.Identifier) continue;
+
+        const srcId = (argExpr as Identifier).name;
+        const srcType = this.localVarTypes.get(srcId);
+        if (!srcType) continue;
+
+        const isOwningSource = this.isClassType(srcType) || (srcType.startsWith('ptr<') && !srcType.startsWith('ptr<void>'));
+        if (!isOwningSource) continue;
+
+        const expectedT = info.paramTypes[i + 1];
+        const sameType = expectedT === srcType;
+        const loweredPointerMatch = this.toLLVMType(expectedT) === 'ptr';
+        if (!sameType && !loweredPointerMatch) continue;
+
+        this.emit(`store ptr null, ptr %${srcId}, align 8`);
+        this.cleanupStack[this.cleanupStack.length - 1].delete(srcId);
+        this.movedLocals.add(srcId);
+      }
     }
     return ptr;
   }
@@ -1444,19 +1467,24 @@ export class CodeGenerator {
       return result;
     }
 
-    if ((e.operator === '==' || e.operator === '!=') && leftType === 'string' && rightType === 'string') {
-      this.ensureExternalDeclaration('string_equals', { name: 'string_equals', kind: 'function', llvmType: 'i1', paramTypes: ['ptr', 'ptr'] } as any);
-      const equalsResult = this.newTemp();
-      this.emit(`${equalsResult} = call i1 @string_equals(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
-      if (e.operator === '!=') {
-        const notResult = this.newTemp();
-        this.emit(`${notResult} = xor i1 ${equalsResult}, true`);
+    if (e.operator === '==' || e.operator === '!=') {
+      const isLString = leftType === 'string' || this.toLLVMType(leftType) === 'ptr';
+      const isRString = rightType === 'string' || this.toLLVMType(rightType) === 'ptr';
+      
+      if (isLString && isRString) {
+        this.ensureExternalDeclaration('string_equals', { name: 'string_equals', kind: 'function', llvmType: 'i1', paramTypes: ['ptr', 'ptr'] } as any);
+        const equalsResult = this.newTemp();
+        this.emit(`${equalsResult} = call i1 @string_equals(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
+        if (e.operator === '!=') {
+          const notResult = this.newTemp();
+          this.emit(`${notResult} = xor i1 ${equalsResult}, true`);
+          this.tempTypes.set(equalsResult, 'i1');
+          this.tempTypes.set(notResult, 'i1');
+          return notResult;
+        }
         this.tempTypes.set(equalsResult, 'i1');
-        this.tempTypes.set(notResult, 'i1');
-        return notResult;
+        return equalsResult;
       }
-      this.tempTypes.set(equalsResult, 'i1');
-      return equalsResult;
     }
 
     if ((e.operator === '<' || e.operator === '<=' || e.operator === '>' || e.operator === '>=') && leftType === 'string' && rightType === 'string') {
@@ -1794,12 +1822,13 @@ export class CodeGenerator {
     }
 
     // Built-in string methods
-    if (objType === 'string' || (objType === 'ptr' && (m.member === 'slice' || m.member === 'includes' || m.member === 'indexOf' || m.member === 'startsWith' || m.member === 'endsWith'))) {
+    if (objType === 'string' || (objType === 'ptr' && (m.member === 'slice' || m.member === 'includes' || m.member === 'indexOf' || m.member === 'startsWith' || m.member === 'endsWith' || m.member === 'charCodeAt'))) {
         const stringMethods: Record<string, { func: string, rt: string, pts: string[] }> = {
             'includes':   { func: 'string_includes',   rt: 'i1',  pts: ['ptr', 'ptr'] },
             'indexOf':    { func: 'string_indexOf',    rt: 'i32', pts: ['ptr', 'ptr'] },
             'startsWith': { func: 'string_startsWith', rt: 'i1',  pts: ['ptr', 'ptr'] },
             'endsWith':   { func: 'string_endsWith',   rt: 'i1',  pts: ['ptr', 'ptr'] },
+            'charCodeAt': { func: 'string_charCodeAt', rt: 'i32', pts: ['ptr', 'i32'] },
         };
 
         if (m.member === 'slice') {
@@ -1830,10 +1859,11 @@ export class CodeGenerator {
         const method = stringMethods[m.member];
         if (method) {
             this.ensureExternalDeclaration(method.func, { name: method.func, kind: 'function', llvmType: method.rt, paramTypes: method.pts } as any);
-            const search = this.generateExpression(args[0]);
-            const searchType = this.getValueType(search);
+            const arg0 = this.generateExpression(args[0]);
+            const arg0Type = this.getValueType(arg0);
             const t = this.newTemp();
-            this.emit(`${t} = call ${method.rt} @${method.func}(ptr ${obj}, ptr ${this.coerceToType(search, searchType, 'ptr')})`);
+            const expectedArgType = method.pts[1] || 'ptr';
+            this.emit(`${t} = call ${method.rt} @${method.func}(ptr ${obj}, ${this.toLLVMType(expectedArgType)} ${this.coerceToType(arg0, arg0Type, expectedArgType)})`);
             this.tempTypes.set(t, method.rt);
             return t;
         }
