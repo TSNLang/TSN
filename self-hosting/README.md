@@ -149,4 +149,13 @@ Parser subset cung da tu-parse `main.tsn` va xac nhan cac ket qua sau:
 - `self-parse main: firstFunctionParamSummary = (empty — main() takes no params)`
 - `self-parse main: firstFunctionReturnSummary = main: i32`
 
-Tat ca 4 file tu-hosting (`parser.tsn`, `lexer.tsn`, `ast.tsn`, `main.tsn`) da duoc parser subset tu-parse thanh cong.
+### 0.17.2 Milestone: Track `new` va `this` expressions
+
+Parser subset da duoc mo rong de track `new` va `this` keywords ben trong block scope. Ket qua self-parse:
+
+- `parser.tsn`: `new = 11`, `this = 150`
+- `lexer.tsn`: `new = 20`, `this = 117`
+- `ast.tsn`: `new = 0`, `this = 44`
+- `main.tsn`: `new = 10`, `this = 0`
+
+Tat ca 4 file tu-hosting (`parser.tsn`, `lexer.tsn`, `ast.tsn`, `main.tsn`) da duoc parser subset tu-parse thanh cong voi coverage track keyword mo rong.

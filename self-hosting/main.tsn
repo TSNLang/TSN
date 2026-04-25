@@ -48,6 +48,10 @@ function main(): i32 {
     log(program.staticCount);
     log("async modifiers parsed");
     log(program.asyncCount);
+    log("new parsed");
+    log(program.newCount);
+    log("this parsed");
+    log(program.thisCount);
     log("first function summary");
     log(program.firstFunctionName);
     log("first function type param summary");
@@ -121,6 +125,10 @@ function main(): i32 {
         log(selfProgram.publicCount);
         log("self-parse: private");
         log(selfProgram.privateCount);
+        log("self-parse: new");
+        log(selfProgram.newCount);
+        log("self-parse: this");
+        log(selfProgram.thisCount);
         log("self-parse: firstClassName");
         log(selfProgram.firstClassName);
         log("self-parse: firstMethodName");
@@ -159,6 +167,10 @@ function main(): i32 {
         log(selfProgram3.ifCount);
         log("self-parse main: while");
         log(selfProgram3.whileCount);
+        log("self-parse main: new");
+        log(selfProgram3.newCount);
+        log("self-parse main: this");
+        log(selfProgram3.thisCount);
         log("self-parse main: firstFunctionName");
         log(selfProgram3.firstFunctionName);
         log("self-parse main: firstFunctionParamSummary");
@@ -199,6 +211,10 @@ function main(): i32 {
         log(selfProgram0.ifCount);
         log("self-parse ast: public");
         log(selfProgram0.publicCount);
+        log("self-parse ast: new");
+        log(selfProgram0.newCount);
+        log("self-parse ast: this");
+        log(selfProgram0.thisCount);
         log("self-parse ast: firstClassName");
         log(selfProgram0.firstClassName);
         log("self-parse ast: firstFieldName");
@@ -241,6 +257,10 @@ function main(): i32 {
         log(selfProgram2.whileCount);
         log("self-parse lexer: private");
         log(selfProgram2.privateCount);
+        log("self-parse lexer: new");
+        log(selfProgram2.newCount);
+        log("self-parse lexer: this");
+        log(selfProgram2.thisCount);
         log("self-parse lexer: firstClassName");
         log(selfProgram2.firstClassName);
         log("self-parse lexer: firstMethodName");
