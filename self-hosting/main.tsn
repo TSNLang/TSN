@@ -135,6 +135,42 @@ function main(): i32 {
     }
 
     log("---");
+    log("self-parse smoke test: main.tsn");
+    let fsResult3 = readText("self-hosting/main.tsn");
+    if (fsResult3.isOk()) {
+        let selfSource3 = fsResult3.value();
+        let selfLexer3 = new Lexer(selfSource3);
+        let selfTokens3 = selfLexer3.tokenize();
+        let selfParser3 = new Parser(selfTokens3);
+        let selfProgram3 = selfParser3.parse();
+        log("self-parse main: import");
+        log(selfProgram3.importCount);
+        log("self-parse main: export");
+        log(selfProgram3.exportCount);
+        log("self-parse main: function");
+        log(selfProgram3.functionCount);
+        log("self-parse main: class");
+        log(selfProgram3.classCount);
+        log("self-parse main: let");
+        log(selfProgram3.letCount);
+        log("self-parse main: return");
+        log(selfProgram3.returnCount);
+        log("self-parse main: if");
+        log(selfProgram3.ifCount);
+        log("self-parse main: while");
+        log(selfProgram3.whileCount);
+        log("self-parse main: firstFunctionName");
+        log(selfProgram3.firstFunctionName);
+        log("self-parse main: firstFunctionParamSummary");
+        log(selfProgram3.firstFunctionParamSummary);
+        log("self-parse main: firstFunctionReturnSummary");
+        log(selfProgram3.firstFunctionReturnSummary);
+        log("self-parse main OK");
+    } else {
+        log("self-parse main FAILED: could not read main.tsn");
+    }
+
+    log("---");
     log("self-parse smoke test: ast.tsn");
     let fsResult0 = readText("self-hosting/ast.tsn");
     if (fsResult0.isOk()) {

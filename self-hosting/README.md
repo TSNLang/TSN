@@ -134,3 +134,19 @@ Parser subset cung da tu-parse `ast.tsn` va xac nhan cac ket qua sau:
 - `self-parse ast: firstClassName = Token`
 - `self-parse ast: firstFieldName = kind`
 - `self-parse ast: firstConstructorParamSummary = constructor(kind: i32, lexeme: string, line: i32, column: i32)`
+
+Parser subset cung da tu-parse `main.tsn` va xac nhan cac ket qua sau:
+
+- `self-parse main: import = 4`
+- `self-parse main: export = 0`
+- `self-parse main: function = 1`
+- `self-parse main: class = 0`
+- `self-parse main: let = 29`
+- `self-parse main: return = 1`
+- `self-parse main: if = 4`
+- `self-parse main: while = 0`
+- `self-parse main: firstFunctionName = main`
+- `self-parse main: firstFunctionParamSummary = (empty — main() takes no params)`
+- `self-parse main: firstFunctionReturnSummary = main: i32`
+
+Tat ca 4 file tu-hosting (`parser.tsn`, `lexer.tsn`, `ast.tsn`, `main.tsn`) da duoc parser subset tu-parse thanh cong.
