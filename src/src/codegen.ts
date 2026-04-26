@@ -1461,8 +1461,10 @@ export class CodeGenerator {
 
     if (e.operator === '+' && (leftType === 'string' || rightType === 'string' || (this.toLLVMType(leftType) === 'ptr' && this.toLLVMType(rightType) === 'ptr'))) {
       this.ensureExternalDeclaration('string_concat', { name: 'string_concat', kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'ptr'] } as any);
+      const coercedLeft = this.coerceToType(l, leftType, 'ptr');
+      const coercedRight = this.coerceToType(r, rightType, 'ptr');
       const result = this.newTemp();
-      this.emit(`${result} = call ptr @string_concat(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
+      this.emit(`${result} = call ptr @string_concat(ptr ${coercedLeft}, ptr ${coercedRight})`);
       this.tempTypes.set(result, 'string');
       return result;
     }
@@ -1473,8 +1475,10 @@ export class CodeGenerator {
       
       if (isLString && isRString) {
         this.ensureExternalDeclaration('string_equals', { name: 'string_equals', kind: 'function', llvmType: 'i1', paramTypes: ['ptr', 'ptr'] } as any);
+        const coercedLeft = this.coerceToType(l, leftType, 'ptr');
+        const coercedRight = this.coerceToType(r, rightType, 'ptr');
         const equalsResult = this.newTemp();
-        this.emit(`${equalsResult} = call i1 @string_equals(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
+        this.emit(`${equalsResult} = call i1 @string_equals(ptr ${coercedLeft}, ptr ${coercedRight})`);
         if (e.operator === '!=') {
           const notResult = this.newTemp();
           this.emit(`${notResult} = xor i1 ${equalsResult}, true`);

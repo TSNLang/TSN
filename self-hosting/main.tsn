@@ -28,46 +28,95 @@ function parseFile(path: string): i32 {
     log("class decl count");
     log(program.classDecls.length);
     if (program.declarations.length > 0) {
-        let firstDecl = program.declarations.get(0);
         log("first declaration kind");
-        log(firstDecl.kind);
+        log(program.declarations.get(0).kind);
         log("first declaration name");
-        log(firstDecl.name);
+        log(program.declarations.get(0).name);
     }
     if (program.importDecls.length > 0) {
-        let firstImport = program.importDecls.get(0);
         log("first import clause");
-        log(firstImport.clause);
+        log(program.importDecls.get(0).clause);
         log("first import source");
-        log(firstImport.source);
+        log(program.importDecls.get(0).source);
+        log("first import default import");
+        log(program.importDecls.get(0).defaultImport);
+        log("first import namespace import");
+        log(program.importDecls.get(0).namespaceImport);
+        log("first import named specifier count");
+        log(program.importDecls.get(0).namedSpecifiers.length);
+        if (program.importDecls.get(0).namedSpecifiers.length > 0) {
+            log("first import first specifier imported");
+            log(program.importDecls.get(0).namedSpecifiers.get(0).imported);
+            log("first import first specifier local");
+            log(program.importDecls.get(0).namedSpecifiers.get(0).local);
+        }
+
+        let namedImportIndex: i32 = 0;
+        let foundNamedImport = false;
+        let foundMultiNamedImport = false;
+        while (namedImportIndex < program.importDecls.length) {
+            if (!foundNamedImport && program.importDecls.get(namedImportIndex).namedSpecifiers.length > 0) {
+                log("first named import clause");
+                log(program.importDecls.get(namedImportIndex).clause);
+                log("first named import source");
+                log(program.importDecls.get(namedImportIndex).source);
+                log("first named import specifier count");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.length);
+                log("first named import first specifier imported");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(0).imported);
+                log("first named import first specifier local");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(0).local);
+                foundNamedImport = true;
+            }
+            if (!foundMultiNamedImport && program.importDecls.get(namedImportIndex).namedSpecifiers.length > 1) {
+                log("first multi named import clause");
+                log(program.importDecls.get(namedImportIndex).clause);
+                log("first multi named import source");
+                log(program.importDecls.get(namedImportIndex).source);
+                log("first multi named import specifier count");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.length);
+                log("first multi named import first specifier imported");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(0).imported);
+                log("first multi named import second specifier imported");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(1).imported);
+                foundMultiNamedImport = true;
+            }
+            namedImportIndex = namedImportIndex + 1;
+        }
     }
     if (program.functionDecls.length > 0) {
-        let firstFunction = program.functionDecls.get(0);
         log("first function name");
-        log(firstFunction.name);
+        log(program.functionDecls.get(0).name);
+        log("first function type parameter count");
+        log(program.functionDecls.get(0).typeParameters.length);
         log("first function param count");
-        log(firstFunction.paramCount);
+        log(program.functionDecls.get(0).paramCount);
         log("first function bracket count");
-        log(firstFunction.bracketCount);
+        log(program.functionDecls.get(0).bracketCount);
+        log("first function structured param count");
+        log(program.functionDecls.get(0).params.length);
+        log("first function return type text");
+        log(program.functionDecls.get(0).returnTypeText);
     }
     if (program.classDecls.length > 0) {
-        let firstClass = program.classDecls.get(0);
         log("first class name");
-        log(firstClass.name);
+        log(program.classDecls.get(0).name);
+        log("first class type parameter count");
+        log(program.classDecls.get(0).typeParameters.length);
         log("first class member count");
-        log(firstClass.members.length);
+        log(program.classDecls.get(0).members.length);
         log("first class method count");
-        log(firstClass.methodCount);
+        log(program.classDecls.get(0).methodCount);
         log("first class field count");
-        log(firstClass.fieldCount);
+        log(program.classDecls.get(0).fieldCount);
         log("first class constructor count");
-        log(firstClass.constructorCount);
+        log(program.classDecls.get(0).constructorCount);
         log("first class first method name");
-        log(firstClass.firstMethodName);
+        log(program.classDecls.get(0).firstMethodName);
         log("first class first field name");
-        log(firstClass.firstFieldName);
+        log(program.classDecls.get(0).firstFieldName);
         log("first class first constructor name");
-        log(firstClass.firstConstructorName);
+        log(program.classDecls.get(0).firstConstructorName);
     }
     log("class count");
     log(program.counts.get(3));
@@ -88,19 +137,25 @@ function parseFile(path: string): i32 {
     log("assign count");
     log(program.counts.get(24));
     if (program.classMembers.length > 0) {
-        let firstMember = program.classMembers.get(0);
         log("first class member kind");
-        log(firstMember.kind);
+        log(program.classMembers.get(0).kind);
         log("first class member name");
-        log(firstMember.name);
+        log(program.classMembers.get(0).name);
     }
     return 0;
 }
 
 function main(): i32 {
-    let parserResult = parseFile("self-hosting/parser.tsn");
-    let bracketResult = parseFile("examples/rest-params-smoke.tsn");
-    if (parserResult != 0 || bracketResult != 0) {
+    if (parseFile("self-hosting/parser.tsn") != 0) {
+        return 1;
+    }
+    if (parseFile("examples/rest-params-smoke.tsn") != 0) {
+        return 1;
+    }
+    if (parseFile("examples/nested-generic-smoke.tsn") != 0) {
+        return 1;
+    }
+    if (parseFile("examples/stdlib-generic-methods.tsn") != 0) {
         return 1;
     }
     return 0;

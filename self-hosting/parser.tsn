@@ -1,5 +1,5 @@
 import { Array } from "std:array";
-import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, Program, Token, TokenKind } from "./ast.tsn";
+import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, Token, TokenKind } from "./ast.tsn";
 
 export class Parser {
     private tokens: Array<Token>;
@@ -63,9 +63,9 @@ export class Parser {
 
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Import)) {
-                let importDecl = this.parseImportDecl();
-                declarations.push(importDecl);
-                importDecls.push(new ImportDeclInfo(importDecl.name, importDecl.detailA));
+                let importResult = this.parseImportDecl();
+                declarations.push(importResult.declaration);
+                importDecls.push(importResult.info);
                 importCount = importCount + 1;
                 continue;
             }
@@ -77,7 +77,7 @@ export class Parser {
             if (this.matchKind(TokenKind.Function)) {
                 let body = this.parseFunctionDecl();
                 declarations.push(new Declaration("FunctionDecl", body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), new Array<ClassMemberDecl>()));
-                functionDecls.push(new FunctionDeclInfo(body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21)));
+                functionDecls.push(this.createFunctionDeclInfo(body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21)));
                 functionCount = functionCount + 1;
                 letCount = letCount + body.counts.get(4);
                 returnCount = returnCount + body.counts.get(5);
@@ -118,7 +118,7 @@ export class Parser {
             if (this.matchKind(TokenKind.Class)) {
                 let body = this.parseClassDecl();
                 declarations.push(new Declaration("ClassDecl", body.summaries.get(2), body.summaries.get(3), body.summaries.get(12), "", body.classMembers));
-                classDecls.push(new ClassDeclInfo(body.summaries.get(2), body.summaries.get(3), body.classMembers, body.counts.get(10), body.counts.get(11), body.counts.get(12), body.summaries.get(5), body.summaries.get(7), body.summaries.get(9)));
+                classDecls.push(this.createClassDeclInfo(body.summaries.get(2), body.summaries.get(3), body.classMembers, body.counts.get(10), body.counts.get(11), body.counts.get(12), body.summaries.get(5), body.summaries.get(7), body.summaries.get(9)));
                 let memberIndex: i32 = 0;
                 while (memberIndex < body.classMembers.length) {
                     classMembers.push(body.classMembers.get(memberIndex));
@@ -297,25 +297,82 @@ export class Parser {
         return p;
     }
 
-    private parseImportDecl(): Declaration {
+    private parseImportDecl(): ImportParseResult {
         let clause = "";
         let source = "";
+        let defaultImport = "";
+        let namespaceImport = "";
+        let namedSpecifiers = new Array<ImportSpecifierInfo>();
         let inSource = false;
+        let inNamedSpecifiers = false;
+        let seenClauseToken = false;
+        let pendingImported = "";
+        let namespacePending = false;
+
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Semicolon)) {
-                return new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
+                let declaration = new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
+                let info = new ImportDeclInfo(clause, source, defaultImport, namespaceImport, new Array<ImportSpecifierInfo>());
+                let specifierIndex: i32 = 0;
+                while (specifierIndex < namedSpecifiers.length) {
+                    let specifier = namedSpecifiers.get(specifierIndex);
+                    info.namedSpecifiers.push(new ImportSpecifierInfo(specifier.imported, specifier.local));
+                    specifierIndex = specifierIndex + 1;
+                }
+                return new ImportParseResult(declaration, info);
             }
+
             let token = this.peek();
             if (token.kind == TokenKind.From) {
                 inSource = true;
+                inNamedSpecifiers = false;
+                namespacePending = false;
+                pendingImported = "";
                 this.advance();
                 continue;
             }
+
             if (!inSource) {
-                if (clause == "") {
-                    clause = token.lexeme;
-                } else {
-                    clause = clause + " " + token.lexeme;
+                clause = this.appendImportText(clause, token);
+                if (token.kind == TokenKind.LBrace) {
+                    inNamedSpecifiers = true;
+                } else if (token.kind == TokenKind.RBrace) {
+                    if (pendingImported != "") {
+                        namedSpecifiers.push(new ImportSpecifierInfo(pendingImported, pendingImported));
+                    }
+                    inNamedSpecifiers = false;
+                    pendingImported = "";
+                } else if (inNamedSpecifiers) {
+                    if (token.kind == TokenKind.Identifier || token.kind == TokenKind.Star) {
+                        if (pendingImported == "") {
+                            pendingImported = token.lexeme;
+                        } else {
+                            namedSpecifiers.push(new ImportSpecifierInfo(pendingImported, pendingImported));
+                            pendingImported = token.lexeme;
+                        }
+                    } else if (token.kind == TokenKind.Comma) {
+                        if (pendingImported != "") {
+                            namedSpecifiers.push(new ImportSpecifierInfo(pendingImported, pendingImported));
+                            pendingImported = "";
+                        }
+                    }
+                } else if (token.kind == TokenKind.Identifier) {
+                    if (namespacePending) {
+                        if (token.lexeme == "as") {
+                            this.advance();
+                            continue;
+                        }
+                        namespaceImport = token.lexeme;
+                        namespacePending = false;
+                    } else if (!seenClauseToken) {
+                        defaultImport = token.lexeme;
+                    }
+                    seenClauseToken = true;
+                } else if (token.kind == TokenKind.Star) {
+                    namespacePending = true;
+                    seenClauseToken = true;
+                } else if (token.kind != TokenKind.Comma) {
+                    seenClauseToken = true;
                 }
             } else {
                 if (source == "") {
@@ -324,9 +381,19 @@ export class Parser {
                     source = source + " " + token.lexeme;
                 }
             }
+
             this.advance();
         }
-        return new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
+
+        let declaration = new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
+        let info = new ImportDeclInfo(clause, source, defaultImport, namespaceImport, new Array<ImportSpecifierInfo>());
+        let specifierIndex: i32 = 0;
+        while (specifierIndex < namedSpecifiers.length) {
+            let specifier = namedSpecifiers.get(specifierIndex);
+            info.namedSpecifiers.push(new ImportSpecifierInfo(specifier.imported, specifier.local));
+            specifierIndex = specifierIndex + 1;
+        }
+        return new ImportParseResult(declaration, info);
     }
 
     private consumeTopLevelModifiers(): Program {
@@ -1013,6 +1080,69 @@ export class Parser {
             pos = pos + 1;
         }
         return count;
+    }
+
+    private buildParameterInfo(paramText: string): ParameterInfo {
+        return new ParameterInfo(paramText, "", false);
+    }
+
+    private createFunctionDeclInfo(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32): FunctionDeclInfo {
+        return new FunctionDeclInfo(name, typeParamSummary, paramSummary, returnSummary, new Array<string>(), new Array<ParameterInfo>(), returnSummary, paramCount, bracketCount);
+    }
+
+    private appendImportText(current: string, token: Token): string {
+        if (token.kind == TokenKind.LBrace) {
+            if (current == "") {
+                return "{";
+            }
+            return current + " {";
+        }
+        if (token.kind == TokenKind.RBrace) {
+            return current + "}";
+        }
+        if (token.kind == TokenKind.Comma) {
+            return current + ",";
+        }
+        if (current == "") {
+            return token.lexeme;
+        }
+        if (token.kind == TokenKind.Dot) {
+            return current + ".";
+        }
+        return current + " " + token.lexeme;
+    }
+
+    private createClassDeclInfo(name: string, typeParamSummary: string, classMembers: Array<ClassMemberDecl>, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string): ClassDeclInfo {
+        let info = new ClassDeclInfo(name, typeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), methodCount, fieldCount, constructorCount, firstMethodName, firstFieldName, firstConstructorName);
+        let memberIndex: i32 = 0;
+        while (memberIndex < classMembers.length) {
+            let member = classMembers.get(memberIndex);
+            info.members.push(new ClassMemberDecl(member.kind, member.name, member.modifierSummary, member.typeParamSummary, member.paramSummary, member.returnSummary, member.typeSummary));
+            memberIndex = memberIndex + 1;
+        }
+        return info;
+    }
+
+    private indexOfChar(text: string, target: i32): i32 {
+        let pos: i32 = 0;
+        while (pos < text.length) {
+            if (text.charCodeAt(pos) == target) {
+                return pos;
+            }
+            pos = pos + 1;
+        }
+        return -1;
+    }
+
+    private lastIndexOfChar(text: string, target: i32): i32 {
+        let pos: i32 = text.length - 1;
+        while (pos >= 0) {
+            if (text.charCodeAt(pos) == target) {
+                return pos;
+            }
+            pos = pos - 1;
+        }
+        return -1;
     }
 
     private appendModifier(current: string, next: string): string {

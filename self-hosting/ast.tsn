@@ -106,13 +106,51 @@ export class Declaration {
     }
 }
 
+export class ImportSpecifierInfo {
+    public imported: string;
+    public local: string;
+
+    constructor(imported: string, local: string) {
+        this.imported = imported;
+        this.local = local;
+    }
+}
+
+export class ParameterInfo {
+    public name: string;
+    public typeText: string;
+    public isRest: bool;
+
+    constructor(name: string, typeText: string, isRest: bool) {
+        this.name = name;
+        this.typeText = typeText;
+        this.isRest = isRest;
+    }
+}
+
 export class ImportDeclInfo {
     public clause: string;
     public source: string;
+    public defaultImport: string;
+    public namespaceImport: string;
+    public namedSpecifiers: Array<ImportSpecifierInfo>;
 
-    constructor(clause: string, source: string) {
+    constructor(clause: string, source: string, defaultImport: string, namespaceImport: string, namedSpecifiers: Array<ImportSpecifierInfo>) {
         this.clause = clause;
         this.source = source;
+        this.defaultImport = defaultImport;
+        this.namespaceImport = namespaceImport;
+        this.namedSpecifiers = namedSpecifiers;
+    }
+}
+
+export class ImportParseResult {
+    public declaration: Declaration;
+    public info: ImportDeclInfo;
+
+    constructor(declaration: Declaration, info: ImportDeclInfo) {
+        this.declaration = declaration;
+        this.info = info;
     }
 }
 
@@ -121,14 +159,20 @@ export class FunctionDeclInfo {
     public typeParamSummary: string;
     public paramSummary: string;
     public returnSummary: string;
+    public typeParameters: Array<string>;
+    public params: Array<ParameterInfo>;
+    public returnTypeText: string;
     public paramCount: i32;
     public bracketCount: i32;
 
-    constructor(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32) {
+    constructor(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string, typeParameters: Array<string>, params: Array<ParameterInfo>, returnTypeText: string, paramCount: i32, bracketCount: i32) {
         this.name = name;
         this.typeParamSummary = typeParamSummary;
         this.paramSummary = paramSummary;
         this.returnSummary = returnSummary;
+        this.typeParameters = typeParameters;
+        this.params = params;
+        this.returnTypeText = returnTypeText;
         this.paramCount = paramCount;
         this.bracketCount = bracketCount;
     }
@@ -137,6 +181,7 @@ export class FunctionDeclInfo {
 export class ClassDeclInfo {
     public name: string;
     public typeParamSummary: string;
+    public typeParameters: Array<string>;
     public members: Array<ClassMemberDecl>;
     public methodCount: i32;
     public fieldCount: i32;
@@ -145,9 +190,10 @@ export class ClassDeclInfo {
     public firstFieldName: string;
     public firstConstructorName: string;
 
-    constructor(name: string, typeParamSummary: string, members: Array<ClassMemberDecl>, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string) {
+    constructor(name: string, typeParamSummary: string, typeParameters: Array<string>, members: Array<ClassMemberDecl>, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string) {
         this.name = name;
         this.typeParamSummary = typeParamSummary;
+        this.typeParameters = typeParameters;
         this.members = members;
         this.methodCount = methodCount;
         this.fieldCount = fieldCount;
