@@ -68,19 +68,53 @@ export class Token {
     }
 }
 
-export class FunctionDecl {
+export class ClassMemberDecl {
+    public kind: string;
     public name: string;
+    public modifierSummary: string;
+    public typeParamSummary: string;
+    public paramSummary: string;
+    public returnSummary: string;
+    public typeSummary: string;
 
-    constructor(name: string) {
+    constructor(kind: string, name: string, modifierSummary: string, typeParamSummary: string, paramSummary: string, returnSummary: string, typeSummary: string) {
+        this.kind = kind;
         this.name = name;
+        this.modifierSummary = modifierSummary;
+        this.typeParamSummary = typeParamSummary;
+        this.paramSummary = paramSummary;
+        this.returnSummary = returnSummary;
+        this.typeSummary = typeSummary;
+    }
+}
+
+export class Declaration {
+    public kind: string;
+    public name: string;
+    public detailA: string;
+    public detailB: string;
+    public detailC: string;
+    public members: Array<ClassMemberDecl>;
+
+    constructor(kind: string, name: string, detailA: string, detailB: string, detailC: string, members: Array<ClassMemberDecl>) {
+        this.kind = kind;
+        this.name = name;
+        this.detailA = detailA;
+        this.detailB = detailB;
+        this.detailC = detailC;
+        this.members = members;
     }
 }
 
 export class Program {
+    public declarations: Array<Declaration>;
+    public classMembers: Array<ClassMemberDecl>;
     public counts: Array<i32>;
     public summaries: Array<string>;
 
-    constructor(counts: Array<i32>, summaries: Array<string>) {
+    constructor(declarations: Array<Declaration>, classMembers: Array<ClassMemberDecl>, counts: Array<i32>, summaries: Array<string>) {
+        this.declarations = declarations;
+        this.classMembers = classMembers;
         this.counts = counts;
         this.summaries = summaries;
     }

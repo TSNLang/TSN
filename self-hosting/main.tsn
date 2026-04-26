@@ -19,6 +19,15 @@ function parseFile(path: string): i32 {
 
     log("parsed file");
     log(path);
+    log("declaration count");
+    log(program.declarations.length);
+    if (program.declarations.length > 0) {
+        let firstDecl = program.declarations.get(0);
+        log("first declaration kind");
+        log(firstDecl.kind);
+        log("first declaration name");
+        log(firstDecl.name);
+    }
     log("class count");
     log(program.counts.get(3));
     log("method count");
@@ -37,6 +46,13 @@ function parseFile(path: string): i32 {
     log(program.counts.get(23));
     log("assign count");
     log(program.counts.get(24));
+    if (program.classMembers.length > 0) {
+        let firstMember = program.classMembers.get(0);
+        log("first class member kind");
+        log(firstMember.kind);
+        log("first class member name");
+        log(firstMember.name);
+    }
     return 0;
 }
 

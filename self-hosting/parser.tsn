@@ -1,5 +1,5 @@
 import { Array } from "std:array";
-import { Program, Token, TokenKind } from "./ast.tsn";
+import { ClassMemberDecl, Declaration, Program, Token, TokenKind } from "./ast.tsn";
 
 export class Parser {
     private tokens: Array<Token>;
@@ -55,10 +55,13 @@ export class Parser {
         let firstConstructorParamSummary = "";
         let firstFunctionParamSummary = "";
         let firstFunctionReturnSummary = "";
+        let declarations = new Array<Declaration>();
+        let classMembers = new Array<ClassMemberDecl>();
 
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Import)) {
-                this.parseImportDecl();
+                let importDecl = this.parseImportDecl();
+                declarations.push(importDecl);
                 importCount = importCount + 1;
                 continue;
             }
@@ -69,6 +72,7 @@ export class Parser {
 
             if (this.matchKind(TokenKind.Function)) {
                 let body = this.parseFunctionDecl();
+                declarations.push(new Declaration("FunctionDecl", body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), new Array<ClassMemberDecl>()));
                 functionCount = functionCount + 1;
                 letCount = letCount + body.counts.get(4);
                 returnCount = returnCount + body.counts.get(5);
@@ -108,6 +112,12 @@ export class Parser {
 
             if (this.matchKind(TokenKind.Class)) {
                 let body = this.parseClassDecl();
+                declarations.push(new Declaration("ClassDecl", body.summaries.get(2), body.summaries.get(3), body.summaries.get(12), "", body.classMembers));
+                let memberIndex: i32 = 0;
+                while (memberIndex < body.classMembers.length) {
+                    classMembers.push(body.classMembers.get(memberIndex));
+                    memberIndex = memberIndex + 1;
+                }
                 classCount = classCount + 1;
                 letCount = letCount + body.counts.get(4);
                 returnCount = returnCount + body.counts.get(5);
@@ -207,6 +217,16 @@ export class Parser {
         }
 
         let p = this.createEmptyProgram();
+        let declarationIndex: i32 = 0;
+        while (declarationIndex < declarations.length) {
+            p.declarations.push(declarations.get(declarationIndex));
+            declarationIndex = declarationIndex + 1;
+        }
+        let classMemberIndex: i32 = 0;
+        while (classMemberIndex < classMembers.length) {
+            p.classMembers.push(classMembers.get(classMemberIndex));
+            classMemberIndex = classMemberIndex + 1;
+        }
         p.counts.set(0, importCount);
         p.counts.set(1, exportCount);
         p.counts.set(2, functionCount);
@@ -256,13 +276,21 @@ export class Parser {
         return p;
     }
 
-    private parseImportDecl(): void {
+    private parseImportDecl(): Declaration {
+        let detail = "";
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Semicolon)) {
-                return;
+                return new Declaration("ImportDecl", detail, "", "", "", new Array<ClassMemberDecl>());
+            }
+            let token = this.peek();
+            if (detail == "") {
+                detail = token.lexeme;
+            } else {
+                detail = detail + " " + token.lexeme;
             }
             this.advance();
         }
+        return new Declaration("ImportDecl", detail, "", "", "", new Array<ClassMemberDecl>());
     }
 
     private consumeTopLevelModifiers(): Program {
@@ -405,6 +433,7 @@ export class Parser {
         let firstMethodReturnSummary = "";
         let firstMethodParamSummary = "";
         let firstConstructorParamSummary = "";
+        let members = new Array<ClassMemberDecl>();
 
         if (!this.isAtEnd()) {
             className = this.peek().lexeme;
@@ -449,6 +478,27 @@ export class Parser {
                 kind = this.peek().kind;
                 if (kind == TokenKind.Identifier || kind == TokenKind.Constructor) {
                     let member = this.parseClassMember(modifierState.summaries.get(11));
+                    let memberDecl = new ClassMemberDecl(
+                        member.summaries.get(12),
+                        member.summaries.get(5),
+                        member.summaries.get(11),
+                        member.summaries.get(4),
+                        member.summaries.get(15),
+                        member.summaries.get(14),
+                        member.summaries.get(13)
+                    );
+                    if (member.summaries.get(7) != "") {
+                        memberDecl = new ClassMemberDecl(
+                            member.summaries.get(12),
+                            member.summaries.get(7),
+                            member.summaries.get(11),
+                            "",
+                            "",
+                            "",
+                            member.summaries.get(13)
+                        );
+                    }
+                    members.push(memberDecl);
                     letCount = letCount + member.counts.get(4);
                     returnCount = returnCount + member.counts.get(5);
                     ifCount = ifCount + member.counts.get(6);
@@ -512,6 +562,11 @@ export class Parser {
         }
 
         let p = this.createEmptyProgram();
+        let parsedMemberIndex: i32 = 0;
+        while (parsedMemberIndex < members.length) {
+            p.classMembers.push(members.get(parsedMemberIndex));
+            parsedMemberIndex = parsedMemberIndex + 1;
+        }
         p.counts.set(4, letCount);
         p.counts.set(5, returnCount);
         p.counts.set(6, ifCount);
@@ -1231,12 +1286,14 @@ export class Parser {
     }
 
     private createEmptyProgram(): Program {
+        let declarations = new Array<Declaration>();
+        let classMembers = new Array<ClassMemberDecl>();
         let counts = new Array<i32>();
         let i = 0;
         while (i < 25) { counts.push(0); i = i + 1; }
         let summaries = new Array<string>();
         i = 0;
         while (i < 19) { summaries.push(""); i = i + 1; }
-        return new Program(counts, summaries);
+        return new Program(declarations, classMembers, counts, summaries);
     }
 }
