@@ -21,6 +21,12 @@ function parseFile(path: string): i32 {
     log(path);
     log("declaration count");
     log(program.declarations.length);
+    log("import decl count");
+    log(program.importDecls.length);
+    log("function decl count");
+    log(program.functionDecls.length);
+    log("class decl count");
+    log(program.classDecls.length);
     if (program.declarations.length > 0) {
         let firstDecl = program.declarations.get(0);
         log("first declaration kind");

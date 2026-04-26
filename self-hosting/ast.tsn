@@ -106,15 +106,55 @@ export class Declaration {
     }
 }
 
+export class ImportDeclInfo {
+    public clause: string;
+
+    constructor(clause: string) {
+        this.clause = clause;
+    }
+}
+
+export class FunctionDeclInfo {
+    public name: string;
+    public typeParamSummary: string;
+    public paramSummary: string;
+    public returnSummary: string;
+
+    constructor(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string) {
+        this.name = name;
+        this.typeParamSummary = typeParamSummary;
+        this.paramSummary = paramSummary;
+        this.returnSummary = returnSummary;
+    }
+}
+
+export class ClassDeclInfo {
+    public name: string;
+    public typeParamSummary: string;
+    public members: Array<ClassMemberDecl>;
+
+    constructor(name: string, typeParamSummary: string, members: Array<ClassMemberDecl>) {
+        this.name = name;
+        this.typeParamSummary = typeParamSummary;
+        this.members = members;
+    }
+}
+
 export class Program {
     public declarations: Array<Declaration>;
     public classMembers: Array<ClassMemberDecl>;
+    public importDecls: Array<ImportDeclInfo>;
+    public functionDecls: Array<FunctionDeclInfo>;
+    public classDecls: Array<ClassDeclInfo>;
     public counts: Array<i32>;
     public summaries: Array<string>;
 
-    constructor(declarations: Array<Declaration>, classMembers: Array<ClassMemberDecl>, counts: Array<i32>, summaries: Array<string>) {
+    constructor(declarations: Array<Declaration>, classMembers: Array<ClassMemberDecl>, importDecls: Array<ImportDeclInfo>, functionDecls: Array<FunctionDeclInfo>, classDecls: Array<ClassDeclInfo>, counts: Array<i32>, summaries: Array<string>) {
         this.declarations = declarations;
         this.classMembers = classMembers;
+        this.importDecls = importDecls;
+        this.functionDecls = functionDecls;
+        this.classDecls = classDecls;
         this.counts = counts;
         this.summaries = summaries;
     }
