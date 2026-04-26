@@ -77,7 +77,7 @@ export class Parser {
             if (this.matchKind(TokenKind.Function)) {
                 let body = this.parseFunctionDecl();
                 declarations.push(new Declaration("FunctionDecl", body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), new Array<ClassMemberDecl>()));
-                functionDecls.push(new FunctionDeclInfo(body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18)));
+                functionDecls.push(new FunctionDeclInfo(body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21)));
                 functionCount = functionCount + 1;
                 letCount = letCount + body.counts.get(4);
                 returnCount = returnCount + body.counts.get(5);
@@ -118,7 +118,7 @@ export class Parser {
             if (this.matchKind(TokenKind.Class)) {
                 let body = this.parseClassDecl();
                 declarations.push(new Declaration("ClassDecl", body.summaries.get(2), body.summaries.get(3), body.summaries.get(12), "", body.classMembers));
-                classDecls.push(new ClassDeclInfo(body.summaries.get(2), body.summaries.get(3), body.classMembers));
+                classDecls.push(new ClassDeclInfo(body.summaries.get(2), body.summaries.get(3), body.classMembers, body.counts.get(10), body.counts.get(11), body.counts.get(12), body.summaries.get(5), body.summaries.get(7), body.summaries.get(9)));
                 let memberIndex: i32 = 0;
                 while (memberIndex < body.classMembers.length) {
                     classMembers.push(body.classMembers.get(memberIndex));

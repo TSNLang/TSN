@@ -121,12 +121,16 @@ export class FunctionDeclInfo {
     public typeParamSummary: string;
     public paramSummary: string;
     public returnSummary: string;
+    public paramCount: i32;
+    public bracketCount: i32;
 
-    constructor(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string) {
+    constructor(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32) {
         this.name = name;
         this.typeParamSummary = typeParamSummary;
         this.paramSummary = paramSummary;
         this.returnSummary = returnSummary;
+        this.paramCount = paramCount;
+        this.bracketCount = bracketCount;
     }
 }
 
@@ -134,11 +138,23 @@ export class ClassDeclInfo {
     public name: string;
     public typeParamSummary: string;
     public members: Array<ClassMemberDecl>;
+    public methodCount: i32;
+    public fieldCount: i32;
+    public constructorCount: i32;
+    public firstMethodName: string;
+    public firstFieldName: string;
+    public firstConstructorName: string;
 
-    constructor(name: string, typeParamSummary: string, members: Array<ClassMemberDecl>) {
+    constructor(name: string, typeParamSummary: string, members: Array<ClassMemberDecl>, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string) {
         this.name = name;
         this.typeParamSummary = typeParamSummary;
         this.members = members;
+        this.methodCount = methodCount;
+        this.fieldCount = fieldCount;
+        this.constructorCount = constructorCount;
+        this.firstMethodName = firstMethodName;
+        this.firstFieldName = firstFieldName;
+        this.firstConstructorName = firstConstructorName;
     }
 }
 

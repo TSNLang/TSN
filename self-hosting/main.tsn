@@ -41,12 +41,33 @@ function parseFile(path: string): i32 {
         log("first import source");
         log(firstImport.source);
     }
+    if (program.functionDecls.length > 0) {
+        let firstFunction = program.functionDecls.get(0);
+        log("first function name");
+        log(firstFunction.name);
+        log("first function param count");
+        log(firstFunction.paramCount);
+        log("first function bracket count");
+        log(firstFunction.bracketCount);
+    }
     if (program.classDecls.length > 0) {
         let firstClass = program.classDecls.get(0);
         log("first class name");
         log(firstClass.name);
         log("first class member count");
         log(firstClass.members.length);
+        log("first class method count");
+        log(firstClass.methodCount);
+        log("first class field count");
+        log(firstClass.fieldCount);
+        log("first class constructor count");
+        log(firstClass.constructorCount);
+        log("first class first method name");
+        log(firstClass.firstMethodName);
+        log("first class first field name");
+        log(firstClass.firstFieldName);
+        log("first class first constructor name");
+        log(firstClass.firstConstructorName);
     }
     log("class count");
     log(program.counts.get(3));
