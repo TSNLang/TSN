@@ -1530,9 +1530,8 @@ export class CodeGenerator {
     if (e.operator === '&&' || e.operator === '||') {
       const l1 = this.coerceToType(l, this.getValueType(l), 'i1');
       const r1 = this.coerceToType(r, this.getValueType(r), 'i1');
-      const t = `%${this.tempCounter}`;
+      const t = this.newTemp();
       this.emit(`${t} = ${op} i1 ${l1}, ${r1}`);
-      this.tempCounter++;
       this.tempTypes.set(t, 'i1');
       return t;
     }
@@ -1603,19 +1602,21 @@ export class CodeGenerator {
 
     const v = this.generateExpression(e.operand);
     const vt = this.getValueType(v);
-    const t = this.newTemp();
     const lType = this.toLLVMType(vt);
     
     if (e.operator === '-') {
+        const t = this.newTemp();
         this.emit(`${t} = sub ${lType} 0, ${v}`);
         this.tempTypes.set(t, vt);
         return t;
     } else if (e.operator === '~') {
+        const t = this.newTemp();
         this.emit(`${t} = xor ${lType} ${v}, -1`);
         this.tempTypes.set(t, vt);
         return t;
     } else {
         const cond = this.coerceToType(v, vt, 'i1');
+        const t = this.newTemp();
         this.emit(`${t} = xor i1 ${cond}, true`);
         this.tempTypes.set(t, 'i1');
         return t;
@@ -2540,16 +2541,14 @@ export class CodeGenerator {
     }
 
     if (src === 'i32' && dest === 'i1') {
-      const t = `%${this.tempCounter}`;
+      const t = this.newTemp();
       this.emit(`${t} = icmp ne i32 ${v}, 0`);
-      this.tempCounter++;
       this.tempTypes.set(t, 'i1');
       return t;
     }
     if (src === 'i1' && dest === 'i32') {
-      const t = `%${this.tempCounter}`;
+      const t = this.newTemp();
       this.emit(`${t} = zext i1 ${v} to i32`);
-      this.tempCounter++;
       this.tempTypes.set(t, 'i32');
       return t;
     }

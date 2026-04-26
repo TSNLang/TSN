@@ -108,9 +108,11 @@ export class Declaration {
 
 export class ImportDeclInfo {
     public clause: string;
+    public source: string;
 
-    constructor(clause: string) {
+    constructor(clause: string, source: string) {
         this.clause = clause;
+        this.source = source;
     }
 }
 

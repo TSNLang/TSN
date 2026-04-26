@@ -65,7 +65,7 @@ export class Parser {
             if (this.matchKind(TokenKind.Import)) {
                 let importDecl = this.parseImportDecl();
                 declarations.push(importDecl);
-                importDecls.push(new ImportDeclInfo(importDecl.name));
+                importDecls.push(new ImportDeclInfo(importDecl.name, importDecl.detailA));
                 importCount = importCount + 1;
                 continue;
             }
@@ -298,20 +298,35 @@ export class Parser {
     }
 
     private parseImportDecl(): Declaration {
-        let detail = "";
+        let clause = "";
+        let source = "";
+        let inSource = false;
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Semicolon)) {
-                return new Declaration("ImportDecl", detail, "", "", "", new Array<ClassMemberDecl>());
+                return new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
             }
             let token = this.peek();
-            if (detail == "") {
-                detail = token.lexeme;
+            if (token.kind == TokenKind.From) {
+                inSource = true;
+                this.advance();
+                continue;
+            }
+            if (!inSource) {
+                if (clause == "") {
+                    clause = token.lexeme;
+                } else {
+                    clause = clause + " " + token.lexeme;
+                }
             } else {
-                detail = detail + " " + token.lexeme;
+                if (source == "") {
+                    source = token.lexeme;
+                } else {
+                    source = source + " " + token.lexeme;
+                }
             }
             this.advance();
         }
-        return new Declaration("ImportDecl", detail, "", "", "", new Array<ClassMemberDecl>());
+        return new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
     }
 
     private consumeTopLevelModifiers(): Program {

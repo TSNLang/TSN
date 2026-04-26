@@ -34,6 +34,20 @@ function parseFile(path: string): i32 {
         log("first declaration name");
         log(firstDecl.name);
     }
+    if (program.importDecls.length > 0) {
+        let firstImport = program.importDecls.get(0);
+        log("first import clause");
+        log(firstImport.clause);
+        log("first import source");
+        log(firstImport.source);
+    }
+    if (program.classDecls.length > 0) {
+        let firstClass = program.classDecls.get(0);
+        log("first class name");
+        log(firstClass.name);
+        log("first class member count");
+        log(firstClass.members.length);
+    }
     log("class count");
     log(program.counts.get(3));
     log("method count");
