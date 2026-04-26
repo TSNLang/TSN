@@ -17,8 +17,6 @@ export class Parser {
       try {
         const decl = this.parseDeclaration();
         if (decl) {
-          const name = (decl as any).name || 'unnamed';
-          console.log(`DEBUG: Parser adding declaration ${decl.kind} (${name}) at ${decl.line}:${decl.column}`);
           declarations.push(decl);
         }
         else this.synchronize();

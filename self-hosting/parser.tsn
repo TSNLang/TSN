@@ -321,10 +321,12 @@ export class Parser {
         if (this.matchKind(TokenKind.LParen)) {
             functionParamSummary = this.readParamSummary(functionName);
             paramCount = this.countParamsFromSummary(functionParamSummary);
+            bracketCount = bracketCount + this.countBracketChars(functionParamSummary);
         }
 
         if (this.matchKind(TokenKind.Colon)) {
             functionReturnSummary = this.readTypeSummary(functionName);
+            bracketCount = bracketCount + this.countBracketChars(functionReturnSummary);
         }
 
         if (this.matchKind(TokenKind.LBrace)) {
@@ -337,7 +339,7 @@ export class Parser {
             newCount = body.counts.get(18);
             thisCount = body.counts.get(19);
             dotCount = body.counts.get(20);
-            bracketCount = body.counts.get(21);
+            bracketCount = bracketCount + body.counts.get(21);
             ampCount = body.counts.get(22);
             pipeCount = body.counts.get(23);
             assignCount = body.counts.get(24);
@@ -618,9 +620,11 @@ export class Parser {
             let paramSummary = this.readParamSummary(memberName);
             let paramCount = this.countParamsFromSummary(paramSummary);
             let methodReturnSummary = "";
+            let signatureBracketCount: i32 = this.countBracketChars(paramSummary);
 
             if (this.matchKind(TokenKind.Colon)) {
                 methodReturnSummary = this.readTypeSummary(memberName);
+                signatureBracketCount = signatureBracketCount + this.countBracketChars(methodReturnSummary);
             }
 
             let letCount: i32 = 0;
@@ -666,6 +670,8 @@ export class Parser {
                 pipeCount = body.counts.get(23);
                 assignCount = body.counts.get(24);
             }
+
+            bracketCount = bracketCount + signatureBracketCount;
 
             let constructorCount: i32 = 0;
             let methodCount: i32 = 1;
@@ -717,6 +723,7 @@ export class Parser {
 
         if (this.matchKind(TokenKind.Colon)) {
             let fieldTypeSummary = this.readTypeSummary(memberName);
+            let fieldBracketCount: i32 = this.countBracketChars(fieldTypeSummary);
             this.skipClassFieldTail();
             let fieldSummary = "field " + memberName;
             if (modifierSummary != "") {
@@ -724,6 +731,7 @@ export class Parser {
             }
             let p = this.createEmptyProgram();
             p.counts.set(11, 1);
+            p.counts.set(21, fieldBracketCount);
             p.summaries.set(7, memberName);
             p.summaries.set(8, modifierSummary);
             p.summaries.set(11, modifierSummary);
@@ -886,12 +894,16 @@ export class Parser {
         let closeIndex: i32 = -1;
         
         let i = 0;
+        let openBrace: i32 = 40; // '('
+        let closeBrace: i32 = 41; // ')'
+        let comma: i32 = 44; // ','
+
         while (i < summary.length) {
-            let char = summary.slice(i, i + 1);
-            if (char == "(") {
+            let char = summary.charCodeAt(i);
+            if (char == openBrace) {
                 openIndex = i;
             }
-            if (char == ")") {
+            if (char == closeBrace) {
                 closeIndex = i;
             }
             i = i + 1;
@@ -900,11 +912,11 @@ export class Parser {
         if (openIndex == -1 || closeIndex == -1 || closeIndex <= openIndex + 1) {
             return 0;
         }
-        let inner: string = summary.slice(openIndex + 1, closeIndex);
+        
         let count: i32 = 1;
-        let pos: i32 = 0;
-        while (pos < inner.length) {
-            if (inner.slice(pos, pos + 1) == ",") {
+        let pos: i32 = openIndex + 1;
+        while (pos < closeIndex) {
+            if (summary.charCodeAt(pos) == comma) {
                 count = count + 1;
             }
             pos = pos + 1;
@@ -917,6 +929,23 @@ export class Parser {
             return next;
         }
         return current + "," + next;
+    }
+
+    private countBracketChars(summary: string): i32 {
+        if (summary == "") {
+            return 0;
+        }
+
+        let count: i32 = 0;
+        let pos: i32 = 0;
+        let openBracket: i32 = 91; // '['
+        while (pos < summary.length) {
+            if (summary.charCodeAt(pos) == openBracket) {
+                count = count + 1;
+            }
+            pos = pos + 1;
+        }
+        return count;
     }
 
     private countParamsInParenBlock(): i32 {
@@ -1116,7 +1145,20 @@ export class Parser {
             this.advance();
         }
 
-        return this.createProgram(0, 0, 0, 0, letCount, returnCount, ifCount, whileCount, forCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", newCount, thisCount, dotCount, bracketCount, ampCount, pipeCount, assignCount);
+        let p = this.createEmptyProgram();
+        p.counts.set(4, letCount);
+        p.counts.set(5, returnCount);
+        p.counts.set(6, ifCount);
+        p.counts.set(7, whileCount);
+        p.counts.set(8, forCount);
+        p.counts.set(18, newCount);
+        p.counts.set(19, thisCount);
+        p.counts.set(20, dotCount);
+        p.counts.set(21, bracketCount);
+        p.counts.set(22, ampCount);
+        p.counts.set(23, pipeCount);
+        p.counts.set(24, assignCount);
+        return p;
     }
 
     private skipAngleBlock(): void {
