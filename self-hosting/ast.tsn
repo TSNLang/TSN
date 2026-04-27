@@ -266,6 +266,50 @@ export class ExpressionInfo {
     }
 }
 
+export class LiteralInfo {
+    public kind: string;
+    public value: string;
+
+    constructor(kind: string, value: string) {
+        this.kind = kind;
+        this.value = value;
+    }
+}
+
+export class BinaryExprInfo {
+    public operator: string;
+    public leftText: string;
+    public rightText: string;
+
+    constructor(operator: string, leftText: string, rightText: string) {
+        this.operator = operator;
+        this.leftText = leftText;
+        this.rightText = rightText;
+    }
+}
+
+export class CallExprInfo {
+    public calleeName: string;
+    public argCount: i32;
+    public hasGenericArgs: bool;
+
+    constructor(calleeName: string, argCount: i32, hasGenericArgs: bool) {
+        this.calleeName = calleeName;
+        this.argCount = argCount;
+        this.hasGenericArgs = hasGenericArgs;
+    }
+}
+
+export class MemberExprInfo {
+    public objectText: string;
+    public memberName: string;
+
+    constructor(objectText: string, memberName: string) {
+        this.objectText = objectText;
+        this.memberName = memberName;
+    }
+}
+
 export class StatementInfo {
     public kind: string;
     public text: string;
@@ -287,5 +331,47 @@ export class VarDeclInfo {
         this.typeText = typeText;
         this.isConst = isConst;
         this.hasInit = hasInit;
+    }
+}
+
+export class AssignmentInfo {
+    public targetText: string;
+    public valueText: string;
+
+    constructor(targetText: string, valueText: string) {
+        this.targetText = targetText;
+        this.valueText = valueText;
+    }
+}
+
+export class ReturnStmtInfo {
+    public hasValue: bool;
+    public valueText: string;
+
+    constructor(hasValue: bool, valueText: string) {
+        this.hasValue = hasValue;
+        this.valueText = valueText;
+    }
+}
+
+export class IfStmtInfo {
+    public conditionText: string;
+    public hasThenBranch: bool;
+    public hasElseBranch: bool;
+
+    constructor(conditionText: string, hasThenBranch: bool, hasElseBranch: bool) {
+        this.conditionText = conditionText;
+        this.hasThenBranch = hasThenBranch;
+        this.hasElseBranch = hasElseBranch;
+    }
+}
+
+export class WhileStmtInfo {
+    public conditionText: string;
+    public hasBody: bool;
+
+    constructor(conditionText: string, hasBody: bool) {
+        this.conditionText = conditionText;
+        this.hasBody = hasBody;
     }
 }
