@@ -124,6 +124,9 @@ function parseFile(path: string): i32 {
         log(program.functionDecls.get(0).bracketCount);
         log("first function return type text");
         log(program.functionDecls.get(0).returnTypeText);
+        logBool("first function has body", program.functionDecls.get(0).hasBody);
+        log("first function body statement count");
+        log(program.functionDecls.get(0).bodyStatementCount);
     }
     if (program.classDecls.length > 0) {
         log("first class name");

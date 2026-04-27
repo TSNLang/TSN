@@ -79,7 +79,7 @@ export class Parser {
             if (this.matchKind(TokenKind.Function)) {
                 let body = this.parseFunctionDecl();
                 declarations.push(new Declaration("FunctionDecl", body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), new Array<ClassMemberDecl>()));
-                let functionInfo = this.createFunctionDeclInfo(body.summaries.get(0), topModifiers.counts.get(1) > 0, topModifiers.counts.get(17) > 0, body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21), body.counts.get(25) > 0, body.counts.get(26));
+                let functionInfo = this.createFunctionDeclInfo(body.summaries.get(0), topModifiers.counts.get(1) > 0, topModifiers.counts.get(17) > 0, body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21), body.counts.get(25), body.counts.get(26), body.counts.get(27), body.counts.get(28), body.counts.get(29), body.counts.get(30));
                 functionDecls.push(functionInfo);
                 functionInfo = null;
                 functionCount = functionCount + 1;
@@ -515,7 +515,11 @@ export class Parser {
         p.summaries.set(17, functionParamSummary);
         p.summaries.set(18, functionReturnSummary);
         p.counts.set(25, letCount);
-        p.counts.set(26, letCount);
+        p.counts.set(26, returnCount);
+        p.counts.set(27, ifCount);
+        p.counts.set(28, whileCount);
+        p.counts.set(29, forCount);
+        p.counts.set(30, assignCount);
 
         return p;
     }
@@ -1180,7 +1184,7 @@ export class Parser {
         namedSpecifiers.push(new ImportSpecifierInfo(imported, finalLocal));
     }
 
-    private createFunctionDeclInfo(name: string, isExported: bool, isAsync: bool, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32, hasBody: bool, bodyStatementCount: i32): FunctionDeclInfo {
+    private createFunctionDeclInfo(name: string, isExported: bool, isAsync: bool, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32, bodyLetCount: i32, bodyReturnCount: i32, bodyIfCount: i32, bodyWhileCount: i32, bodyForCount: i32, bodyAssignCount: i32): FunctionDeclInfo {
         let clonedName = this.sliceText(name, 0, name.length);
         let clonedTypeParamSummary = this.sliceText(typeParamSummary, 0, typeParamSummary.length);
         let clonedParamSummary = this.sliceText(paramSummary, 0, paramSummary.length);
@@ -1190,7 +1194,14 @@ export class Parser {
         let params = new Array<ParameterInfo>();
         this.appendTypeParameters(typeParameters, typeParamSummary);
         this.appendParameters(params, paramSummary);
-        return new FunctionDeclInfo(clonedName, isExported, isAsync, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, typeParameters, params, clonedReturnTypeText, paramCount, bracketCount, hasBody, bodyStatementCount);
+        let stmtCount: i32 = bodyLetCount;
+        stmtCount = stmtCount + bodyReturnCount;
+        stmtCount = stmtCount + bodyIfCount;
+        stmtCount = stmtCount + bodyWhileCount;
+        stmtCount = stmtCount + bodyForCount;
+        stmtCount = stmtCount + bodyAssignCount;
+        let hasBodyFlag = stmtCount > 0;
+        return new FunctionDeclInfo(clonedName, isExported, isAsync, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, typeParameters, params, clonedReturnTypeText, paramCount, bracketCount, hasBodyFlag, stmtCount);
     }
 
     private appendImportText(current: string, token: Token): string {
@@ -1844,7 +1855,7 @@ export class Parser {
         let classDecls = new Array<ClassDeclInfo>();
         let counts = new Array<i32>();
         let i = 0;
-        while (i < 27) { counts.push(0); i = i + 1; }
+        while (i < 31) { counts.push(0); i = i + 1; }
         let summaries = new Array<string>();
         i = 0;
         while (i < 19) { summaries.push(""); i = i + 1; }
