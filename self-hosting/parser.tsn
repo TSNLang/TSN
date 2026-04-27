@@ -605,19 +605,41 @@ export class Parser {
                         member.summaries.get(5),
                         member.summaries.get(11),
                         member.summaries.get(4),
+                        this.buildTypeParameterList(member.summaries.get(4)),
                         member.summaries.get(15),
+                        this.buildParameterList(member.summaries.get(15)),
                         member.summaries.get(14),
-                        member.summaries.get(13)
+                        this.extractTypeText(member.summaries.get(14)),
+                        member.summaries.get(13),
+                        this.extractTypeText(member.summaries.get(13))
                     );
-                    if (member.summaries.get(7) != "") {
+                    if (member.summaries.get(9) != "") {
+                        memberDecl = new ClassMemberDecl(
+                            member.summaries.get(12),
+                            member.summaries.get(9),
+                            member.summaries.get(10),
+                            member.summaries.get(4),
+                            this.buildTypeParameterList(member.summaries.get(4)),
+                            member.summaries.get(16),
+                            this.buildParameterList(member.summaries.get(16)),
+                            "",
+                            "",
+                            "",
+                            ""
+                        );
+                    } else if (member.summaries.get(7) != "") {
                         memberDecl = new ClassMemberDecl(
                             member.summaries.get(12),
                             member.summaries.get(7),
                             member.summaries.get(11),
                             "",
+                            new Array<string>(),
+                            "",
+                            new Array<ParameterInfo>(),
                             "",
                             "",
-                            member.summaries.get(13)
+                            member.summaries.get(13),
+                            this.extractTypeText(member.summaries.get(13))
                         );
                     }
                     members.push(memberDecl);
@@ -1177,7 +1199,8 @@ export class Parser {
         let clonedFirstMethodName = this.sliceText(firstMethodName, 0, firstMethodName.length);
         let clonedFirstFieldName = this.sliceText(firstFieldName, 0, firstFieldName.length);
         let clonedFirstConstructorName = this.sliceText(firstConstructorName, 0, firstConstructorName.length);
-        let info = new ClassDeclInfo(clonedName, clonedTypeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), methodCount, fieldCount, constructorCount, clonedFirstMethodName, clonedFirstFieldName, clonedFirstConstructorName);
+        let emptyConstructorDecl = new ClassMemberDecl("", "", "", "", new Array<string>(), "", new Array<ParameterInfo>(), "", "", "", "");
+        let info = new ClassDeclInfo(clonedName, clonedTypeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), emptyConstructorDecl, methodCount, fieldCount, constructorCount, clonedFirstMethodName, clonedFirstFieldName, clonedFirstConstructorName);
         let typeParamIndex: i32 = 0;
         while (typeParamIndex < typeParameters.length) {
             let typeParameter = typeParameters.get(typeParamIndex);
@@ -1194,7 +1217,18 @@ export class Parser {
             let clonedParamSummary = this.sliceText(sourceMember.paramSummary, 0, sourceMember.paramSummary.length);
             let clonedReturnSummary = this.sliceText(sourceMember.returnSummary, 0, sourceMember.returnSummary.length);
             let clonedTypeSummary = this.sliceText(sourceMember.typeSummary, 0, sourceMember.typeSummary.length);
-            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, clonedTypeSummary));
+            let typeParameters = this.buildTypeParameterList(sourceMember.typeParamSummary);
+            let params = this.buildParameterList(sourceMember.paramSummary);
+            let clonedReturnTypeText = this.sliceText(sourceMember.returnTypeText, 0, sourceMember.returnTypeText.length);
+            let clonedTypeText = this.sliceText(sourceMember.typeText, 0, sourceMember.typeText.length);
+            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText));
+            if (this.hasMemberLabel(clonedKind, "field")) {
+                info.fields.push(this.cloneClassMemberDecl(sourceMember));
+            } else if (this.hasMemberLabel(clonedKind, "constructor")) {
+                info.constructorDecl = this.cloneClassMemberDecl(sourceMember);
+            } else if (this.hasMemberLabel(clonedKind, "method")) {
+                info.methods.push(this.cloneClassMemberDecl(sourceMember));
+            }
             memberIndex = memberIndex + 1;
         }
         return info;
@@ -1285,6 +1319,59 @@ export class Parser {
             return this.trimText(typeSummary);
         }
         return this.trimText(this.sliceText(typeSummary, colonIndex + 1, typeSummary.length));
+    }
+
+    private cloneClassMemberDecl(member: ClassMemberDecl): ClassMemberDecl {
+        let clonedKind = this.sliceText(member.kind, 0, member.kind.length);
+        let clonedName = this.sliceText(member.name, 0, member.name.length);
+        let clonedModifierSummary = this.sliceText(member.modifierSummary, 0, member.modifierSummary.length);
+        let clonedTypeParamSummary = this.sliceText(member.typeParamSummary, 0, member.typeParamSummary.length);
+        let clonedTypeParameters = this.buildTypeParameterList(member.typeParamSummary);
+        let clonedParamSummary = this.sliceText(member.paramSummary, 0, member.paramSummary.length);
+        let clonedParams = this.buildParameterList(member.paramSummary);
+        let clonedReturnSummary = this.sliceText(member.returnSummary, 0, member.returnSummary.length);
+        let clonedReturnTypeText = this.sliceText(member.returnTypeText, 0, member.returnTypeText.length);
+        let clonedTypeSummary = this.sliceText(member.typeSummary, 0, member.typeSummary.length);
+        let clonedTypeText = this.sliceText(member.typeText, 0, member.typeText.length);
+        return new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, clonedTypeParamSummary, clonedTypeParameters, clonedParamSummary, clonedParams, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText);
+    }
+
+    private containsText(text: string, needle: string): bool {
+        if (needle == "") {
+            return true;
+        }
+        if (text.length < needle.length) {
+            return false;
+        }
+
+        let start: i32 = 0;
+        let limit = text.length - needle.length;
+        while (start <= limit) {
+            let index: i32 = 0;
+            let matches = true;
+            while (index < needle.length) {
+                if (text.charCodeAt(start + index) != needle.charCodeAt(index)) {
+                    matches = false;
+                    break;
+                }
+                index = index + 1;
+            }
+            if (matches) {
+                return true;
+            }
+            start = start + 1;
+        }
+        return false;
+    }
+
+    private hasMemberLabel(text: string, label: string): bool {
+        if (this.startsWithText(text, label + " ")) {
+            return true;
+        }
+        if (this.containsText(text, " " + label + " ")) {
+            return true;
+        }
+        return false;
     }
 
     private splitCommaSeparatedParts(text: string): Array<string> {

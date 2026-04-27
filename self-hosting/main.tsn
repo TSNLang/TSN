@@ -121,6 +121,12 @@ function parseFile(path: string): i32 {
         log(program.classDecls.get(0).typeParameters.length);
         log("first class member count");
         log(program.classDecls.get(0).members.length);
+        log("first class structured field count");
+        log(program.classDecls.get(0).fields.length);
+        log("first class structured method count");
+        log(program.classDecls.get(0).methods.length);
+        log("first class structured constructor name");
+        log(program.classDecls.get(0).constructorDecl.name);
         log("first class method count");
         log(program.classDecls.get(0).methodCount);
         log("first class field count");
