@@ -255,3 +255,37 @@ export class Program {
         this.summaries = summaries;
     }
 }
+
+export class ExpressionInfo {
+    public kind: string;
+    public text: string;
+
+    constructor(kind: string, text: string) {
+        this.kind = kind;
+        this.text = text;
+    }
+}
+
+export class StatementInfo {
+    public kind: string;
+    public text: string;
+
+    constructor(kind: string, text: string) {
+        this.kind = kind;
+        this.text = text;
+    }
+}
+
+export class VarDeclInfo {
+    public name: string;
+    public typeText: string;
+    public isConst: bool;
+    public hasInit: bool;
+
+    constructor(name: string, typeText: string, isConst: bool, hasInit: bool) {
+        this.name = name;
+        this.typeText = typeText;
+        this.isConst = isConst;
+        this.hasInit = hasInit;
+    }
+}
