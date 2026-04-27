@@ -54,6 +54,7 @@ function parseFile(path: string): i32 {
         let namedImportIndex: i32 = 0;
         let foundNamedImport = false;
         let foundMultiNamedImport = false;
+        let foundDefaultMultiNamedImport = false;
         while (namedImportIndex < program.importDecls.length) {
             if (!foundNamedImport && program.importDecls.get(namedImportIndex).namedSpecifiers.length > 0) {
                 log("first named import clause");
@@ -84,6 +85,19 @@ function parseFile(path: string): i32 {
                 log("first multi named import second specifier local");
                 log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(1).local);
                 foundMultiNamedImport = true;
+            }
+            if (!foundDefaultMultiNamedImport && program.importDecls.get(namedImportIndex).defaultImport != "" && program.importDecls.get(namedImportIndex).namedSpecifiers.length > 0) {
+                log("first default plus named import clause");
+                log(program.importDecls.get(namedImportIndex).clause);
+                log("first default plus named import source");
+                log(program.importDecls.get(namedImportIndex).source);
+                log("first default plus named import default");
+                log(program.importDecls.get(namedImportIndex).defaultImport);
+                log("first default plus named import first specifier imported");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(0).imported);
+                log("first default plus named import first specifier local");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(0).local);
+                foundDefaultMultiNamedImport = true;
             }
             namedImportIndex = namedImportIndex + 1;
         }
@@ -163,6 +177,9 @@ function main(): i32 {
         return 1;
     }
     if (parseFile("examples/import-alias-smoke.tsn") != 0) {
+        return 1;
+    }
+    if (parseFile("examples/default-named-import-smoke.tsn") != 0) {
         return 1;
     }
     return 0;
