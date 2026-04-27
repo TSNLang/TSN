@@ -310,6 +310,50 @@ export class MemberExprInfo {
     }
 }
 
+export class UnaryExprInfo {
+    public operator: string;
+    public operandText: string;
+    public isPostfix: bool;
+
+    constructor(operator: string, operandText: string, isPostfix: bool) {
+        this.operator = operator;
+        this.operandText = operandText;
+        this.isPostfix = isPostfix;
+    }
+}
+
+export class IndexExprInfo {
+    public baseText: string;
+    public indexText: string;
+
+    constructor(baseText: string, indexText: string) {
+        this.baseText = baseText;
+        this.indexText = indexText;
+    }
+}
+
+export class NewExprInfo {
+    public className: string;
+    public argCount: i32;
+    public hasGenericArgs: bool;
+
+    constructor(className: string, argCount: i32, hasGenericArgs: bool) {
+        this.className = className;
+        this.argCount = argCount;
+        this.hasGenericArgs = hasGenericArgs;
+    }
+}
+
+export class ArrayLiteralInfo {
+    public elementCount: i32;
+    public hasSpread: bool;
+
+    constructor(elementCount: i32, hasSpread: bool) {
+        this.elementCount = elementCount;
+        this.hasSpread = hasSpread;
+    }
+}
+
 export class StatementInfo {
     public kind: string;
     public text: string;
@@ -373,5 +417,27 @@ export class WhileStmtInfo {
     constructor(conditionText: string, hasBody: bool) {
         this.conditionText = conditionText;
         this.hasBody = hasBody;
+    }
+}
+
+export class ForStmtInfo {
+    public hasInit: bool;
+    public hasCondition: bool;
+    public hasUpdate: bool;
+    public hasBody: bool;
+
+    constructor(hasInit: bool, hasCondition: bool, hasUpdate: bool, hasBody: bool) {
+        this.hasInit = hasInit;
+        this.hasCondition = hasCondition;
+        this.hasUpdate = hasUpdate;
+        this.hasBody = hasBody;
+    }
+}
+
+export class ExprStmtInfo {
+    public exprText: string;
+
+    constructor(exprText: string) {
+        this.exprText = exprText;
     }
 }
