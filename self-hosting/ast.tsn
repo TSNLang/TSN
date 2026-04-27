@@ -186,8 +186,10 @@ export class FunctionDeclInfo {
     public returnTypeText: string;
     public paramCount: i32;
     public bracketCount: i32;
+    public hasBody: bool;
+    public bodyStatementCount: i32;
 
-    constructor(name: string, isExported: bool, isAsync: bool, typeParamSummary: string, paramSummary: string, returnSummary: string, typeParameters: Array<string>, params: Array<ParameterInfo>, returnTypeText: string, paramCount: i32, bracketCount: i32) {
+    constructor(name: string, isExported: bool, isAsync: bool, typeParamSummary: string, paramSummary: string, returnSummary: string, typeParameters: Array<string>, params: Array<ParameterInfo>, returnTypeText: string, paramCount: i32, bracketCount: i32, hasBody: bool, bodyStatementCount: i32) {
         this.name = name;
         this.isExported = isExported;
         this.isAsync = isAsync;
@@ -199,6 +201,8 @@ export class FunctionDeclInfo {
         this.returnTypeText = returnTypeText;
         this.paramCount = paramCount;
         this.bracketCount = bracketCount;
+        this.hasBody = hasBody;
+        this.bodyStatementCount = bodyStatementCount;
     }
 }
 
