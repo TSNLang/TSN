@@ -354,6 +354,34 @@ export class ArrayLiteralInfo {
     }
 }
 
+export class TypeAnnotationInfo {
+    public name: string;
+    public isPointer: bool;
+    public isRawPointer: bool;
+    public isArray: bool;
+    public arraySize: i32;
+    public hasGenericArgs: bool;
+    public genericArgCount: i32;
+    public isTuple: bool;
+    public tupleElementCount: i32;
+    public isUnion: bool;
+    public unionTypeCount: i32;
+
+    constructor(name: string, isPointer: bool, isRawPointer: bool, isArray: bool, arraySize: i32, hasGenericArgs: bool, genericArgCount: i32, isTuple: bool, tupleElementCount: i32, isUnion: bool, unionTypeCount: i32) {
+        this.name = name;
+        this.isPointer = isPointer;
+        this.isRawPointer = isRawPointer;
+        this.isArray = isArray;
+        this.arraySize = arraySize;
+        this.hasGenericArgs = hasGenericArgs;
+        this.genericArgCount = genericArgCount;
+        this.isTuple = isTuple;
+        this.tupleElementCount = tupleElementCount;
+        this.isUnion = isUnion;
+        this.unionTypeCount = unionTypeCount;
+    }
+}
+
 export class StatementInfo {
     public kind: string;
     public text: string;
