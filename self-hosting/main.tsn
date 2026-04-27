@@ -111,8 +111,6 @@ function parseFile(path: string): i32 {
         log(program.functionDecls.get(0).paramCount);
         log("first function bracket count");
         log(program.functionDecls.get(0).bracketCount);
-        log("first function structured param count");
-        log(program.functionDecls.get(0).params.length);
         log("first function return type text");
         log(program.functionDecls.get(0).returnTypeText);
     }

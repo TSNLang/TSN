@@ -114,7 +114,39 @@ export class CodeGenerator {
     return targetOS.some(os => this.isSingleTargetOSMatch(os));
   }
 
+  private transferArrayPushArgumentOwnership(args: Expression[], paramTypes: string[]): void {
+    for (let i = 0; i < args.length; i++) {
+      const argExpr = args[i];
+      if (argExpr.kind !== ASTKind.Identifier) continue;
+
+      const srcId = (argExpr as Identifier).name;
+      const srcType = this.localVarTypes.get(srcId);
+      if (!srcType) continue;
+
+      const isOwningSource = this.isClassType(srcType) || (srcType.startsWith('ptr<') && !srcType.startsWith('ptr<void>'));
+      if (!isOwningSource) continue;
+
+      const expectedT = paramTypes[i + 1];
+      if (!expectedT) continue;
+
+      const sameType = expectedT === srcType;
+      const loweredPointerMatch = this.toLLVMType(expectedT) === 'ptr';
+      if (!sameType && !loweredPointerMatch) continue;
+
+      this.emit(`store ptr null, ptr %${srcId}, align 8`);
+      this.cleanupStack[this.cleanupStack.length - 1].delete(srcId);
+      this.movedLocals.add(srcId);
+    }
+  }
+
   private emitOwnedCleanupForValue(ptr: string, type: string): void {
+    const cleanupLabel = this.newLabel('cleanup');
+    const cleanupDoneLabel = this.newLabel('cleanup.done');
+    const hasValue = this.newTemp();
+    this.emit(`${hasValue} = icmp ne ptr ${ptr}, null`);
+    this.emit(`br i1 ${hasValue}, label %${cleanupLabel}, label %${cleanupDoneLabel}`);
+    this.emit(`\n${cleanupLabel}:`);
+    this.indent++;
     if (this.isClassType(type)) {
       const className = type.startsWith('%') ? type.substring(1) : type;
       const disposeName = `${className}.dispose`;
@@ -125,6 +157,11 @@ export class CodeGenerator {
     }
     this.ensureExternalDeclaration('memory_free', { name: 'memory_free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
     this.emit(`call void @memory_free(ptr ${ptr})`);
+    this.emit(`br label %${cleanupDoneLabel}`);
+    this.indent--;
+    this.emit(`\n${cleanupDoneLabel}:`);
+    this.indent++;
+    this.indent--;
   }
 
   private emitCleanup(): void {
@@ -1017,6 +1054,7 @@ export class CodeGenerator {
   private generateAssignment(s: Assignment): void {
     const val = this.generateExpression(s.value);
     const vt = this.getValueType(val);
+    const isNullAssignment = s.value.kind === ASTKind.NullLiteral;
     
     if (s.target.kind === ASTKind.MemberExpr) {
       const m = s.target as MemberExpr;
@@ -1042,8 +1080,8 @@ export class CodeGenerator {
       const id = (s.target as Identifier).name, global = this.globals.get(id);
       const lt = this.localVarTypes.get(id) || 'i32';
       
-      if (lt.startsWith('ptr<') && this.toLLVMType(vt) === this.toLLVMType(this.getPointerInnerType(lt))) {
-          this.generateManagedAssignment(id, val, this.getPointerInnerType(lt));
+      if (lt.startsWith('ptr<') && (isNullAssignment || this.toLLVMType(vt) === this.toLLVMType(this.getPointerInnerType(lt)))) {
+          this.generateManagedAssignment(id, val, this.getPointerInnerType(lt), isNullAssignment);
           return;
       }
 
@@ -1053,15 +1091,20 @@ export class CodeGenerator {
           this.emit(`call void @llvm.memcpy.p0.p0.i64(ptr %${id}, ptr ${val}, i64 ${size}, i1 false)`);
           this.ensureExternalDeclaration('llvm.memcpy.p0.p0.i64', { name: 'memcpy', kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'ptr', 'i64', 'i1'] } as any);
       } else if (this.isClassType(lt)) {
-          const oldVal = this.newTemp();
-          this.emit(`${oldVal} = load ptr, ptr %${id}, align 8`);
-          this.emitOwnedCleanupForValue(oldVal, lt);
-          this.emit(`store ${this.toLLVMType(lt)} ${val}, ptr %${id}, align 8`);
-          this.movedLocals.delete(id);
-          if (s.value.kind === ASTKind.Identifier) {
-              const srcId = (s.value as Identifier).name;
-              this.emit(`store ptr null, ptr %${srcId}, align 8`);
-              this.movedLocals.add(srcId);
+          if (isNullAssignment) {
+              this.emit(`store ptr null, ptr %${id}, align 8`);
+              this.movedLocals.delete(id);
+          } else {
+              const oldVal = this.newTemp();
+              this.emit(`${oldVal} = load ptr, ptr %${id}, align 8`);
+              this.emitOwnedCleanupForValue(oldVal, lt);
+              this.emit(`store ${this.toLLVMType(lt)} ${val}, ptr %${id}, align 8`);
+              this.movedLocals.delete(id);
+              if (s.value.kind === ASTKind.Identifier) {
+                  const srcId = (s.value as Identifier).name;
+                  this.emit(`store ptr null, ptr %${srcId}, align 8`);
+                  this.movedLocals.add(srcId);
+              }
           }
       } else {
           const lType = this.toLLVMType(lt);
@@ -1950,10 +1993,16 @@ export class CodeGenerator {
                 // 4. Call function pointer
                 if (llvmRt === 'void') {
                     this.emit(`call void ${fnPtr}(${aStr})`);
+                    if (m.member === 'push' && stName.startsWith('Array_') && info) {
+                        this.transferArrayPushArgumentOwnership(args, info.paramTypes);
+                    }
                     return '0';
                 } else {
                     const t = this.newTemp();
                     this.emit(`${t} = call ${llvmRt} ${fnPtr}(${aStr})`);
+                    if (m.member === 'push' && stName.startsWith('Array_') && info) {
+                        this.transferArrayPushArgumentOwnership(args, info.paramTypes);
+                    }
                     this.tempTypes.set(t, rt);
                     return t;
                 }
@@ -2033,8 +2082,16 @@ export class CodeGenerator {
         }
     }
 
-    if (llvmRt === 'void') { this.emit(`call void @${actualName}(${aStr})`); return '0'; }
-    const t = this.newTemp(); this.emit(`${t} = call ${llvmRt} @${actualName}(${aStr})`); this.tempTypes.set(t, rt); return t;
+    if (llvmRt === 'void') {
+      this.emit(`call void @${actualName}(${aStr})`);
+      if (m.member === 'push' && stName.startsWith('Array_') && info) this.transferArrayPushArgumentOwnership(args, info.paramTypes);
+      return '0';
+    }
+    const t = this.newTemp();
+    this.emit(`${t} = call ${llvmRt} @${actualName}(${aStr})`);
+    if (m.member === 'push' && stName.startsWith('Array_') && info) this.transferArrayPushArgumentOwnership(args, info.paramTypes);
+    this.tempTypes.set(t, rt);
+    return t;
   }
 
   private emitWindowsConsoleLog(args: Expression[]): boolean {
@@ -2387,7 +2444,12 @@ export class CodeGenerator {
     return heapPtr;
   }
 
-  private generateManagedAssignment(id: string, newVal: string, innerType: string): void {
+  private generateManagedAssignment(id: string, newVal: string, innerType: string, isClearingNull: boolean = false): void {
+      if (isClearingNull) {
+          this.emit(`store ptr null, ptr %${id}, align 8`);
+          this.movedLocals.delete(id);
+          return;
+      }
       const oldPtr = this.newTemp();
       this.emit(`${oldPtr} = load ptr, ptr %${id}, align 8`);
       this.ensureExternalDeclaration('memory_free', { name: 'memory_free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });

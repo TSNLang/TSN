@@ -1,4 +1,6 @@
 import { Array } from "std:array";
+import { log } from "std:console";
+import * as str from "std:string";
 import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, Token, TokenKind } from "./ast.tsn";
 
 export class Parser {
@@ -77,7 +79,9 @@ export class Parser {
             if (this.matchKind(TokenKind.Function)) {
                 let body = this.parseFunctionDecl();
                 declarations.push(new Declaration("FunctionDecl", body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), new Array<ClassMemberDecl>()));
-                functionDecls.push(this.createFunctionDeclInfo(body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21)));
+                let functionInfo = this.createFunctionDeclInfo(body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21));
+                functionDecls.push(functionInfo);
+                functionInfo = null;
                 functionCount = functionCount + 1;
                 letCount = letCount + body.counts.get(4);
                 returnCount = returnCount + body.counts.get(5);
@@ -1098,7 +1102,25 @@ export class Parser {
     }
 
     private buildParameterInfo(paramText: string): ParameterInfo {
-        return new ParameterInfo(paramText, "", false);
+        let trimmed = this.trimText(paramText);
+        if (trimmed == "") {
+            return new ParameterInfo("", "", false);
+        }
+
+        let isRest = false;
+        if (this.startsWithText(trimmed, "...")) {
+            isRest = true;
+            trimmed = this.trimText(this.sliceText(trimmed, 3, trimmed.length));
+        }
+
+        let colonIndex = this.indexOfChar(trimmed, 58);
+        if (colonIndex == -1) {
+            return new ParameterInfo(trimmed, "", isRest);
+        }
+
+        let name = this.trimText(this.sliceText(trimmed, 0, colonIndex));
+        let typeText = this.trimText(this.sliceText(trimmed, colonIndex + 1, trimmed.length));
+        return new ParameterInfo(name, typeText, isRest);
     }
 
     private flushPendingImportSpecifier(namedSpecifiers: Array<ImportSpecifierInfo>, imported: string, local: string): void {
@@ -1114,7 +1136,16 @@ export class Parser {
     }
 
     private createFunctionDeclInfo(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32): FunctionDeclInfo {
-        return new FunctionDeclInfo(name, typeParamSummary, paramSummary, returnSummary, new Array<string>(), new Array<ParameterInfo>(), returnSummary, paramCount, bracketCount);
+        let clonedName = this.sliceText(name, 0, name.length);
+        let clonedTypeParamSummary = this.sliceText(typeParamSummary, 0, typeParamSummary.length);
+        let clonedParamSummary = this.sliceText(paramSummary, 0, paramSummary.length);
+        let clonedReturnSummary = this.sliceText(returnSummary, 0, returnSummary.length);
+        let clonedReturnTypeText = this.extractTypeText(returnSummary);
+        let typeParameters = new Array<string>();
+        let params = new Array<ParameterInfo>();
+        this.appendTypeParameters(typeParameters, typeParamSummary);
+        this.appendParameters(params, paramSummary);
+        return new FunctionDeclInfo(clonedName, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, typeParameters, params, clonedReturnTypeText, paramCount, bracketCount);
     }
 
     private appendImportText(current: string, token: Token): string {
@@ -1140,14 +1171,197 @@ export class Parser {
     }
 
     private createClassDeclInfo(name: string, typeParamSummary: string, classMembers: Array<ClassMemberDecl>, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string): ClassDeclInfo {
-        let info = new ClassDeclInfo(name, typeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), methodCount, fieldCount, constructorCount, firstMethodName, firstFieldName, firstConstructorName);
+        let typeParameters = this.buildTypeParameterList(typeParamSummary);
+        let clonedName = this.sliceText(name, 0, name.length);
+        let clonedTypeParamSummary = this.sliceText(typeParamSummary, 0, typeParamSummary.length);
+        let clonedFirstMethodName = this.sliceText(firstMethodName, 0, firstMethodName.length);
+        let clonedFirstFieldName = this.sliceText(firstFieldName, 0, firstFieldName.length);
+        let clonedFirstConstructorName = this.sliceText(firstConstructorName, 0, firstConstructorName.length);
+        let info = new ClassDeclInfo(clonedName, clonedTypeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), methodCount, fieldCount, constructorCount, clonedFirstMethodName, clonedFirstFieldName, clonedFirstConstructorName);
+        let typeParamIndex: i32 = 0;
+        while (typeParamIndex < typeParameters.length) {
+            let typeParameter = typeParameters.get(typeParamIndex);
+            info.typeParameters.push(this.sliceText(typeParameter, 0, typeParameter.length));
+            typeParamIndex = typeParamIndex + 1;
+        }
         let memberIndex: i32 = 0;
         while (memberIndex < classMembers.length) {
-            let member = classMembers.get(memberIndex);
-            info.members.push(new ClassMemberDecl(member.kind, member.name, member.modifierSummary, member.typeParamSummary, member.paramSummary, member.returnSummary, member.typeSummary));
+            let sourceMember = classMembers.get(memberIndex);
+            let clonedKind = this.sliceText(sourceMember.kind, 0, sourceMember.kind.length);
+            let clonedName = this.sliceText(sourceMember.name, 0, sourceMember.name.length);
+            let clonedModifierSummary = this.sliceText(sourceMember.modifierSummary, 0, sourceMember.modifierSummary.length);
+            let clonedTypeParamSummary = this.sliceText(sourceMember.typeParamSummary, 0, sourceMember.typeParamSummary.length);
+            let clonedParamSummary = this.sliceText(sourceMember.paramSummary, 0, sourceMember.paramSummary.length);
+            let clonedReturnSummary = this.sliceText(sourceMember.returnSummary, 0, sourceMember.returnSummary.length);
+            let clonedTypeSummary = this.sliceText(sourceMember.typeSummary, 0, sourceMember.typeSummary.length);
+            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, clonedTypeSummary));
             memberIndex = memberIndex + 1;
         }
         return info;
+    }
+
+    private buildTypeParameterList(typeParamSummary: string): Array<string> {
+        let result = new Array<string>();
+        this.appendTypeParameters(result, typeParamSummary);
+        return result;
+    }
+
+    private appendTypeParameters(target: Array<string>, typeParamSummary: string): void {
+        if (typeParamSummary == "") {
+            return;
+        }
+
+        let openIndex = this.indexOfChar(typeParamSummary, 60);
+        let closeIndex = this.lastIndexOfChar(typeParamSummary, 62);
+        if (openIndex == -1 || closeIndex == -1 || closeIndex <= openIndex + 1) {
+            return;
+        }
+
+        let content = this.sliceText(typeParamSummary, openIndex + 1, closeIndex);
+        let parts = this.splitCommaSeparatedParts(content);
+        let partIndex: i32 = 0;
+        while (partIndex < parts.length) {
+            let part = parts.get(partIndex);
+            target.push(this.sliceText(part, 0, part.length));
+            partIndex = partIndex + 1;
+        }
+    }
+
+    private buildParameterList(paramSummary: string): Array<ParameterInfo> {
+        let result = new Array<ParameterInfo>();
+        this.appendParameters(result, paramSummary);
+        return result;
+    }
+
+    private appendParameters(target: Array<ParameterInfo>, paramSummary: string): void {
+        if (paramSummary == "") {
+            return;
+        }
+
+        let openIndex = this.indexOfChar(paramSummary, 40);
+        let closeIndex = this.lastIndexOfChar(paramSummary, 41);
+        if (openIndex == -1 || closeIndex == -1 || closeIndex <= openIndex + 1) {
+            return;
+        }
+
+        let content = this.sliceText(paramSummary, openIndex + 1, closeIndex);
+        let parts = this.splitCommaSeparatedParts(content);
+
+        let partIndex: i32 = 0;
+        while (partIndex < parts.length) {
+            let trimmed = this.trimText(parts.get(partIndex));
+            if (trimmed != "") {
+                let isRest = false;
+                if (this.startsWithText(trimmed, "...")) {
+                    isRest = true;
+                    trimmed = this.trimText(this.sliceText(trimmed, 3, trimmed.length));
+                }
+
+                let name = trimmed;
+                let typeText = "";
+                let colonIndex = this.indexOfChar(trimmed, 58);
+                if (colonIndex != -1) {
+                    name = this.trimText(this.sliceText(trimmed, 0, colonIndex));
+                    typeText = this.trimText(this.sliceText(trimmed, colonIndex + 1, trimmed.length));
+                }
+
+                let clonedName = this.sliceText(name, 0, name.length);
+                let clonedTypeText = this.sliceText(typeText, 0, typeText.length);
+                let info = new ParameterInfo(clonedName, clonedTypeText, isRest);
+                target.push(info);
+                info = null;
+            }
+            partIndex = partIndex + 1;
+        }
+    }
+
+    private extractTypeText(typeSummary: string): string {
+        if (typeSummary == "") {
+            return "";
+        }
+
+        let colonIndex = this.indexOfChar(typeSummary, 58);
+        if (colonIndex == -1) {
+            return this.trimText(typeSummary);
+        }
+        return this.trimText(this.sliceText(typeSummary, colonIndex + 1, typeSummary.length));
+    }
+
+    private splitCommaSeparatedParts(text: string): Array<string> {
+        let result = new Array<string>();
+        let start: i32 = 0;
+        let angleDepth: i32 = 0;
+        let parenDepth: i32 = 0;
+        let bracketDepth: i32 = 0;
+        let pos: i32 = 0;
+
+        while (pos < text.length) {
+            let char = text.charCodeAt(pos);
+            if (char == 60) {
+                angleDepth = angleDepth + 1;
+            } else if (char == 62 && angleDepth > 0) {
+                angleDepth = angleDepth - 1;
+            } else if (char == 40) {
+                parenDepth = parenDepth + 1;
+            } else if (char == 41 && parenDepth > 0) {
+                parenDepth = parenDepth - 1;
+            } else if (char == 91) {
+                bracketDepth = bracketDepth + 1;
+            } else if (char == 93 && bracketDepth > 0) {
+                bracketDepth = bracketDepth - 1;
+            } else if (char == 44 && angleDepth == 0 && parenDepth == 0 && bracketDepth == 0) {
+                let part = this.trimText(this.sliceText(text, start, pos));
+                if (part != "") {
+                    result.push(part);
+                }
+                start = pos + 1;
+            }
+            pos = pos + 1;
+        }
+
+        let tail = this.trimText(this.sliceText(text, start, text.length));
+        if (tail != "") {
+            result.push(tail);
+        }
+        return result;
+    }
+
+    private trimText(text: string): string {
+        let start: i32 = 0;
+        let end: i32 = text.length;
+        while (start < end && this.isSpaceChar(text.charCodeAt(start))) {
+            start = start + 1;
+        }
+        while (end > start && this.isSpaceChar(text.charCodeAt(end - 1))) {
+            end = end - 1;
+        }
+        return this.sliceText(text, start, end);
+    }
+
+    private startsWithText(text: string, prefix: string): bool {
+        if (text.length < prefix.length) {
+            return false;
+        }
+
+        let index: i32 = 0;
+        while (index < prefix.length) {
+            if (text.charCodeAt(index) != prefix.charCodeAt(index)) {
+                return false;
+            }
+            index = index + 1;
+        }
+        return true;
+    }
+
+    private isSpaceChar(char: i32): bool {
+        return char == 32 || char == 9 || char == 10 || char == 13;
+    }
+
+    private sliceText(text: string, start: i32, end: i32): string {
+        if (end <= start) {
+            return "";
+        }
+        return str.substr(text, start, end - start);
     }
 
     private indexOfChar(text: string, target: i32): i32 {
