@@ -79,7 +79,7 @@ export class Parser {
             if (this.matchKind(TokenKind.Function)) {
                 let body = this.parseFunctionDecl();
                 declarations.push(new Declaration("FunctionDecl", body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), new Array<ClassMemberDecl>()));
-                let functionInfo = this.createFunctionDeclInfo(body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21));
+                let functionInfo = this.createFunctionDeclInfo(body.summaries.get(0), topModifiers.counts.get(1) > 0, topModifiers.counts.get(17) > 0, body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21));
                 functionDecls.push(functionInfo);
                 functionInfo = null;
                 functionCount = functionCount + 1;
@@ -122,7 +122,7 @@ export class Parser {
             if (this.matchKind(TokenKind.Class)) {
                 let body = this.parseClassDecl();
                 declarations.push(new Declaration("ClassDecl", body.summaries.get(2), body.summaries.get(3), body.summaries.get(12), "", body.classMembers));
-                classDecls.push(this.createClassDeclInfo(body.summaries.get(2), body.summaries.get(3), body.classMembers, body.counts.get(10), body.counts.get(11), body.counts.get(12), body.summaries.get(5), body.summaries.get(7), body.summaries.get(9)));
+                classDecls.push(this.createClassDeclInfo(body.summaries.get(2), topModifiers.counts.get(1) > 0, body.summaries.get(3), body.classMembers, body.counts.get(10), body.counts.get(11), body.counts.get(12), body.summaries.get(5), body.summaries.get(7), body.summaries.get(9)));
                 let memberIndex: i32 = 0;
                 while (memberIndex < body.classMembers.length) {
                     classMembers.push(body.classMembers.get(memberIndex));
@@ -600,10 +600,17 @@ export class Parser {
                 kind = this.peek().kind;
                 if (kind == TokenKind.Identifier || kind == TokenKind.Constructor) {
                     let member = this.parseClassMember(modifierState.summaries.get(11));
+                    let memberFlags = this.parseModifierFlags(member.summaries.get(11));
                     let memberDecl = new ClassMemberDecl(
                         member.summaries.get(12),
                         member.summaries.get(5),
                         member.summaries.get(11),
+                        memberFlags.counts.get(13) > 0,
+                        memberFlags.counts.get(14) > 0,
+                        memberFlags.counts.get(15) > 0,
+                        memberFlags.counts.get(16) > 0,
+                        memberFlags.counts.get(17) > 0,
+                        false,
                         member.summaries.get(4),
                         this.buildTypeParameterList(member.summaries.get(4)),
                         member.summaries.get(15),
@@ -614,10 +621,17 @@ export class Parser {
                         this.extractTypeText(member.summaries.get(13))
                     );
                     if (member.summaries.get(9) != "") {
+                        let constructorFlags = this.parseModifierFlags(member.summaries.get(10));
                         memberDecl = new ClassMemberDecl(
                             member.summaries.get(12),
                             member.summaries.get(9),
                             member.summaries.get(10),
+                            constructorFlags.counts.get(13) > 0,
+                            constructorFlags.counts.get(14) > 0,
+                            constructorFlags.counts.get(15) > 0,
+                            constructorFlags.counts.get(16) > 0,
+                            constructorFlags.counts.get(17) > 0,
+                            true,
                             member.summaries.get(4),
                             this.buildTypeParameterList(member.summaries.get(4)),
                             member.summaries.get(16),
@@ -628,10 +642,17 @@ export class Parser {
                             ""
                         );
                     } else if (member.summaries.get(7) != "") {
+                        let fieldFlags = this.parseModifierFlags(member.summaries.get(11));
                         memberDecl = new ClassMemberDecl(
                             member.summaries.get(12),
                             member.summaries.get(7),
                             member.summaries.get(11),
+                            fieldFlags.counts.get(13) > 0,
+                            fieldFlags.counts.get(14) > 0,
+                            fieldFlags.counts.get(15) > 0,
+                            fieldFlags.counts.get(16) > 0,
+                            fieldFlags.counts.get(17) > 0,
+                            false,
                             "",
                             new Array<string>(),
                             "",
@@ -1157,7 +1178,7 @@ export class Parser {
         namedSpecifiers.push(new ImportSpecifierInfo(imported, finalLocal));
     }
 
-    private createFunctionDeclInfo(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32): FunctionDeclInfo {
+    private createFunctionDeclInfo(name: string, isExported: bool, isAsync: bool, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32): FunctionDeclInfo {
         let clonedName = this.sliceText(name, 0, name.length);
         let clonedTypeParamSummary = this.sliceText(typeParamSummary, 0, typeParamSummary.length);
         let clonedParamSummary = this.sliceText(paramSummary, 0, paramSummary.length);
@@ -1167,7 +1188,7 @@ export class Parser {
         let params = new Array<ParameterInfo>();
         this.appendTypeParameters(typeParameters, typeParamSummary);
         this.appendParameters(params, paramSummary);
-        return new FunctionDeclInfo(clonedName, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, typeParameters, params, clonedReturnTypeText, paramCount, bracketCount);
+        return new FunctionDeclInfo(clonedName, isExported, isAsync, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, typeParameters, params, clonedReturnTypeText, paramCount, bracketCount);
     }
 
     private appendImportText(current: string, token: Token): string {
@@ -1192,15 +1213,15 @@ export class Parser {
         return current + " " + token.lexeme;
     }
 
-    private createClassDeclInfo(name: string, typeParamSummary: string, classMembers: Array<ClassMemberDecl>, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string): ClassDeclInfo {
+    private createClassDeclInfo(name: string, isExported: bool, typeParamSummary: string, classMembers: Array<ClassMemberDecl>, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string): ClassDeclInfo {
         let typeParameters = this.buildTypeParameterList(typeParamSummary);
         let clonedName = this.sliceText(name, 0, name.length);
         let clonedTypeParamSummary = this.sliceText(typeParamSummary, 0, typeParamSummary.length);
         let clonedFirstMethodName = this.sliceText(firstMethodName, 0, firstMethodName.length);
         let clonedFirstFieldName = this.sliceText(firstFieldName, 0, firstFieldName.length);
         let clonedFirstConstructorName = this.sliceText(firstConstructorName, 0, firstConstructorName.length);
-        let emptyConstructorDecl = new ClassMemberDecl("", "", "", "", new Array<string>(), "", new Array<ParameterInfo>(), "", "", "", "");
-        let info = new ClassDeclInfo(clonedName, clonedTypeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), emptyConstructorDecl, methodCount, fieldCount, constructorCount, clonedFirstMethodName, clonedFirstFieldName, clonedFirstConstructorName);
+        let emptyConstructorDecl = new ClassMemberDecl("", "", "", false, false, false, false, false, false, "", new Array<string>(), "", new Array<ParameterInfo>(), "", "", "", "");
+        let info = new ClassDeclInfo(clonedName, isExported, clonedTypeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), emptyConstructorDecl, methodCount, fieldCount, constructorCount, clonedFirstMethodName, clonedFirstFieldName, clonedFirstConstructorName);
         let typeParamIndex: i32 = 0;
         while (typeParamIndex < typeParameters.length) {
             let typeParameter = typeParameters.get(typeParamIndex);
@@ -1221,7 +1242,8 @@ export class Parser {
             let params = this.buildParameterList(sourceMember.paramSummary);
             let clonedReturnTypeText = this.sliceText(sourceMember.returnTypeText, 0, sourceMember.returnTypeText.length);
             let clonedTypeText = this.sliceText(sourceMember.typeText, 0, sourceMember.typeText.length);
-            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText));
+            let memberModifiers = this.parseModifierFlags(clonedModifierSummary);
+            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, memberModifiers.counts.get(13) > 0, memberModifiers.counts.get(14) > 0, memberModifiers.counts.get(15) > 0, memberModifiers.counts.get(16) > 0, memberModifiers.counts.get(17) > 0, this.hasMemberLabel(clonedKind, "constructor"), clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText));
             if (this.hasMemberLabel(clonedKind, "field")) {
                 info.fields.push(this.cloneClassMemberDecl(sourceMember));
             } else if (this.hasMemberLabel(clonedKind, "constructor")) {
@@ -1333,7 +1355,40 @@ export class Parser {
         let clonedReturnTypeText = this.sliceText(member.returnTypeText, 0, member.returnTypeText.length);
         let clonedTypeSummary = this.sliceText(member.typeSummary, 0, member.typeSummary.length);
         let clonedTypeText = this.sliceText(member.typeText, 0, member.typeText.length);
-        return new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, clonedTypeParamSummary, clonedTypeParameters, clonedParamSummary, clonedParams, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText);
+        return new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, member.isPublic, member.isPrivate, member.isProtected, member.isStatic, member.isAsync, member.isConstructor, clonedTypeParamSummary, clonedTypeParameters, clonedParamSummary, clonedParams, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText);
+    }
+
+    private parseModifierFlags(summary: string): Program {
+        let p = this.createEmptyProgram();
+        if (this.hasModifier(summary, "public")) {
+            p.counts.set(13, 1);
+        }
+        if (this.hasModifier(summary, "private")) {
+            p.counts.set(14, 1);
+        }
+        if (this.hasModifier(summary, "protected")) {
+            p.counts.set(15, 1);
+        }
+        if (this.hasModifier(summary, "static")) {
+            p.counts.set(16, 1);
+        }
+        if (this.hasModifier(summary, "async")) {
+            p.counts.set(17, 1);
+        }
+        return p;
+    }
+
+    private hasModifier(summary: string, modifier: string): bool {
+        if (summary == modifier) {
+            return true;
+        }
+        if (this.startsWithText(summary, modifier + " ")) {
+            return true;
+        }
+        if (this.containsText(summary, " " + modifier)) {
+            return true;
+        }
+        return false;
     }
 
     private containsText(text: string, needle: string): bool {

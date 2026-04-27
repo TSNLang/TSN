@@ -72,6 +72,12 @@ export class ClassMemberDecl {
     public kind: string;
     public name: string;
     public modifierSummary: string;
+    public isPublic: bool;
+    public isPrivate: bool;
+    public isProtected: bool;
+    public isStatic: bool;
+    public isAsync: bool;
+    public isConstructor: bool;
     public typeParamSummary: string;
     public typeParameters: Array<string>;
     public paramSummary: string;
@@ -81,10 +87,16 @@ export class ClassMemberDecl {
     public typeSummary: string;
     public typeText: string;
 
-    constructor(kind: string, name: string, modifierSummary: string, typeParamSummary: string, typeParameters: Array<string>, paramSummary: string, params: Array<ParameterInfo>, returnSummary: string, returnTypeText: string, typeSummary: string, typeText: string) {
+    constructor(kind: string, name: string, modifierSummary: string, isPublic: bool, isPrivate: bool, isProtected: bool, isStatic: bool, isAsync: bool, isConstructor: bool, typeParamSummary: string, typeParameters: Array<string>, paramSummary: string, params: Array<ParameterInfo>, returnSummary: string, returnTypeText: string, typeSummary: string, typeText: string) {
         this.kind = kind;
         this.name = name;
         this.modifierSummary = modifierSummary;
+        this.isPublic = isPublic;
+        this.isPrivate = isPrivate;
+        this.isProtected = isProtected;
+        this.isStatic = isStatic;
+        this.isAsync = isAsync;
+        this.isConstructor = isConstructor;
         this.typeParamSummary = typeParamSummary;
         this.typeParameters = typeParameters;
         this.paramSummary = paramSummary;
@@ -164,6 +176,8 @@ export class ImportParseResult {
 
 export class FunctionDeclInfo {
     public name: string;
+    public isExported: bool;
+    public isAsync: bool;
     public typeParamSummary: string;
     public paramSummary: string;
     public returnSummary: string;
@@ -173,8 +187,10 @@ export class FunctionDeclInfo {
     public paramCount: i32;
     public bracketCount: i32;
 
-    constructor(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string, typeParameters: Array<string>, params: Array<ParameterInfo>, returnTypeText: string, paramCount: i32, bracketCount: i32) {
+    constructor(name: string, isExported: bool, isAsync: bool, typeParamSummary: string, paramSummary: string, returnSummary: string, typeParameters: Array<string>, params: Array<ParameterInfo>, returnTypeText: string, paramCount: i32, bracketCount: i32) {
         this.name = name;
+        this.isExported = isExported;
+        this.isAsync = isAsync;
         this.typeParamSummary = typeParamSummary;
         this.paramSummary = paramSummary;
         this.returnSummary = returnSummary;
@@ -188,6 +204,7 @@ export class FunctionDeclInfo {
 
 export class ClassDeclInfo {
     public name: string;
+    public isExported: bool;
     public typeParamSummary: string;
     public typeParameters: Array<string>;
     public members: Array<ClassMemberDecl>;
@@ -201,8 +218,9 @@ export class ClassDeclInfo {
     public firstFieldName: string;
     public firstConstructorName: string;
 
-    constructor(name: string, typeParamSummary: string, typeParameters: Array<string>, members: Array<ClassMemberDecl>, fields: Array<ClassMemberDecl>, methods: Array<ClassMemberDecl>, constructorDecl: ClassMemberDecl, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string) {
+    constructor(name: string, isExported: bool, typeParamSummary: string, typeParameters: Array<string>, members: Array<ClassMemberDecl>, fields: Array<ClassMemberDecl>, methods: Array<ClassMemberDecl>, constructorDecl: ClassMemberDecl, methodCount: i32, fieldCount: i32, constructorCount: i32, firstMethodName: string, firstFieldName: string, firstConstructorName: string) {
         this.name = name;
+        this.isExported = isExported;
         this.typeParamSummary = typeParamSummary;
         this.typeParameters = typeParameters;
         this.members = members;
