@@ -1,0 +1,13 @@
+import { log } from "std:console";
+import { Some as makeSome, None as makeNone } from "std:option";
+
+function main(): i32 {
+    let value = makeSome<i32>(42);
+    let empty = makeNone<i32>();
+
+    if (value.isSome() && empty.isNone()) {
+        log("alias import ok");
+    }
+
+    return 0;
+}

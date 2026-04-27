@@ -307,10 +307,13 @@ export class Parser {
         let inNamedSpecifiers = false;
         let seenClauseToken = false;
         let pendingImported = "";
+        let pendingLocal = "";
+        let awaitingAliasLocal = false;
         let namespacePending = false;
 
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Semicolon)) {
+                this.flushPendingImportSpecifier(namedSpecifiers, pendingImported, pendingLocal);
                 let declaration = new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
                 let info = new ImportDeclInfo(clause, source, defaultImport, namespaceImport, new Array<ImportSpecifierInfo>());
                 let specifierIndex: i32 = 0;
@@ -327,7 +330,9 @@ export class Parser {
                 inSource = true;
                 inNamedSpecifiers = false;
                 namespacePending = false;
+                awaitingAliasLocal = false;
                 pendingImported = "";
+                pendingLocal = "";
                 this.advance();
                 continue;
             }
@@ -337,24 +342,33 @@ export class Parser {
                 if (token.kind == TokenKind.LBrace) {
                     inNamedSpecifiers = true;
                 } else if (token.kind == TokenKind.RBrace) {
-                    if (pendingImported != "") {
-                        namedSpecifiers.push(new ImportSpecifierInfo(pendingImported, pendingImported));
-                    }
+                    this.flushPendingImportSpecifier(namedSpecifiers, pendingImported, pendingLocal);
                     inNamedSpecifiers = false;
+                    awaitingAliasLocal = false;
                     pendingImported = "";
+                    pendingLocal = "";
                 } else if (inNamedSpecifiers) {
-                    if (token.kind == TokenKind.Identifier || token.kind == TokenKind.Star) {
-                        if (pendingImported == "") {
+                    if (token.kind == TokenKind.Identifier && token.lexeme == "as") {
+                        if (pendingImported != "") {
+                            awaitingAliasLocal = true;
+                        }
+                    } else if (token.kind == TokenKind.Identifier || token.kind == TokenKind.Star) {
+                        if (awaitingAliasLocal) {
+                            pendingLocal = token.lexeme;
+                            awaitingAliasLocal = false;
+                        } else if (pendingImported == "") {
                             pendingImported = token.lexeme;
+                            pendingLocal = token.lexeme;
                         } else {
-                            namedSpecifiers.push(new ImportSpecifierInfo(pendingImported, pendingImported));
+                            this.flushPendingImportSpecifier(namedSpecifiers, pendingImported, pendingLocal);
                             pendingImported = token.lexeme;
+                            pendingLocal = token.lexeme;
                         }
                     } else if (token.kind == TokenKind.Comma) {
-                        if (pendingImported != "") {
-                            namedSpecifiers.push(new ImportSpecifierInfo(pendingImported, pendingImported));
-                            pendingImported = "";
-                        }
+                        this.flushPendingImportSpecifier(namedSpecifiers, pendingImported, pendingLocal);
+                        pendingImported = "";
+                        pendingLocal = "";
+                        awaitingAliasLocal = false;
                     }
                 } else if (token.kind == TokenKind.Identifier) {
                     if (namespacePending) {
@@ -385,6 +399,7 @@ export class Parser {
             this.advance();
         }
 
+        this.flushPendingImportSpecifier(namedSpecifiers, pendingImported, pendingLocal);
         let declaration = new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
         let info = new ImportDeclInfo(clause, source, defaultImport, namespaceImport, new Array<ImportSpecifierInfo>());
         let specifierIndex: i32 = 0;
@@ -1084,6 +1099,18 @@ export class Parser {
 
     private buildParameterInfo(paramText: string): ParameterInfo {
         return new ParameterInfo(paramText, "", false);
+    }
+
+    private flushPendingImportSpecifier(namedSpecifiers: Array<ImportSpecifierInfo>, imported: string, local: string): void {
+        if (imported == "") {
+            return;
+        }
+
+        let finalLocal = local;
+        if (finalLocal == "") {
+            finalLocal = imported;
+        }
+        namedSpecifiers.push(new ImportSpecifierInfo(imported, finalLocal));
     }
 
     private createFunctionDeclInfo(name: string, typeParamSummary: string, paramSummary: string, returnSummary: string, paramCount: i32, bracketCount: i32): FunctionDeclInfo {

@@ -77,8 +77,12 @@ function parseFile(path: string): i32 {
                 log(program.importDecls.get(namedImportIndex).namedSpecifiers.length);
                 log("first multi named import first specifier imported");
                 log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(0).imported);
+                log("first multi named import first specifier local");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(0).local);
                 log("first multi named import second specifier imported");
                 log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(1).imported);
+                log("first multi named import second specifier local");
+                log(program.importDecls.get(namedImportIndex).namedSpecifiers.get(1).local);
                 foundMultiNamedImport = true;
             }
             namedImportIndex = namedImportIndex + 1;
@@ -156,6 +160,9 @@ function main(): i32 {
         return 1;
     }
     if (parseFile("examples/stdlib-generic-methods.tsn") != 0) {
+        return 1;
+    }
+    if (parseFile("examples/import-alias-smoke.tsn") != 0) {
         return 1;
     }
     return 0;
