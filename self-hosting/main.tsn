@@ -162,7 +162,13 @@ function parseFile(path: string): i32 {
         if (program.classDecls.get(0).methods.length > 0) {
             logBool("first class first method async flag", program.classDecls.get(0).methods.get(0).isAsync);
             logBool("first class first method static flag", program.classDecls.get(0).methods.get(0).isStatic);
+            logBool("first class first method has body", program.classDecls.get(0).methods.get(0).hasBody);
+            log("first class first method body statement count");
+            log(program.classDecls.get(0).methods.get(0).bodyStatementCount);
         }
+        logBool("first class constructor has body", program.classDecls.get(0).constructorDecl.hasBody);
+        log("first class constructor body statement count");
+        log(program.classDecls.get(0).constructorDecl.bodyStatementCount);
     }
     log("class count");
     log(program.counts.get(3));

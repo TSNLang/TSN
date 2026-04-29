@@ -607,6 +607,12 @@ export class Parser {
                 if (kind == TokenKind.Identifier || kind == TokenKind.Constructor) {
                     let member = this.parseClassMember(modifierState.summaries.get(11));
                     let memberFlags = this.parseModifierFlags(member.summaries.get(11));
+                    let memberStmtCount: i32 = member.counts.get(31);
+                    memberStmtCount = memberStmtCount + member.counts.get(32);
+                    memberStmtCount = memberStmtCount + member.counts.get(33);
+                    memberStmtCount = memberStmtCount + member.counts.get(34);
+                    memberStmtCount = memberStmtCount + member.counts.get(35);
+                    memberStmtCount = memberStmtCount + member.counts.get(36);
                     let memberDecl = new ClassMemberDecl(
                         member.summaries.get(12),
                         member.summaries.get(5),
@@ -624,7 +630,9 @@ export class Parser {
                         member.summaries.get(14),
                         this.extractTypeText(member.summaries.get(14)),
                         member.summaries.get(13),
-                        this.extractTypeText(member.summaries.get(13))
+                        this.extractTypeText(member.summaries.get(13)),
+                        memberStmtCount > 0,
+                        memberStmtCount
                     );
                     if (member.summaries.get(9) != "") {
                         let constructorFlags = this.parseModifierFlags(member.summaries.get(10));
@@ -645,7 +653,9 @@ export class Parser {
                             "",
                             "",
                             "",
-                            ""
+                            "",
+                            memberStmtCount > 0,
+                            memberStmtCount
                         );
                     } else if (member.summaries.get(7) != "") {
                         let fieldFlags = this.parseModifierFlags(member.summaries.get(11));
@@ -666,7 +676,9 @@ export class Parser {
                             "",
                             "",
                             member.summaries.get(13),
-                            this.extractTypeText(member.summaries.get(13))
+                            this.extractTypeText(member.summaries.get(13)),
+                            false,
+                            0
                         );
                     }
                     members.push(memberDecl);
@@ -932,6 +944,12 @@ export class Parser {
             p.counts.set(22, ampCount);
             p.counts.set(23, pipeCount);
             p.counts.set(24, assignCount);
+            p.counts.set(31, letCount);
+            p.counts.set(32, returnCount);
+            p.counts.set(33, ifCount);
+            p.counts.set(34, whileCount);
+            p.counts.set(35, forCount);
+            p.counts.set(36, assignCount);
 
             p.summaries.set(4, methodTypeParamSummary);
             p.summaries.set(5, firstMethodName);
@@ -1233,7 +1251,7 @@ export class Parser {
         let clonedFirstMethodName = this.sliceText(firstMethodName, 0, firstMethodName.length);
         let clonedFirstFieldName = this.sliceText(firstFieldName, 0, firstFieldName.length);
         let clonedFirstConstructorName = this.sliceText(firstConstructorName, 0, firstConstructorName.length);
-        let emptyConstructorDecl = new ClassMemberDecl("", "", "", false, false, false, false, false, false, "", new Array<string>(), "", new Array<ParameterInfo>(), "", "", "", "");
+        let emptyConstructorDecl = new ClassMemberDecl("", "", "", false, false, false, false, false, false, "", new Array<string>(), "", new Array<ParameterInfo>(), "", "", "", "", false, 0);
         let info = new ClassDeclInfo(clonedName, isExported, clonedTypeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), emptyConstructorDecl, methodCount, fieldCount, constructorCount, clonedFirstMethodName, clonedFirstFieldName, clonedFirstConstructorName);
         let typeParamIndex: i32 = 0;
         while (typeParamIndex < typeParameters.length) {
@@ -1256,7 +1274,7 @@ export class Parser {
             let clonedReturnTypeText = this.sliceText(sourceMember.returnTypeText, 0, sourceMember.returnTypeText.length);
             let clonedTypeText = this.sliceText(sourceMember.typeText, 0, sourceMember.typeText.length);
             let memberModifiers = this.parseModifierFlags(clonedModifierSummary);
-            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, memberModifiers.counts.get(13) > 0, memberModifiers.counts.get(14) > 0, memberModifiers.counts.get(15) > 0, memberModifiers.counts.get(16) > 0, memberModifiers.counts.get(17) > 0, this.hasMemberLabel(clonedKind, "constructor"), clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText));
+            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, memberModifiers.counts.get(13) > 0, memberModifiers.counts.get(14) > 0, memberModifiers.counts.get(15) > 0, memberModifiers.counts.get(16) > 0, memberModifiers.counts.get(17) > 0, this.hasMemberLabel(clonedKind, "constructor"), clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText, sourceMember.hasBody, sourceMember.bodyStatementCount));
             if (this.hasMemberLabel(clonedKind, "field")) {
                 info.fields.push(this.cloneClassMemberDecl(sourceMember));
             } else if (this.hasMemberLabel(clonedKind, "constructor")) {
@@ -1368,7 +1386,7 @@ export class Parser {
         let clonedReturnTypeText = this.sliceText(member.returnTypeText, 0, member.returnTypeText.length);
         let clonedTypeSummary = this.sliceText(member.typeSummary, 0, member.typeSummary.length);
         let clonedTypeText = this.sliceText(member.typeText, 0, member.typeText.length);
-        return new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, member.isPublic, member.isPrivate, member.isProtected, member.isStatic, member.isAsync, member.isConstructor, clonedTypeParamSummary, clonedTypeParameters, clonedParamSummary, clonedParams, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText);
+        return new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, member.isPublic, member.isPrivate, member.isProtected, member.isStatic, member.isAsync, member.isConstructor, clonedTypeParamSummary, clonedTypeParameters, clonedParamSummary, clonedParams, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText, member.hasBody, member.bodyStatementCount);
     }
 
     private parseModifierFlags(summary: string): Program {
@@ -1855,7 +1873,7 @@ export class Parser {
         let classDecls = new Array<ClassDeclInfo>();
         let counts = new Array<i32>();
         let i = 0;
-        while (i < 31) { counts.push(0); i = i + 1; }
+        while (i < 37) { counts.push(0); i = i + 1; }
         let summaries = new Array<string>();
         i = 0;
         while (i < 19) { summaries.push(""); i = i + 1; }

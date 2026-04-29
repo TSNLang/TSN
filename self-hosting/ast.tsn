@@ -86,8 +86,10 @@ export class ClassMemberDecl {
     public returnTypeText: string;
     public typeSummary: string;
     public typeText: string;
+    public hasBody: bool;
+    public bodyStatementCount: i32;
 
-    constructor(kind: string, name: string, modifierSummary: string, isPublic: bool, isPrivate: bool, isProtected: bool, isStatic: bool, isAsync: bool, isConstructor: bool, typeParamSummary: string, typeParameters: Array<string>, paramSummary: string, params: Array<ParameterInfo>, returnSummary: string, returnTypeText: string, typeSummary: string, typeText: string) {
+    constructor(kind: string, name: string, modifierSummary: string, isPublic: bool, isPrivate: bool, isProtected: bool, isStatic: bool, isAsync: bool, isConstructor: bool, typeParamSummary: string, typeParameters: Array<string>, paramSummary: string, params: Array<ParameterInfo>, returnSummary: string, returnTypeText: string, typeSummary: string, typeText: string, hasBody: bool, bodyStatementCount: i32) {
         this.kind = kind;
         this.name = name;
         this.modifierSummary = modifierSummary;
@@ -105,6 +107,8 @@ export class ClassMemberDecl {
         this.returnTypeText = returnTypeText;
         this.typeSummary = typeSummary;
         this.typeText = typeText;
+        this.hasBody = hasBody;
+        this.bodyStatementCount = bodyStatementCount;
     }
 }
 
