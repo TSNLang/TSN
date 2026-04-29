@@ -224,6 +224,18 @@ function parseFile(path: string): i32 {
     log(program.counts.get(23));
     log("assign count");
     log(program.counts.get(24));
+    log("call expr count");
+    log(program.counts.get(37));
+    log("first call expr summary");
+    log(program.summaries.get(19));
+    log("member expr count");
+    log(program.counts.get(38));
+    log("first member expr summary");
+    log(program.summaries.get(20));
+    log("binary expr count");
+    log(program.counts.get(39));
+    log("first binary expr summary");
+    log(program.summaries.get(21));
     if (program.classMembers.length > 0) {
         log("first class member kind");
         log(program.classMembers.get(0).kind);
@@ -237,10 +249,22 @@ function main(): i32 {
     if (parseFile("self-hosting/parser.tsn") != 0) {
         return 1;
     }
+    if (parseFile("self-hosting/lexer.tsn") != 0) {
+        return 1;
+    }
+    if (parseFile("self-hosting/ast.tsn") != 0) {
+        return 1;
+    }
+    if (parseFile("self-hosting/main.tsn") != 0) {
+        return 1;
+    }
     if (parseFile("examples/rest-params-smoke.tsn") != 0) {
         return 1;
     }
     if (parseFile("examples/nested-generic-smoke.tsn") != 0) {
+        return 1;
+    }
+    if (parseFile("examples/call-summary-smoke.tsn") != 0) {
         return 1;
     }
     if (parseFile("examples/stdlib-generic-methods.tsn") != 0) {

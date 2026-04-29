@@ -38,6 +38,12 @@ export class Parser {
         let ampCount: i32 = 0;
         let pipeCount: i32 = 0;
         let assignCount: i32 = 0;
+        let callCount: i32 = 0;
+        let memberExprCount: i32 = 0;
+        let binaryExprCount: i32 = 0;
+        let firstCallSummary = "";
+        let firstMemberExprSummary = "";
+        let firstBinaryExprSummary = "";
         let firstFunctionName = "";
         let firstFunctionTypeParamSummary = "";
         let firstClassName = "";
@@ -104,6 +110,18 @@ export class Parser {
                 ampCount = ampCount + body.counts.get(22);
                 pipeCount = pipeCount + body.counts.get(23);
                 assignCount = assignCount + body.counts.get(24);
+                callCount = callCount + body.counts.get(37);
+                memberExprCount = memberExprCount + body.counts.get(38);
+                binaryExprCount = binaryExprCount + body.counts.get(39);
+                if (firstCallSummary == "" && body.summaries.get(19) != "") {
+                    firstCallSummary = body.summaries.get(19);
+                }
+                if (firstMemberExprSummary == "" && body.summaries.get(20) != "") {
+                    firstMemberExprSummary = body.summaries.get(20);
+                }
+                if (firstBinaryExprSummary == "" && body.summaries.get(21) != "") {
+                    firstBinaryExprSummary = body.summaries.get(21);
+                }
                 if (firstFunctionName == "") {
                     firstFunctionName = body.summaries.get(0);
                 }
@@ -150,6 +168,18 @@ export class Parser {
                 ampCount = ampCount + body.counts.get(22);
                 pipeCount = pipeCount + body.counts.get(23);
                 assignCount = assignCount + body.counts.get(24);
+                callCount = callCount + body.counts.get(37);
+                memberExprCount = memberExprCount + body.counts.get(38);
+                binaryExprCount = binaryExprCount + body.counts.get(39);
+                if (firstCallSummary == "" && body.summaries.get(19) != "") {
+                    firstCallSummary = body.summaries.get(19);
+                }
+                if (firstMemberExprSummary == "" && body.summaries.get(20) != "") {
+                    firstMemberExprSummary = body.summaries.get(20);
+                }
+                if (firstBinaryExprSummary == "" && body.summaries.get(21) != "") {
+                    firstBinaryExprSummary = body.summaries.get(21);
+                }
                 if (firstClassName == "") {
                     firstClassName = body.summaries.get(2);
                 }
@@ -277,6 +307,9 @@ export class Parser {
         p.counts.set(22, ampCount);
         p.counts.set(23, pipeCount);
         p.counts.set(24, assignCount);
+        p.counts.set(37, callCount);
+        p.counts.set(38, memberExprCount);
+        p.counts.set(39, binaryExprCount);
 
         p.summaries.set(0, firstFunctionName);
         p.summaries.set(1, firstFunctionTypeParamSummary);
@@ -297,6 +330,9 @@ export class Parser {
         p.summaries.set(16, firstConstructorParamSummary);
         p.summaries.set(17, firstFunctionParamSummary);
         p.summaries.set(18, firstFunctionReturnSummary);
+        p.summaries.set(19, firstCallSummary);
+        p.summaries.set(20, firstMemberExprSummary);
+        p.summaries.set(21, firstBinaryExprSummary);
 
         return p;
     }
@@ -455,6 +491,12 @@ export class Parser {
         let ampCount: i32 = 0;
         let pipeCount: i32 = 0;
         let assignCount: i32 = 0;
+        let callCount: i32 = 0;
+        let memberExprCount: i32 = 0;
+        let binaryExprCount: i32 = 0;
+        let firstCallSummary = "";
+        let firstMemberExprSummary = "";
+        let firstBinaryExprSummary = "";
         let functionTypeParamSummary = "";
         let functionParamSummary = "";
         let functionReturnSummary = "";
@@ -493,6 +535,12 @@ export class Parser {
             ampCount = body.counts.get(22);
             pipeCount = body.counts.get(23);
             assignCount = body.counts.get(24);
+            callCount = body.counts.get(37);
+            memberExprCount = body.counts.get(38);
+            binaryExprCount = body.counts.get(39);
+            firstCallSummary = body.summaries.get(19);
+            firstMemberExprSummary = body.summaries.get(20);
+            firstBinaryExprSummary = body.summaries.get(21);
         }
 
         let p = this.createEmptyProgram();
@@ -509,11 +557,17 @@ export class Parser {
         p.counts.set(22, ampCount);
         p.counts.set(23, pipeCount);
         p.counts.set(24, assignCount);
+        p.counts.set(37, callCount);
+        p.counts.set(38, memberExprCount);
+        p.counts.set(39, binaryExprCount);
 
         p.summaries.set(0, functionName);
         p.summaries.set(1, functionTypeParamSummary);
         p.summaries.set(17, functionParamSummary);
         p.summaries.set(18, functionReturnSummary);
+        p.summaries.set(19, firstCallSummary);
+        p.summaries.set(20, firstMemberExprSummary);
+        p.summaries.set(21, firstBinaryExprSummary);
         p.counts.set(25, letCount);
         p.counts.set(26, returnCount);
         p.counts.set(27, ifCount);
@@ -548,6 +602,12 @@ export class Parser {
         let ampCount: i32 = 0;
         let pipeCount: i32 = 0;
         let assignCount: i32 = 0;
+        let callCount: i32 = 0;
+        let memberExprCount: i32 = 0;
+        let binaryExprCount: i32 = 0;
+        let firstCallSummary = "";
+        let firstMemberExprSummary = "";
+        let firstBinaryExprSummary = "";
         let firstMethodTypeParamSummary = "";
         let firstMethodName = "";
         let firstMethodModifierSummary = "";
@@ -716,6 +776,18 @@ export class Parser {
                     ampCount = ampCount + member.counts.get(22);
                     pipeCount = pipeCount + member.counts.get(23);
                     assignCount = assignCount + member.counts.get(24);
+                    callCount = callCount + member.counts.get(37);
+                    memberExprCount = memberExprCount + member.counts.get(38);
+                    binaryExprCount = binaryExprCount + member.counts.get(39);
+                    if (firstCallSummary == "" && member.summaries.get(19) != "") {
+                        firstCallSummary = member.summaries.get(19);
+                    }
+                    if (firstMemberExprSummary == "" && member.summaries.get(20) != "") {
+                        firstMemberExprSummary = member.summaries.get(20);
+                    }
+                    if (firstBinaryExprSummary == "" && member.summaries.get(21) != "") {
+                        firstBinaryExprSummary = member.summaries.get(21);
+                    }
                     if (firstMethodTypeParamSummary == "" && member.summaries.get(4) != "") {
                         firstMethodTypeParamSummary = member.summaries.get(4);
                     }
@@ -789,6 +861,9 @@ export class Parser {
         p.counts.set(22, ampCount);
         p.counts.set(23, pipeCount);
         p.counts.set(24, assignCount);
+        p.counts.set(37, callCount);
+        p.counts.set(38, memberExprCount);
+        p.counts.set(39, binaryExprCount);
 
         p.summaries.set(2, className);
         p.summaries.set(3, classTypeParamSummary);
@@ -805,6 +880,9 @@ export class Parser {
         p.summaries.set(14, firstMethodReturnSummary);
         p.summaries.set(15, firstMethodParamSummary);
         p.summaries.set(16, firstConstructorParamSummary);
+        p.summaries.set(19, firstCallSummary);
+        p.summaries.set(20, firstMemberExprSummary);
+        p.summaries.set(21, firstBinaryExprSummary);
 
         return p;
     }
@@ -895,6 +973,12 @@ export class Parser {
             let ampCount: i32 = 0;
             let pipeCount: i32 = 0;
             let assignCount: i32 = 0;
+            let callCount: i32 = 0;
+            let memberExprCount: i32 = 0;
+            let binaryExprCount: i32 = 0;
+            let firstCallSummary = "";
+            let firstMemberExprSummary = "";
+            let firstBinaryExprSummary = "";
             let firstMethodName = memberName;
             let firstConstructorName = "";
             let firstConstructorParamSummary = "";
@@ -925,6 +1009,12 @@ export class Parser {
                 ampCount = body.counts.get(22);
                 pipeCount = body.counts.get(23);
                 assignCount = body.counts.get(24);
+                callCount = body.counts.get(37);
+                memberExprCount = body.counts.get(38);
+                binaryExprCount = body.counts.get(39);
+                firstCallSummary = body.summaries.get(19);
+                firstMemberExprSummary = body.summaries.get(20);
+                firstBinaryExprSummary = body.summaries.get(21);
             }
 
             bracketCount = bracketCount + signatureBracketCount;
@@ -963,6 +1053,10 @@ export class Parser {
             p.counts.set(23, pipeCount);
             p.counts.set(24, assignCount);
             p.counts.set(31, letCount);
+            p.counts.set(37, callCount);
+            p.counts.set(38, memberExprCount);
+            p.counts.set(39, binaryExprCount);
+            p.counts.set(31, letCount);
             p.counts.set(32, returnCount);
             p.counts.set(33, ifCount);
             p.counts.set(34, whileCount);
@@ -979,6 +1073,9 @@ export class Parser {
             p.summaries.set(14, methodReturnSummary);
             p.summaries.set(15, paramSummary);
             p.summaries.set(16, firstConstructorParamSummary);
+            p.summaries.set(19, firstCallSummary);
+            p.summaries.set(20, firstMemberExprSummary);
+            p.summaries.set(21, firstBinaryExprSummary);
 
             return p;
         }
@@ -1720,6 +1817,12 @@ export class Parser {
         let ampCount: i32 = 0;
         let pipeCount: i32 = 0;
         let assignCount: i32 = 0;
+        let callCount: i32 = 0;
+        let memberExprCount: i32 = 0;
+        let binaryExprCount: i32 = 0;
+        let firstCallSummary = "";
+        let firstMemberExprSummary = "";
+        let firstBinaryExprSummary = "";
 
         while (!this.isAtEnd() && depth > 0) {
             let kind = this.peek().kind;
@@ -1770,8 +1873,15 @@ export class Parser {
                 continue;
             }
             if (depth > 0 && kind == TokenKind.Dot) {
+                let objectText = this.describeTokenBack(1);
                 this.advance();
                 dotCount = dotCount + 1;
+                if (!this.isAtEnd() && this.peek().kind == TokenKind.Identifier) {
+                    memberExprCount = memberExprCount + 1;
+                    if (firstMemberExprSummary == "") {
+                        firstMemberExprSummary = this.describeMemberExpr(objectText);
+                    }
+                }
                 continue;
             }
             if (depth > 0 && kind == TokenKind.LBracket) {
@@ -1779,19 +1889,41 @@ export class Parser {
                 bracketCount = bracketCount + 1;
                 continue;
             }
+            if (depth > 0 && kind == TokenKind.LParen) {
+                if (this.isCallStart()) {
+                    callCount = callCount + 1;
+                    if (firstCallSummary == "") {
+                        firstCallSummary = this.describeCallExpr();
+                    }
+                }
+                this.advance();
+                continue;
+            }
             if (depth > 0 && kind == TokenKind.Amp) {
+                if (firstBinaryExprSummary == "") {
+                    firstBinaryExprSummary = this.describeBinaryExpr();
+                }
                 this.advance();
                 ampCount = ampCount + 1;
+                binaryExprCount = binaryExprCount + 1;
                 continue;
             }
             if (depth > 0 && kind == TokenKind.Pipe) {
+                if (firstBinaryExprSummary == "") {
+                    firstBinaryExprSummary = this.describeBinaryExpr();
+                }
                 this.advance();
                 pipeCount = pipeCount + 1;
+                binaryExprCount = binaryExprCount + 1;
                 continue;
             }
             if (depth > 0 && kind == TokenKind.Equal) {
+                if (firstBinaryExprSummary == "") {
+                    firstBinaryExprSummary = this.describeBinaryExpr();
+                }
                 this.advance();
                 assignCount = assignCount + 1;
+                binaryExprCount = binaryExprCount + 1;
                 continue;
             }
 
@@ -1811,6 +1943,12 @@ export class Parser {
         p.counts.set(22, ampCount);
         p.counts.set(23, pipeCount);
         p.counts.set(24, assignCount);
+        p.counts.set(37, callCount);
+        p.counts.set(38, memberExprCount);
+        p.counts.set(39, binaryExprCount);
+        p.summaries.set(19, firstCallSummary);
+        p.summaries.set(20, firstMemberExprSummary);
+        p.summaries.set(21, firstBinaryExprSummary);
         return p;
     }
 
@@ -1844,6 +1982,245 @@ export class Parser {
             }
             this.advance();
         }
+    }
+
+    private describeCallExpr(): string {
+        let callee = this.describeCallCallee();
+        if (callee == "") {
+            return "call (?)";
+        }
+        return "call " + callee + "(...)";
+    }
+
+    private describeCallCallee(): string {
+        let prevKind = this.peekBackKind(1);
+        if (prevKind == TokenKind.Identifier) {
+            let callee = this.peekBackLexeme(1);
+            if (this.peekBackKind(2) == TokenKind.Dot) {
+                let objectText = this.describeTokenBack(3);
+                if (objectText != "") {
+                    return objectText + "." + callee;
+                }
+            }
+            if (this.peekBackKind(2) == TokenKind.Greater) {
+                let genericBase = this.describeGenericCallBase(3);
+                if (genericBase != "") {
+                    return genericBase + "<...>";
+                }
+            }
+            return callee;
+        }
+        if (prevKind == TokenKind.RBracket) {
+            let indexBase = this.describeIndexedCallBase(2);
+            if (indexBase != "") {
+                return indexBase + "[...]";
+            }
+            return "[...]";
+        }
+        if (prevKind == TokenKind.RParen) {
+            if (this.peekBackKind(2) == TokenKind.Dot) {
+                let objectText = this.describeTokenBack(3);
+                if (objectText != "") {
+                    return objectText + ".(...)";
+                }
+            }
+            return "(...)";
+        }
+        if (prevKind == TokenKind.This) {
+            return "this";
+        }
+        return this.describeTokenBack(1);
+    }
+
+    private describeGenericCallBase(distance: i32): string {
+        let currentDistance = distance;
+        let depth: i32 = 1;
+
+        while (currentDistance <= this.pos) {
+            let kind = this.peekBackKind(currentDistance);
+            if (kind == TokenKind.Greater) {
+                depth = depth + 1;
+            } else if (kind == TokenKind.Less) {
+                depth = depth - 1;
+                if (depth == 0) {
+                    let baseKind = this.peekBackKind(currentDistance + 1);
+                    if (baseKind == TokenKind.Identifier) {
+                        let baseName = this.peekBackLexeme(currentDistance + 1);
+                        if (this.peekBackKind(currentDistance + 2) == TokenKind.Dot) {
+                            let objectText = this.describeTokenBack(currentDistance + 3);
+                            if (objectText != "") {
+                                return objectText + "." + baseName;
+                            }
+                        }
+                        return baseName;
+                    }
+                    return "";
+                }
+            }
+            currentDistance = currentDistance + 1;
+        }
+
+        return "";
+    }
+
+    private describeIndexedCallBase(distance: i32): string {
+        let currentDistance = distance;
+        let depth: i32 = 1;
+
+        while (currentDistance <= this.pos) {
+            let kind = this.peekBackKind(currentDistance);
+            if (kind == TokenKind.RBracket) {
+                depth = depth + 1;
+            } else if (kind == TokenKind.LBracket) {
+                depth = depth - 1;
+                if (depth == 0) {
+                    return this.describeTokenBack(currentDistance + 1);
+                }
+            }
+            currentDistance = currentDistance + 1;
+        }
+
+        return "";
+    }
+
+    private describeMemberExpr(objectText: string): string {
+        let memberText = this.describeTokenForward(0);
+        if (objectText == "" || memberText == "") {
+            return "member ?. ?";
+        }
+        return "member " + objectText + "." + memberText;
+    }
+
+    private describeBinaryExpr(): string {
+        let leftText = this.describeTokenBack(1);
+        let operatorText = this.peek().lexeme;
+        let rightText = this.describeTokenForward(1);
+        if (leftText == "") {
+            leftText = "?";
+        }
+        if (operatorText == "") {
+            operatorText = "?";
+        }
+        if (rightText == "") {
+            rightText = "?";
+        }
+        return "binary " + leftText + " " + operatorText + " " + rightText;
+    }
+
+    private describeTokenBack(distance: i32): string {
+        let kind = this.peekBackKind(distance);
+        if (kind == TokenKind.Identifier || kind == TokenKind.Number || kind == TokenKind.String) {
+            return this.peekBackLexeme(distance);
+        }
+        if (kind == TokenKind.This) {
+            return "this";
+        }
+        if (kind == TokenKind.RParen) {
+            return "(...)";
+        }
+        if (kind == TokenKind.RBracket) {
+            return "[...]";
+        }
+        return "";
+    }
+
+    private describeTokenForward(distance: i32): string {
+        let kind = this.peekForwardKind(distance);
+        if (kind == TokenKind.Identifier || kind == TokenKind.Number || kind == TokenKind.String) {
+            return this.peekForwardLexeme(distance);
+        }
+        if (kind == TokenKind.This) {
+            return "this";
+        }
+        if (kind == TokenKind.LParen) {
+            return "(...)";
+        }
+        if (kind == TokenKind.LBracket) {
+            return "[...]";
+        }
+        return "";
+    }
+
+    private isCallStart(): bool {
+        if (this.pos == 0) {
+            return false;
+        }
+
+        let prevKind = this.previous().kind;
+        if (prevKind == TokenKind.Identifier) {
+            return true;
+        }
+        if (prevKind == TokenKind.RBracket) {
+            return true;
+        }
+        if (prevKind == TokenKind.This) {
+            return true;
+        }
+        if (prevKind == TokenKind.RParen) {
+            let beforePrevKind = this.peekBackKind(2);
+            if (beforePrevKind == TokenKind.If) {
+                return false;
+            }
+            if (beforePrevKind == TokenKind.While) {
+                return false;
+            }
+            if (beforePrevKind == TokenKind.For) {
+                return false;
+            }
+            if (beforePrevKind == TokenKind.Return) {
+                return false;
+            }
+            return beforePrevKind != TokenKind.Function;
+        }
+        return false;
+    }
+
+    private peekBackKind(distance: i32): i32 {
+        if (distance <= 0) {
+            return TokenKind.Unknown;
+        }
+
+        let index = this.pos - distance;
+        if (index < 0 || index >= this.tokens.length) {
+            return TokenKind.Unknown;
+        }
+        return this.tokens.get(index).kind;
+    }
+
+    private peekBackLexeme(distance: i32): string {
+        if (distance <= 0) {
+            return "";
+        }
+
+        let index = this.pos - distance;
+        if (index < 0 || index >= this.tokens.length) {
+            return "";
+        }
+        return this.tokens.get(index).lexeme;
+    }
+
+    private peekForwardKind(distance: i32): i32 {
+        if (distance < 0) {
+            return TokenKind.Unknown;
+        }
+
+        let index = this.pos + distance;
+        if (index < 0 || index >= this.tokens.length) {
+            return TokenKind.Unknown;
+        }
+        return this.tokens.get(index).kind;
+    }
+
+    private peekForwardLexeme(distance: i32): string {
+        if (distance < 0) {
+            return "";
+        }
+
+        let index = this.pos + distance;
+        if (index < 0 || index >= this.tokens.length) {
+            return "";
+        }
+        return this.tokens.get(index).lexeme;
     }
 
     private matchKind(kind: i32): bool {
@@ -1891,10 +2268,10 @@ export class Parser {
         let classDecls = new Array<ClassDeclInfo>();
         let counts = new Array<i32>();
         let i = 0;
-        while (i < 37) { counts.push(0); i = i + 1; }
+        while (i < 40) { counts.push(0); i = i + 1; }
         let summaries = new Array<string>();
         i = 0;
-        while (i < 19) { summaries.push(""); i = i + 1; }
+        while (i < 22) { summaries.push(""); i = i + 1; }
         return new Program(declarations, classMembers, importDecls, functionDecls, classDecls, counts, summaries);
     }
 }

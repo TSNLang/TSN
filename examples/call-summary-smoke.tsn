@@ -1,0 +1,17 @@
+function build<T>(value: T): T {
+    return value;
+}
+
+function makeFactory(): i32 {
+    return 1;
+}
+
+function main(): i32 {
+    let genericValue = build<i32>(1);
+    let chainedValue = build<i32>(build<i32>(2));
+    let indexedValue = handlers[0](genericValue);
+    let chainedIndexedValue = registry.items[1](chainedValue);
+    let groupedValue = factory()(indexedValue);
+    let mixedValue = registry.builders[0]<i32>(groupedValue);
+    return mixedValue;
+}
