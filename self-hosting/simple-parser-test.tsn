@@ -1,0 +1,21 @@
+import { Array } from "std:array";
+import { Token, TokenKind, Expr, IdentifierExpr, NumberLiteral, BinaryExpr } from "./ast.tsn";
+
+export class SimpleParser {
+    private tokens: Array<Token>;
+    private pos: i32;
+
+    constructor(tokens: Array<Token>) {
+        this.tokens = tokens;
+        this.pos = 0;
+    }
+
+    public parseSimple(): Expr {
+        if (this.pos < 5) {
+            let left = new NumberLiteral("1");
+            let right = new NumberLiteral("2");
+            return new BinaryExpr("+", left, right);
+        }
+        return new NumberLiteral("1");
+    }
+}

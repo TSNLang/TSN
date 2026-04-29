@@ -501,3 +501,311 @@ export class ExprStmtInfo {
         this.exprText = exprText;
     }
 }
+
+// AST Node Types
+
+export class ASTNode {
+    public kind: string;
+
+    constructor(kind: string) {
+        this.kind = kind;
+    }
+}
+
+export class Expr extends ASTNode {
+    constructor(kind: string) {
+        super(kind);
+    }
+}
+
+export class Stmt extends ASTNode {
+    constructor(kind: string) {
+        super(kind);
+    }
+}
+
+export class Decl extends ASTNode {
+    constructor(kind: string) {
+        super(kind);
+    }
+}
+
+// Expression Nodes
+
+export class IdentifierExpr extends Expr {
+    public name: string;
+
+    constructor(name: string) {
+        super("Identifier");
+        this.name = name;
+    }
+}
+
+export class NumberLiteral extends Expr {
+    public value: string;
+
+    constructor(value: string) {
+        super("NumberLiteral");
+        this.value = value;
+    }
+}
+
+export class StringLiteral extends Expr {
+    public value: string;
+
+    constructor(value: string) {
+        super("StringLiteral");
+        this.value = value;
+    }
+}
+
+export class BooleanLiteral extends Expr {
+    public value: bool;
+
+    constructor(value: bool) {
+        super("BooleanLiteral");
+        this.value = value;
+    }
+}
+
+export class BinaryExpr extends Expr {
+    public operator: string;
+    public left: Expr;
+    public right: Expr;
+
+    constructor(operator: string, left: Expr, right: Expr) {
+        super("BinaryExpr");
+        this.operator = operator;
+        this.left = left;
+        this.right = right;
+    }
+}
+
+export class UnaryExpr extends Expr {
+    public operator: string;
+    public operand: Expr;
+    public isPrefix: bool;
+
+    constructor(operator: string, operand: Expr, isPrefix: bool) {
+        super("UnaryExpr");
+        this.operator = operator;
+        this.operand = operand;
+        this.isPrefix = isPrefix;
+    }
+}
+
+export class CallExpr extends Expr {
+    public callee: Expr;
+    public args: Array<Expr>;
+    public typeArgs: Array<string>;
+
+    constructor(callee: Expr, args: Array<Expr>, typeArgs: Array<string>) {
+        super("CallExpr");
+        this.callee = callee;
+        this.args = args;
+        this.typeArgs = typeArgs;
+    }
+}
+
+export class MemberExpr extends Expr {
+    public object: Expr;
+    public member: string;
+
+    constructor(object: Expr, member: string) {
+        super("MemberExpr");
+        this.object = object;
+        this.member = member;
+    }
+}
+
+export class IndexExpr extends Expr {
+    public base: Expr;
+    public index: Expr;
+
+    constructor(base: Expr, index: Expr) {
+        super("IndexExpr");
+        this.base = base;
+        this.index = index;
+    }
+}
+
+export class NewExpr extends Expr {
+    public className: string;
+    public args: Array<Expr>;
+    public typeArgs: Array<string>;
+
+    constructor(className: string, args: Array<Expr>, typeArgs: Array<string>) {
+        super("NewExpr");
+        this.className = className;
+        this.args = args;
+        this.typeArgs = typeArgs;
+    }
+}
+
+export class ArrayLiteral extends Expr {
+    public elements: Array<Expr>;
+
+    constructor(elements: Array<Expr>) {
+        super("ArrayLiteral");
+        this.elements = elements;
+    }
+}
+
+export class ThisExpr extends Expr {
+    constructor() {
+        super("ThisExpr");
+    }
+}
+
+// Statement Nodes
+
+export class BlockStmt extends Stmt {
+    public statements: Array<Stmt>;
+
+    constructor(statements: Array<Stmt>) {
+        super("BlockStmt");
+        this.statements = statements;
+    }
+}
+
+export class ExprStmt extends Stmt {
+    public expr: Expr;
+
+    constructor(expr: Expr) {
+        super("ExprStmt");
+        this.expr = expr;
+    }
+}
+
+export class VarDeclStmt extends Stmt {
+    public name: string;
+    public typeText: string;
+    public init: Expr;
+    public isConst: bool;
+
+    constructor(name: string, typeText: string, init: Expr, isConst: bool) {
+        super("VarDeclStmt");
+        this.name = name;
+        this.typeText = typeText;
+        this.init = init;
+        this.isConst = isConst;
+    }
+}
+
+export class ReturnStmt extends Stmt {
+    public value: Expr;
+
+    constructor(value: Expr) {
+        super("ReturnStmt");
+        this.value = value;
+    }
+}
+
+export class IfStmt extends Stmt {
+    public condition: Expr;
+    public thenBranch: Stmt;
+    public elseBranch: Stmt;
+
+    constructor(condition: Expr, thenBranch: Stmt, elseBranch: Stmt) {
+        super("IfStmt");
+        this.condition = condition;
+        this.thenBranch = thenBranch;
+        this.elseBranch = elseBranch;
+    }
+}
+
+export class WhileStmt extends Stmt {
+    public condition: Expr;
+    public body: Stmt;
+
+    constructor(condition: Expr, body: Stmt) {
+        super("WhileStmt");
+        this.condition = condition;
+        this.body = body;
+    }
+}
+
+export class ForStmt extends Stmt {
+    public init: Stmt;
+    public condition: Expr;
+    public update: Expr;
+    public body: Stmt;
+
+    constructor(init: Stmt, condition: Expr, update: Expr, body: Stmt) {
+        super("ForStmt");
+        this.init = init;
+        this.condition = condition;
+        this.update = update;
+        this.body = body;
+    }
+}
+
+// Declaration Nodes
+
+export class FunctionDecl extends Decl {
+    public name: string;
+    public params: Array<ParameterInfo>;
+    public returnType: string;
+    public body: BlockStmt;
+    public typeParams: Array<string>;
+    public isExported: bool;
+    public isAsync: bool;
+
+    constructor(name: string, params: Array<ParameterInfo>, returnType: string, body: BlockStmt, typeParams: Array<string>, isExported: bool, isAsync: bool) {
+        super("FunctionDecl");
+        this.name = name;
+        this.params = params;
+        this.returnType = returnType;
+        this.body = body;
+        this.typeParams = typeParams;
+        this.isExported = isExported;
+        this.isAsync = isAsync;
+    }
+}
+
+export class ClassDecl extends Decl {
+    public name: string;
+    public members: Array<ClassMemberDecl>;
+    public typeParams: Array<string>;
+    public isExported: bool;
+
+    constructor(name: string, members: Array<ClassMemberDecl>, typeParams: Array<string>, isExported: bool) {
+        super("ClassDecl");
+        this.name = name;
+        this.members = members;
+        this.typeParams = typeParams;
+        this.isExported = isExported;
+    }
+}
+
+export class ImportDecl extends Decl {
+    public source: string;
+    public defaultImport: string;
+    public namespaceImport: string;
+    public namedImports: Array<ImportSpecifierInfo>;
+
+    constructor(source: string, defaultImport: string, namespaceImport: string, namedImports: Array<ImportSpecifierInfo>) {
+        super("ImportDecl");
+        this.source = source;
+        this.defaultImport = defaultImport;
+        this.namespaceImport = namespaceImport;
+        this.namedImports = namedImports;
+    }
+}
+
+export class ExportDecl extends Decl {
+    public declaration: Decl;
+
+    constructor(declaration: Decl) {
+        super("ExportDecl");
+        this.declaration = declaration;
+    }
+}
+
+export class ASTProgram {
+    public declarations: Array<Decl>;
+
+    constructor(declarations: Array<Decl>) {
+        this.declarations = declarations;
+    }
+}

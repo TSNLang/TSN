@@ -228,6 +228,10 @@ function parseFile(path: string): i32 {
     log(program.counts.get(37));
     log("first call expr summary");
     log(program.summaries.get(19));
+    log("second call expr summary");
+    log(program.summaries.get(22));
+    log("third call expr summary");
+    log(program.summaries.get(23));
     log("member expr count");
     log(program.counts.get(38));
     log("first member expr summary");

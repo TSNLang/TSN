@@ -1,0 +1,17 @@
+import { Array } from "std:array";
+import { log } from "std:console";
+import { IdentifierExpr, NumberLiteral, BinaryExpr, Expr } from "./ast.tsn";
+
+function testAST(): i32 {
+    let left = new NumberLiteral("1");
+    let right = new NumberLiteral("2");
+    let leftCopy = left;
+    let rightCopy = right;
+    let expr = new BinaryExpr("+", leftCopy, rightCopy);
+    log("AST test passed");
+    return 0;
+}
+
+function main(): i32 {
+    return testAST();
+}

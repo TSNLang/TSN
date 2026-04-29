@@ -1,0 +1,515 @@
+import { Array } from "std:array";
+import { Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr, ParameterInfo, ImportSpecifierInfo, ClassMemberDecl } from "./ast.tsn";
+
+export class ASTParser {
+    private tokens: Array<Token>;
+    private pos: i32;
+
+    constructor(tokens: Array<Token>) {
+        this.tokens = tokens;
+        this.pos = 0;
+    }
+
+    public parse(): ASTProgram {
+        let declarations = new Array<Decl>();
+        while (!this.isAtEnd()) {
+            let decl = this.parseDeclaration();
+            declarations.push(decl);
+        }
+        return new ASTProgram(declarations);
+    }
+
+    private parseDeclaration(): Decl {
+        if (this.matchKind(TokenKind.Import)) {
+            return this.parseImportDecl();
+        }
+        let isExported = this.matchKind(TokenKind.Export);
+        if (this.matchKind(TokenKind.Function)) {
+            return this.parseFunctionDecl(isExported);
+        }
+        if (this.matchKind(TokenKind.Class)) {
+            return this.parseClassDecl(isExported);
+        }
+        this.advance();
+        return new ImportDecl("", "", "", new Array<ImportSpecifierInfo>());
+    }
+
+    private parseImportDecl(): ImportDecl {
+        let defaultImport = "";
+        let namespaceImport = "";
+        let namedImports = new Array<ImportSpecifierInfo>();
+        
+        if (this.peek().kind == TokenKind.Identifier) {
+            defaultImport = this.advance().lexeme;
+            if (this.matchKind(TokenKind.Comma)) {
+            }
+        }
+        
+        if (this.matchKind(TokenKind.LBrace)) {
+            while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+                let imported = this.advance().lexeme;
+                let local = imported;
+                namedImports.push(new ImportSpecifierInfo(imported, local));
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.RBrace);
+        }
+        
+        this.matchKind(TokenKind.From);
+        let source = "";
+        if (this.peek().kind == TokenKind.String) {
+            source = this.advance().lexeme;
+        }
+        
+        return new ImportDecl(source, defaultImport, namespaceImport, namedImports);
+    }
+
+    private parseFunctionDecl(isExported: bool): FunctionDecl {
+        let name = "";
+        if (this.peek().kind == TokenKind.Identifier) {
+            name = this.advance().lexeme;
+        }
+        
+        let typeParams = new Array<string>();
+        if (this.matchKind(TokenKind.Less)) {
+            while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
+                if (this.peek().kind == TokenKind.Identifier) {
+                    typeParams.push(this.advance().lexeme);
+                }
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.Greater);
+        }
+        
+        let params = new Array<ParameterInfo>();
+        if (this.matchKind(TokenKind.LParen)) {
+            while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                let paramName = "";
+                if (this.peek().kind == TokenKind.Identifier) {
+                    paramName = this.advance().lexeme;
+                }
+                let paramType = "";
+                if (this.matchKind(TokenKind.Colon)) {
+                    paramType = this.parseTypeText();
+                }
+                params.push(new ParameterInfo(paramName, paramType, false));
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.RParen);
+        }
+        
+        let returnType = "";
+        if (this.matchKind(TokenKind.Colon)) {
+            returnType = this.parseTypeText();
+        }
+        
+        let body = this.parseBlockStmt();
+        
+        return new FunctionDecl(name, params, returnType, body, typeParams, isExported, false);
+    }
+
+    private parseClassDecl(isExported: bool): ClassDecl {
+        let name = "";
+        if (this.peek().kind == TokenKind.Identifier) {
+            name = this.advance().lexeme;
+        }
+        
+        let typeParams = new Array<string>();
+        if (this.matchKind(TokenKind.Less)) {
+            while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
+                if (this.peek().kind == TokenKind.Identifier) {
+                    typeParams.push(this.advance().lexeme);
+                }
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.Greater);
+        }
+        
+        let members = new Array<ClassMemberDecl>();
+        if (this.matchKind(TokenKind.LBrace)) {
+            while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+                this.skipClassMember();
+            }
+            this.matchKind(TokenKind.RBrace);
+        }
+        
+        return new ClassDecl(name, members, typeParams, isExported);
+    }
+
+    private skipClassMember(): void {
+        while (this.peek().kind == TokenKind.Public || this.peek().kind == TokenKind.Private || this.peek().kind == TokenKind.Protected || this.peek().kind == TokenKind.Static) {
+            this.advance();
+        }
+        
+        if (this.matchKind(TokenKind.Constructor)) {
+            if (this.matchKind(TokenKind.LParen)) {
+                this.skipUntil(TokenKind.RParen);
+                this.matchKind(TokenKind.RParen);
+            }
+            if (this.matchKind(TokenKind.LBrace)) {
+                this.skipUntil(TokenKind.RBrace);
+                this.matchKind(TokenKind.RBrace);
+            }
+            return;
+        }
+        
+        if (this.peek().kind == TokenKind.Identifier) {
+            this.advance();
+            if (this.matchKind(TokenKind.Colon)) {
+                this.parseTypeText();
+            }
+            if (this.matchKind(TokenKind.LParen)) {
+                this.skipUntil(TokenKind.RParen);
+                this.matchKind(TokenKind.RParen);
+                if (this.matchKind(TokenKind.Colon)) {
+                    this.parseTypeText();
+                }
+                if (this.matchKind(TokenKind.LBrace)) {
+                    this.skipUntil(TokenKind.RBrace);
+                    this.matchKind(TokenKind.RBrace);
+                }
+            } else {
+                this.matchKind(TokenKind.Semicolon);
+            }
+        }
+    }
+
+    private parseBlockStmt(): BlockStmt {
+        let statements = new Array<Stmt>();
+        if (this.matchKind(TokenKind.LBrace)) {
+            while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+                let stmt = this.parseStatement();
+                statements.push(stmt);
+            }
+            this.matchKind(TokenKind.RBrace);
+        }
+        return new BlockStmt(statements);
+    }
+
+    private parseStatement(): Stmt {
+        if (this.matchKind(TokenKind.Let)) {
+            return this.parseVarDeclStmt();
+        }
+        if (this.matchKind(TokenKind.Return)) {
+            return this.parseReturnStmt();
+        }
+        if (this.matchKind(TokenKind.If)) {
+            return this.parseIfStmt();
+        }
+        if (this.matchKind(TokenKind.While)) {
+            return this.parseWhileStmt();
+        }
+        if (this.matchKind(TokenKind.For)) {
+            return this.parseForStmt();
+        }
+        if (this.matchKind(TokenKind.LBrace)) {
+            this.pos = this.pos - 1;
+            return this.parseBlockStmt();
+        }
+        return this.parseExprStmt();
+    }
+
+    private parseVarDeclStmt(): VarDeclStmt {
+        let name = "";
+        if (this.peek().kind == TokenKind.Identifier) {
+            name = this.advance().lexeme;
+        }
+        let typeText = "";
+        if (this.matchKind(TokenKind.Colon)) {
+            typeText = this.parseTypeText();
+        }
+        let init = new IdentifierExpr("");
+        if (this.matchKind(TokenKind.Equal)) {
+            init = this.parseExpression();
+        }
+        this.matchKind(TokenKind.Semicolon);
+        return new VarDeclStmt(name, typeText, init, false);
+    }
+
+    private parseReturnStmt(): ReturnStmt {
+        let value = new IdentifierExpr("");
+        if (!this.check(TokenKind.Semicolon)) {
+            value = this.parseExpression();
+        }
+        this.matchKind(TokenKind.Semicolon);
+        return new ReturnStmt(value);
+    }
+
+    private parseIfStmt(): IfStmt {
+        this.matchKind(TokenKind.LParen);
+        let condition = this.parseExpression();
+        this.matchKind(TokenKind.RParen);
+        let thenBranch = this.parseStatement();
+        let elseBranch = new BlockStmt(new Array<Stmt>());
+        if (this.matchKind(TokenKind.Else)) {
+            elseBranch = this.parseStatement();
+        }
+        return new IfStmt(condition, thenBranch, elseBranch);
+    }
+
+    private parseWhileStmt(): WhileStmt {
+        this.matchKind(TokenKind.LParen);
+        let condition = this.parseExpression();
+        this.matchKind(TokenKind.RParen);
+        let body = this.parseStatement();
+        return new WhileStmt(condition, body);
+    }
+
+    private parseForStmt(): ForStmt {
+        this.matchKind(TokenKind.LParen);
+        let init = new BlockStmt(new Array<Stmt>());
+        if (this.matchKind(TokenKind.Let)) {
+            init = this.parseVarDeclStmt();
+        }
+        let condition = new IdentifierExpr("");
+        if (!this.check(TokenKind.Semicolon)) {
+            condition = this.parseExpression();
+        }
+        this.matchKind(TokenKind.Semicolon);
+        let update = new IdentifierExpr("");
+        if (!this.check(TokenKind.RParen)) {
+            update = this.parseExpression();
+        }
+        this.matchKind(TokenKind.RParen);
+        let body = this.parseStatement();
+        return new ForStmt(init, condition, update, body);
+    }
+
+    private parseExprStmt(): ExprStmt {
+        let expr = this.parseExpression();
+        this.matchKind(TokenKind.Semicolon);
+        return new ExprStmt(expr);
+    }
+
+    private parseExpression(): Expr {
+        return this.parseAssignment();
+    }
+
+    private parseAssignment(): Expr {
+        if (this.peek().kind == TokenKind.Identifier) {
+            let savedPos = this.pos;
+            let tempLeft = this.parseLogicalOr();
+            if (this.matchKind(TokenKind.Equal)) {
+                let right = this.parseAssignment();
+                return new BinaryExpr("=", tempLeft, right);
+            }
+            this.pos = savedPos;
+        }
+        return this.parseLogicalOr();
+    }
+
+    private parseLogicalOr(): Expr {
+        let left = this.parseLogicalAnd();
+        if (!this.matchKind(TokenKind.Pipe)) {
+            return left;
+        }
+        let op = this.previous().lexeme;
+        let right = this.parseLogicalOr();
+        return new BinaryExpr(op, left, right);
+    }
+
+    private parseLogicalAnd(): Expr {
+        let left = this.parseEquality();
+        if (!this.matchKind(TokenKind.Amp)) {
+            return left;
+        }
+        let op = this.previous().lexeme;
+        let right = this.parseLogicalAnd();
+        return new BinaryExpr(op, left, right);
+    }
+
+    private parseEquality(): Expr {
+        let left = this.parseComparison();
+        if (this.peek().kind != TokenKind.EqualEqual && this.peek().kind != TokenKind.BangEqual) {
+            return left;
+        }
+        let op = this.advance().lexeme;
+        let right = this.parseEquality();
+        return new BinaryExpr(op, left, right);
+    }
+
+    private parseComparison(): Expr {
+        let left = this.parseAdditive();
+        if (this.peek().kind != TokenKind.Less && this.peek().kind != TokenKind.Greater && this.peek().kind != TokenKind.LessEqual && this.peek().kind != TokenKind.GreaterEqual) {
+            return left;
+        }
+        let op = this.advance().lexeme;
+        let right = this.parseComparison();
+        return new BinaryExpr(op, left, right);
+    }
+
+    private parseAdditive(): Expr {
+        let left = this.parseMultiplicative();
+        if (this.peek().kind != TokenKind.Plus && this.peek().kind != TokenKind.Minus) {
+            return left;
+        }
+        let op = this.advance().lexeme;
+        let right = this.parseAdditive();
+        return new BinaryExpr(op, left, right);
+    }
+
+    private parseMultiplicative(): Expr {
+        let left = this.parseUnary();
+        if (this.peek().kind != TokenKind.Star && this.peek().kind != TokenKind.Slash && this.peek().kind != TokenKind.Percent) {
+            return left;
+        }
+        let op = this.advance().lexeme;
+        let right = this.parseMultiplicative();
+        return new BinaryExpr(op, left, right);
+    }
+
+    private parseUnary(): Expr {
+        if (this.peek().kind == TokenKind.Bang || this.peek().kind == TokenKind.Minus || this.peek().kind == TokenKind.Tilde) {
+            let op = this.advance().lexeme;
+            let operand = this.parseUnary();
+            return new UnaryExpr(op, operand, true);
+        }
+        return this.parsePostfix();
+    }
+
+    private parsePostfix(): Expr {
+        let base = this.parsePrimary();
+        return this.parsePostfixContinue(base);
+    }
+
+    private parsePostfixContinue(expr: Expr): Expr {
+        if (this.matchKind(TokenKind.LParen)) {
+            let args = new Array<Expr>();
+            while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                args.push(this.parseExpression());
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.RParen);
+            let callExpr = new CallExpr(expr, args, new Array<string>());
+            return this.parsePostfixContinue(callExpr);
+        } else if (this.matchKind(TokenKind.Dot)) {
+            let member = "";
+            if (this.peek().kind == TokenKind.Identifier) {
+                member = this.advance().lexeme;
+            }
+            let memberExpr = new MemberExpr(expr, member);
+            return this.parsePostfixContinue(memberExpr);
+        } else if (this.matchKind(TokenKind.LBracket)) {
+            let index = this.parseExpression();
+            this.matchKind(TokenKind.RBracket);
+            let indexExpr = new IndexExpr(expr, index);
+            return this.parsePostfixContinue(indexExpr);
+        }
+        return expr;
+    }
+
+    private parsePrimary(): Expr {
+        if (this.peek().kind == TokenKind.Number) {
+            return new NumberLiteral(this.advance().lexeme);
+        }
+        if (this.peek().kind == TokenKind.String) {
+            return new StringLiteral(this.advance().lexeme);
+        }
+        if (this.peek().kind == TokenKind.Identifier) {
+            return new IdentifierExpr(this.advance().lexeme);
+        }
+        if (this.matchKind(TokenKind.This)) {
+            return new ThisExpr();
+        }
+        if (this.matchKind(TokenKind.New)) {
+            let className = "";
+            if (this.peek().kind == TokenKind.Identifier) {
+                className = this.advance().lexeme;
+            }
+            let args = new Array<Expr>();
+            if (this.matchKind(TokenKind.LParen)) {
+                while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                    args.push(this.parseExpression());
+                    if (!this.matchKind(TokenKind.Comma)) {
+                        break;
+                    }
+                }
+                this.matchKind(TokenKind.RParen);
+            }
+            return new NewExpr(className, args, new Array<string>());
+        }
+        if (this.matchKind(TokenKind.LBracket)) {
+            let elements = new Array<Expr>();
+            while (!this.check(TokenKind.RBracket) && !this.isAtEnd()) {
+                elements.push(this.parseExpression());
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.RBracket);
+            return new ArrayLiteral(elements);
+        }
+        if (this.matchKind(TokenKind.LParen)) {
+            let expr = this.parseExpression();
+            this.matchKind(TokenKind.RParen);
+            return expr;
+        }
+        this.advance();
+        return new IdentifierExpr("?");
+    }
+
+    private parseTypeText(): string {
+        let typeText = "";
+        while (!this.check(TokenKind.RParen) && !this.check(TokenKind.Comma) && !this.check(TokenKind.LBrace) && !this.check(TokenKind.Semicolon) && !this.check(TokenKind.Equal) && !this.isAtEnd()) {
+            typeText = typeText + this.advance().lexeme;
+        }
+        return typeText;
+    }
+
+    private skipUntil(kind: i32): void {
+        let depth = 1;
+        while (!this.isAtEnd() && depth > 0) {
+            if (this.peek().kind == kind) {
+                depth = depth - 1;
+                if (depth == 0) {
+                    return;
+                }
+            }
+            this.advance();
+        }
+    }
+
+    private matchKind(kind: i32): bool {
+        if (this.check(kind)) {
+            this.advance();
+            return true;
+        }
+        return false;
+    }
+
+    private check(kind: i32): bool {
+        if (this.isAtEnd()) {
+            return false;
+        }
+        return this.peek().kind == kind;
+    }
+
+    private advance(): Token {
+        if (!this.isAtEnd()) {
+            this.pos = this.pos + 1;
+        }
+        return this.previous();
+    }
+
+    private isAtEnd(): bool {
+        return this.peek().kind == TokenKind.EOF;
+    }
+
+    private peek(): Token {
+        return this.tokens.get(this.pos);
+    }
+
+    private previous(): Token {
+        return this.tokens.get(this.pos - 1);
+    }
+}

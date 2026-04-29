@@ -1,7 +1,7 @@
 import { Array } from "std:array";
 import { log } from "std:console";
 import * as str from "std:string";
-import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, Token, TokenKind } from "./ast.tsn";
+import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr } from "./ast.tsn";
 
 export class Parser {
     private tokens: Array<Token>;
@@ -42,6 +42,8 @@ export class Parser {
         let memberExprCount: i32 = 0;
         let binaryExprCount: i32 = 0;
         let firstCallSummary = "";
+        let secondCallSummary = "";
+        let thirdCallSummary = "";
         let firstMemberExprSummary = "";
         let firstBinaryExprSummary = "";
         let firstFunctionName = "";
@@ -115,6 +117,18 @@ export class Parser {
                 binaryExprCount = binaryExprCount + body.counts.get(39);
                 if (firstCallSummary == "" && body.summaries.get(19) != "") {
                     firstCallSummary = body.summaries.get(19);
+                } else if (secondCallSummary == "" && body.summaries.get(19) != "" && body.summaries.get(19) != firstCallSummary) {
+                    secondCallSummary = body.summaries.get(19);
+                } else if (thirdCallSummary == "" && body.summaries.get(19) != "" && body.summaries.get(19) != firstCallSummary && body.summaries.get(19) != secondCallSummary) {
+                    thirdCallSummary = body.summaries.get(19);
+                }
+                if (secondCallSummary == "" && body.summaries.get(22) != "" && body.summaries.get(22) != firstCallSummary) {
+                    secondCallSummary = body.summaries.get(22);
+                } else if (thirdCallSummary == "" && body.summaries.get(22) != "" && body.summaries.get(22) != firstCallSummary && body.summaries.get(22) != secondCallSummary) {
+                    thirdCallSummary = body.summaries.get(22);
+                }
+                if (thirdCallSummary == "" && body.summaries.get(23) != "" && body.summaries.get(23) != firstCallSummary && body.summaries.get(23) != secondCallSummary) {
+                    thirdCallSummary = body.summaries.get(23);
                 }
                 if (firstMemberExprSummary == "" && body.summaries.get(20) != "") {
                     firstMemberExprSummary = body.summaries.get(20);
@@ -173,6 +187,18 @@ export class Parser {
                 binaryExprCount = binaryExprCount + body.counts.get(39);
                 if (firstCallSummary == "" && body.summaries.get(19) != "") {
                     firstCallSummary = body.summaries.get(19);
+                } else if (secondCallSummary == "" && body.summaries.get(19) != "" && body.summaries.get(19) != firstCallSummary) {
+                    secondCallSummary = body.summaries.get(19);
+                } else if (thirdCallSummary == "" && body.summaries.get(19) != "" && body.summaries.get(19) != firstCallSummary && body.summaries.get(19) != secondCallSummary) {
+                    thirdCallSummary = body.summaries.get(19);
+                }
+                if (secondCallSummary == "" && body.summaries.get(22) != "" && body.summaries.get(22) != firstCallSummary) {
+                    secondCallSummary = body.summaries.get(22);
+                } else if (thirdCallSummary == "" && body.summaries.get(22) != "" && body.summaries.get(22) != firstCallSummary && body.summaries.get(22) != secondCallSummary) {
+                    thirdCallSummary = body.summaries.get(22);
+                }
+                if (thirdCallSummary == "" && body.summaries.get(23) != "" && body.summaries.get(23) != firstCallSummary && body.summaries.get(23) != secondCallSummary) {
+                    thirdCallSummary = body.summaries.get(23);
                 }
                 if (firstMemberExprSummary == "" && body.summaries.get(20) != "") {
                     firstMemberExprSummary = body.summaries.get(20);
@@ -333,6 +359,8 @@ export class Parser {
         p.summaries.set(19, firstCallSummary);
         p.summaries.set(20, firstMemberExprSummary);
         p.summaries.set(21, firstBinaryExprSummary);
+        p.summaries.set(22, secondCallSummary);
+        p.summaries.set(23, thirdCallSummary);
 
         return p;
     }
@@ -495,6 +523,8 @@ export class Parser {
         let memberExprCount: i32 = 0;
         let binaryExprCount: i32 = 0;
         let firstCallSummary = "";
+        let secondCallSummary = "";
+        let thirdCallSummary = "";
         let firstMemberExprSummary = "";
         let firstBinaryExprSummary = "";
         let functionTypeParamSummary = "";
@@ -539,6 +569,8 @@ export class Parser {
             memberExprCount = body.counts.get(38);
             binaryExprCount = body.counts.get(39);
             firstCallSummary = body.summaries.get(19);
+            secondCallSummary = body.summaries.get(22);
+            thirdCallSummary = body.summaries.get(23);
             firstMemberExprSummary = body.summaries.get(20);
             firstBinaryExprSummary = body.summaries.get(21);
         }
@@ -568,6 +600,8 @@ export class Parser {
         p.summaries.set(19, firstCallSummary);
         p.summaries.set(20, firstMemberExprSummary);
         p.summaries.set(21, firstBinaryExprSummary);
+        p.summaries.set(22, secondCallSummary);
+        p.summaries.set(23, thirdCallSummary);
         p.counts.set(25, letCount);
         p.counts.set(26, returnCount);
         p.counts.set(27, ifCount);
@@ -606,6 +640,8 @@ export class Parser {
         let memberExprCount: i32 = 0;
         let binaryExprCount: i32 = 0;
         let firstCallSummary = "";
+        let secondCallSummary = "";
+        let thirdCallSummary = "";
         let firstMemberExprSummary = "";
         let firstBinaryExprSummary = "";
         let firstMethodTypeParamSummary = "";
@@ -782,6 +818,12 @@ export class Parser {
                     if (firstCallSummary == "" && member.summaries.get(19) != "") {
                         firstCallSummary = member.summaries.get(19);
                     }
+                    if (secondCallSummary == "" && member.summaries.get(22) != "") {
+                        secondCallSummary = member.summaries.get(22);
+                    }
+                    if (thirdCallSummary == "" && member.summaries.get(23) != "") {
+                        thirdCallSummary = member.summaries.get(23);
+                    }
                     if (firstMemberExprSummary == "" && member.summaries.get(20) != "") {
                         firstMemberExprSummary = member.summaries.get(20);
                     }
@@ -883,6 +925,8 @@ export class Parser {
         p.summaries.set(19, firstCallSummary);
         p.summaries.set(20, firstMemberExprSummary);
         p.summaries.set(21, firstBinaryExprSummary);
+        p.summaries.set(22, secondCallSummary);
+        p.summaries.set(23, thirdCallSummary);
 
         return p;
     }
@@ -977,6 +1021,8 @@ export class Parser {
             let memberExprCount: i32 = 0;
             let binaryExprCount: i32 = 0;
             let firstCallSummary = "";
+            let secondCallSummary = "";
+            let thirdCallSummary = "";
             let firstMemberExprSummary = "";
             let firstBinaryExprSummary = "";
             let firstMethodName = memberName;
@@ -1013,6 +1059,8 @@ export class Parser {
                 memberExprCount = body.counts.get(38);
                 binaryExprCount = body.counts.get(39);
                 firstCallSummary = body.summaries.get(19);
+                secondCallSummary = body.summaries.get(22);
+                thirdCallSummary = body.summaries.get(23);
                 firstMemberExprSummary = body.summaries.get(20);
                 firstBinaryExprSummary = body.summaries.get(21);
             }
@@ -1076,6 +1124,8 @@ export class Parser {
             p.summaries.set(19, firstCallSummary);
             p.summaries.set(20, firstMemberExprSummary);
             p.summaries.set(21, firstBinaryExprSummary);
+            p.summaries.set(22, secondCallSummary);
+            p.summaries.set(23, thirdCallSummary);
 
             return p;
         }
@@ -1821,6 +1871,8 @@ export class Parser {
         let memberExprCount: i32 = 0;
         let binaryExprCount: i32 = 0;
         let firstCallSummary = "";
+        let secondCallSummary = "";
+        let thirdCallSummary = "";
         let firstMemberExprSummary = "";
         let firstBinaryExprSummary = "";
 
@@ -1892,8 +1944,13 @@ export class Parser {
             if (depth > 0 && kind == TokenKind.LParen) {
                 if (this.isCallStart()) {
                     callCount = callCount + 1;
+                    let callSummary = this.describeCallExpr();
                     if (firstCallSummary == "") {
-                        firstCallSummary = this.describeCallExpr();
+                        firstCallSummary = callSummary;
+                    } else if (secondCallSummary == "" && callSummary != firstCallSummary) {
+                        secondCallSummary = callSummary;
+                    } else if (thirdCallSummary == "" && callSummary != firstCallSummary && callSummary != secondCallSummary) {
+                        thirdCallSummary = callSummary;
                     }
                 }
                 this.advance();
@@ -1949,6 +2006,8 @@ export class Parser {
         p.summaries.set(19, firstCallSummary);
         p.summaries.set(20, firstMemberExprSummary);
         p.summaries.set(21, firstBinaryExprSummary);
+        p.summaries.set(22, secondCallSummary);
+        p.summaries.set(23, thirdCallSummary);
         return p;
     }
 
@@ -2017,6 +2076,12 @@ export class Parser {
             }
             return "[...]";
         }
+        if (prevKind == TokenKind.Greater) {
+            let genericBase = this.describeGenericCallBase(2);
+            if (genericBase != "") {
+                return genericBase + "<...>";
+            }
+        }
         if (prevKind == TokenKind.RParen) {
             if (this.peekBackKind(2) == TokenKind.Dot) {
                 let objectText = this.describeTokenBack(3);
@@ -2043,16 +2108,23 @@ export class Parser {
             } else if (kind == TokenKind.Less) {
                 depth = depth - 1;
                 if (depth == 0) {
-                    let baseKind = this.peekBackKind(currentDistance + 1);
+                    let baseDistance = currentDistance + 1;
+                    let baseKind = this.peekBackKind(baseDistance);
                     if (baseKind == TokenKind.Identifier) {
-                        let baseName = this.peekBackLexeme(currentDistance + 1);
-                        if (this.peekBackKind(currentDistance + 2) == TokenKind.Dot) {
-                            let objectText = this.describeTokenBack(currentDistance + 3);
+                        let baseName = this.peekBackLexeme(baseDistance);
+                        if (this.peekBackKind(baseDistance + 1) == TokenKind.Dot) {
+                            let objectText = this.describeTokenBack(baseDistance + 2);
                             if (objectText != "") {
                                 return objectText + "." + baseName;
                             }
                         }
                         return baseName;
+                    }
+                    if (baseKind == TokenKind.RBracket) {
+                        let indexBase = this.describeIndexedCallBase(baseDistance);
+                        if (indexBase != "") {
+                            return indexBase + "[...]";
+                        }
                     }
                     return "";
                 }
@@ -2074,7 +2146,19 @@ export class Parser {
             } else if (kind == TokenKind.LBracket) {
                 depth = depth - 1;
                 if (depth == 0) {
-                    return this.describeTokenBack(currentDistance + 1);
+                    let baseDistance = currentDistance + 1;
+                    let baseKind = this.peekBackKind(baseDistance);
+                    if (baseKind == TokenKind.Identifier) {
+                        let baseName = this.peekBackLexeme(baseDistance);
+                        if (this.peekBackKind(baseDistance + 1) == TokenKind.Dot) {
+                            let objectText = this.describeTokenBack(baseDistance + 2);
+                            if (objectText != "") {
+                                return objectText + "." + baseName;
+                            }
+                        }
+                        return baseName;
+                    }
+                    return this.describeTokenBack(baseDistance);
                 }
             }
             currentDistance = currentDistance + 1;
@@ -2155,6 +2239,10 @@ export class Parser {
         }
         if (prevKind == TokenKind.This) {
             return true;
+        }
+        if (prevKind == TokenKind.Greater) {
+            let genericBase = this.describeGenericCallBase(2);
+            return genericBase != "";
         }
         if (prevKind == TokenKind.RParen) {
             let beforePrevKind = this.peekBackKind(2);
@@ -2271,7 +2359,475 @@ export class Parser {
         while (i < 40) { counts.push(0); i = i + 1; }
         let summaries = new Array<string>();
         i = 0;
-        while (i < 22) { summaries.push(""); i = i + 1; }
+        while (i < 24) { summaries.push(""); i = i + 1; }
         return new Program(declarations, classMembers, importDecls, functionDecls, classDecls, counts, summaries);
+    }
+
+    // AST Construction Methods
+
+    public parseAST(): ASTProgram {
+        let declarations = new Array<Decl>();
+        while (!this.isAtEnd()) {
+            let decl = this.parseDeclaration();
+            declarations.push(decl);
+        }
+        return new ASTProgram(declarations);
+    }
+
+    private parseDeclaration(): Decl {
+        if (this.matchKind(TokenKind.Import)) {
+            return this.parseImportDeclAST();
+        }
+        let isExported = this.matchKind(TokenKind.Export);
+        if (this.matchKind(TokenKind.Function)) {
+            return this.parseFunctionDeclAST(isExported);
+        }
+        if (this.matchKind(TokenKind.Class)) {
+            return this.parseClassDeclAST(isExported);
+        }
+        this.advance();
+        return new ImportDecl("", "", "", new Array<ImportSpecifierInfo>());
+    }
+
+    private parseImportDeclAST(): ImportDecl {
+        let defaultImport = "";
+        let namespaceImport = "";
+        let namedImports = new Array<ImportSpecifierInfo>();
+        
+        if (this.peek().kind == TokenKind.Identifier) {
+            defaultImport = this.advance().lexeme;
+            if (this.matchKind(TokenKind.Comma)) {
+            }
+        }
+        
+        if (this.matchKind(TokenKind.LBrace)) {
+            while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+                let imported = this.advance().lexeme;
+                let local = imported;
+                namedImports.push(new ImportSpecifierInfo(imported, local));
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.RBrace);
+        }
+        
+        this.matchKind(TokenKind.From);
+        let source = "";
+        if (this.peek().kind == TokenKind.String) {
+            source = this.advance().lexeme;
+        }
+        
+        return new ImportDecl(source, defaultImport, namespaceImport, namedImports);
+    }
+
+    private parseFunctionDeclAST(isExported: bool): FunctionDecl {
+        let name = "";
+        if (this.peek().kind == TokenKind.Identifier) {
+            name = this.advance().lexeme;
+        }
+        
+        let typeParams = new Array<string>();
+        if (this.matchKind(TokenKind.Less)) {
+            while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
+                if (this.peek().kind == TokenKind.Identifier) {
+                    typeParams.push(this.advance().lexeme);
+                }
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.Greater);
+        }
+        
+        let params = new Array<ParameterInfo>();
+        if (this.matchKind(TokenKind.LParen)) {
+            while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                let paramName = "";
+                if (this.peek().kind == TokenKind.Identifier) {
+                    paramName = this.advance().lexeme;
+                }
+                let paramType = "";
+                if (this.matchKind(TokenKind.Colon)) {
+                    paramType = this.parseTypeText();
+                }
+                params.push(new ParameterInfo(paramName, paramType, false));
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.RParen);
+        }
+        
+        let returnType = "";
+        if (this.matchKind(TokenKind.Colon)) {
+            returnType = this.parseTypeText();
+        }
+        
+        let body = this.parseBlockStmtAST();
+        
+        return new FunctionDecl(name, params, returnType, body, typeParams, isExported, false);
+    }
+
+    private parseClassDeclAST(isExported: bool): ClassDecl {
+        let name = "";
+        if (this.peek().kind == TokenKind.Identifier) {
+            name = this.advance().lexeme;
+        }
+        
+        let typeParams = new Array<string>();
+        if (this.matchKind(TokenKind.Less)) {
+            while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
+                if (this.peek().kind == TokenKind.Identifier) {
+                    typeParams.push(this.advance().lexeme);
+                }
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.Greater);
+        }
+        
+        let members = new Array<ClassMemberDecl>();
+        if (this.matchKind(TokenKind.LBrace)) {
+            while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+                this.skipClassMember();
+            }
+            this.matchKind(TokenKind.RBrace);
+        }
+        
+        return new ClassDecl(name, members, typeParams, isExported);
+    }
+
+    private skipClassMember(): void {
+        while (this.peek().kind == TokenKind.Public || this.peek().kind == TokenKind.Private || this.peek().kind == TokenKind.Protected || this.peek().kind == TokenKind.Static) {
+            this.advance();
+        }
+        
+        if (this.matchKind(TokenKind.Constructor)) {
+            if (this.matchKind(TokenKind.LParen)) {
+                this.skipUntil(TokenKind.RParen);
+                this.matchKind(TokenKind.RParen);
+            }
+            if (this.matchKind(TokenKind.LBrace)) {
+                this.skipUntil(TokenKind.RBrace);
+                this.matchKind(TokenKind.RBrace);
+            }
+            return;
+        }
+        
+        if (this.peek().kind == TokenKind.Identifier) {
+            this.advance();
+            if (this.matchKind(TokenKind.Colon)) {
+                this.parseTypeText();
+            }
+            if (this.matchKind(TokenKind.LParen)) {
+                this.skipUntil(TokenKind.RParen);
+                this.matchKind(TokenKind.RParen);
+                if (this.matchKind(TokenKind.Colon)) {
+                    this.parseTypeText();
+                }
+                if (this.matchKind(TokenKind.LBrace)) {
+                    this.skipUntil(TokenKind.RBrace);
+                    this.matchKind(TokenKind.RBrace);
+                }
+            } else {
+                this.matchKind(TokenKind.Semicolon);
+            }
+        }
+    }
+
+    private parseBlockStmtAST(): BlockStmt {
+        let statements = new Array<Stmt>();
+        if (this.matchKind(TokenKind.LBrace)) {
+            while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+                let stmt = this.parseStatementAST();
+                if (stmt != null) {
+                    statements.push(stmt);
+                }
+            }
+            this.matchKind(TokenKind.RBrace);
+        }
+        return new BlockStmt(statements);
+    }
+
+    private parseStatementAST(): Stmt {
+        if (this.matchKind(TokenKind.Let)) {
+            return this.parseVarDeclStmtAST();
+        }
+        if (this.matchKind(TokenKind.Return)) {
+            return this.parseReturnStmtAST();
+        }
+        if (this.matchKind(TokenKind.If)) {
+            return this.parseIfStmtAST();
+        }
+        if (this.matchKind(TokenKind.While)) {
+            return this.parseWhileStmtAST();
+        }
+        if (this.matchKind(TokenKind.For)) {
+            return this.parseForStmtAST();
+        }
+        if (this.matchKind(TokenKind.LBrace)) {
+            this.pos = this.pos - 1;
+            return this.parseBlockStmtAST();
+        }
+        return this.parseExprStmtAST();
+    }
+
+    private parseVarDeclStmtAST(): VarDeclStmt {
+        let name = "";
+        if (this.peek().kind == TokenKind.Identifier) {
+            name = this.advance().lexeme;
+        }
+        let typeText = "";
+        if (this.matchKind(TokenKind.Colon)) {
+            typeText = this.parseTypeText();
+        }
+        let init = new IdentifierExpr("");
+        if (this.matchKind(TokenKind.Equal)) {
+            init = this.parseExpressionAST();
+        }
+        this.matchKind(TokenKind.Semicolon);
+        return new VarDeclStmt(name, typeText, init, false);
+    }
+
+    private parseReturnStmtAST(): ReturnStmt {
+        let value = new IdentifierExpr("");
+        if (!this.check(TokenKind.Semicolon)) {
+            value = this.parseExpressionAST();
+        }
+        this.matchKind(TokenKind.Semicolon);
+        return new ReturnStmt(value);
+    }
+
+    private parseIfStmtAST(): IfStmt {
+        this.matchKind(TokenKind.LParen);
+        let condition = this.parseExpressionAST();
+        this.matchKind(TokenKind.RParen);
+        let thenBranch = this.parseStatementAST();
+        let elseBranch = new BlockStmt(new Array<Stmt>());
+        if (this.matchKind(TokenKind.Else)) {
+            elseBranch = this.parseStatementAST();
+        }
+        return new IfStmt(condition, thenBranch, elseBranch);
+    }
+
+    private parseWhileStmtAST(): WhileStmt {
+        this.matchKind(TokenKind.LParen);
+        let condition = this.parseExpressionAST();
+        this.matchKind(TokenKind.RParen);
+        let body = this.parseStatementAST();
+        return new WhileStmt(condition, body);
+    }
+
+    private parseForStmtAST(): ForStmt {
+        this.matchKind(TokenKind.LParen);
+        let init = new BlockStmt(new Array<Stmt>());
+        if (this.matchKind(TokenKind.Let)) {
+            init = this.parseVarDeclStmtAST();
+        }
+        let condition = new IdentifierExpr("");
+        if (!this.check(TokenKind.Semicolon)) {
+            condition = this.parseExpressionAST();
+        }
+        this.matchKind(TokenKind.Semicolon);
+        let update = new IdentifierExpr("");
+        if (!this.check(TokenKind.RParen)) {
+            update = this.parseExpressionAST();
+        }
+        this.matchKind(TokenKind.RParen);
+        let body = this.parseStatementAST();
+        return new ForStmt(init, condition, update, body);
+    }
+
+    private parseExprStmtAST(): ExprStmt {
+        let expr = this.parseExpressionAST();
+        this.matchKind(TokenKind.Semicolon);
+        return new ExprStmt(expr);
+    }
+
+    private parseExpressionAST(): Expr {
+        return this.parseAssignmentAST();
+    }
+
+    private parseAssignmentAST(): Expr {
+        let expr = this.parseLogicalOrAST();
+        if (this.matchKind(TokenKind.Equal)) {
+            let left = expr;
+            let right = this.parseAssignmentAST();
+            return new BinaryExpr("=", left, right);
+        }
+        return expr;
+    }
+
+    private parseLogicalOrAST(): Expr {
+        let expr = this.parseLogicalAndAST();
+        while (this.matchKind(TokenKind.Pipe)) {
+            let op = this.previous().lexeme;
+            let right = this.parseLogicalAndAST();
+            let left = expr;
+            expr = new BinaryExpr(op, left, right);
+        }
+        return expr;
+    }
+
+    private parseLogicalAndAST(): Expr {
+        let expr = this.parseEqualityAST();
+        while (this.matchKind(TokenKind.Amp)) {
+            let op = this.previous().lexeme;
+            let right = this.parseEqualityAST();
+            let left = expr;
+            expr = new BinaryExpr(op, left, right);
+        }
+        return expr;
+    }
+
+    private parseEqualityAST(): Expr {
+        let expr = this.parseComparisonAST();
+        while (this.peek().kind == TokenKind.EqualEqual || this.peek().kind == TokenKind.BangEqual) {
+            let op = this.advance().lexeme;
+            let right = this.parseComparisonAST();
+            let left = expr;
+            expr = new BinaryExpr(op, left, right);
+        }
+        return expr;
+    }
+
+    private parseComparisonAST(): Expr {
+        let expr = this.parseAdditiveAST();
+        while (this.peek().kind == TokenKind.Less || this.peek().kind == TokenKind.Greater || this.peek().kind == TokenKind.LessEqual || this.peek().kind == TokenKind.GreaterEqual) {
+            let op = this.advance().lexeme;
+            let right = this.parseAdditiveAST();
+            let left = expr;
+            expr = new BinaryExpr(op, left, right);
+        }
+        return expr;
+    }
+
+    private parseAdditiveAST(): Expr {
+        let expr = this.parseMultiplicativeAST();
+        while (this.peek().kind == TokenKind.Plus || this.peek().kind == TokenKind.Minus) {
+            let op = this.advance().lexeme;
+            let right = this.parseMultiplicativeAST();
+            let left = expr;
+            expr = new BinaryExpr(op, left, right);
+        }
+        return expr;
+    }
+
+    private parseMultiplicativeAST(): Expr {
+        let expr = this.parseUnaryAST();
+        while (this.peek().kind == TokenKind.Star || this.peek().kind == TokenKind.Slash || this.peek().kind == TokenKind.Percent) {
+            let op = this.advance().lexeme;
+            let right = this.parseUnaryAST();
+            let left = expr;
+            expr = new BinaryExpr(op, left, right);
+        }
+        return expr;
+    }
+
+    private parseUnaryAST(): Expr {
+        if (this.peek().kind == TokenKind.Bang || this.peek().kind == TokenKind.Minus || this.peek().kind == TokenKind.Tilde) {
+            let op = this.advance().lexeme;
+            let operand = this.parseUnaryAST();
+            return new UnaryExpr(op, operand, true);
+        }
+        return this.parsePostfixAST();
+    }
+
+    private parsePostfixAST(): Expr {
+        let expr = this.parsePrimaryAST();
+        while (true) {
+            if (this.matchKind(TokenKind.LParen)) {
+                let args = new Array<Expr>();
+                while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                    args.push(this.parseExpressionAST());
+                    if (!this.matchKind(TokenKind.Comma)) {
+                        break;
+                    }
+                }
+                this.matchKind(TokenKind.RParen);
+                let callee = expr;
+                expr = new CallExpr(callee, args, new Array<string>());
+            } else if (this.matchKind(TokenKind.Dot)) {
+                let member = "";
+                if (this.peek().kind == TokenKind.Identifier) {
+                    member = this.advance().lexeme;
+                }
+                let object = expr;
+                expr = new MemberExpr(object, member);
+            } else if (this.matchKind(TokenKind.LBracket)) {
+                let index = this.parseExpressionAST();
+                this.matchKind(TokenKind.RBracket);
+                let base = expr;
+                expr = new IndexExpr(base, index);
+            } else {
+                break;
+            }
+        }
+        return expr;
+    }
+
+    private parsePrimaryAST(): Expr {
+        if (this.peek().kind == TokenKind.Number) {
+            return new NumberLiteral(this.advance().lexeme);
+        }
+        if (this.peek().kind == TokenKind.String) {
+            return new StringLiteral(this.advance().lexeme);
+        }
+        if (this.peek().kind == TokenKind.Identifier) {
+            return new IdentifierExpr(this.advance().lexeme);
+        }
+        if (this.matchKind(TokenKind.This)) {
+            return new ThisExpr();
+        }
+        if (this.matchKind(TokenKind.New)) {
+            let className = "";
+            if (this.peek().kind == TokenKind.Identifier) {
+                className = this.advance().lexeme;
+            }
+            let args = new Array<Expr>();
+            if (this.matchKind(TokenKind.LParen)) {
+                while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                    args.push(this.parseExpressionAST());
+                    if (!this.matchKind(TokenKind.Comma)) {
+                        break;
+                    }
+                }
+                this.matchKind(TokenKind.RParen);
+            }
+            return new NewExpr(className, args, new Array<string>());
+        }
+        if (this.matchKind(TokenKind.LBracket)) {
+            let elements = new Array<Expr>();
+            while (!this.check(TokenKind.RBracket) && !this.isAtEnd()) {
+                elements.push(this.parseExpressionAST());
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.RBracket);
+            return new ArrayLiteral(elements);
+        }
+        if (this.matchKind(TokenKind.LParen)) {
+            let expr = this.parseExpressionAST();
+            this.matchKind(TokenKind.RParen);
+            return expr;
+        }
+        this.advance();
+        return new IdentifierExpr("?");
+    }
+
+    private skipUntil(kind: i32): void {
+        let depth = 1;
+        while (!this.isAtEnd() && depth > 0) {
+            if (this.peek().kind == kind) {
+                depth = depth - 1;
+                if (depth == 0) {
+                    return;
+                }
+            }
+            this.advance();
+        }
     }
 }
