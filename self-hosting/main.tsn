@@ -127,6 +127,18 @@ function parseFile(path: string): i32 {
         logBool("first function has body", program.functionDecls.get(0).hasBody);
         log("first function body statement count");
         log(program.functionDecls.get(0).bodyStatementCount);
+        log("first function body let count");
+        log(program.functionDecls.get(0).bodyLetCount);
+        log("first function body return count");
+        log(program.functionDecls.get(0).bodyReturnCount);
+        log("first function body if count");
+        log(program.functionDecls.get(0).bodyIfCount);
+        log("first function body while count");
+        log(program.functionDecls.get(0).bodyWhileCount);
+        log("first function body for count");
+        log(program.functionDecls.get(0).bodyForCount);
+        log("first function body assign count");
+        log(program.functionDecls.get(0).bodyAssignCount);
     }
     if (program.classDecls.length > 0) {
         log("first class name");

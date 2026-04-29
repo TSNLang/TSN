@@ -1237,7 +1237,7 @@ export class Parser {
         stmtCount = stmtCount + bodyForCount;
         stmtCount = stmtCount + bodyAssignCount;
         let hasBodyFlag = stmtCount > 0;
-        return new FunctionDeclInfo(clonedName, isExported, isAsync, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, typeParameters, params, clonedReturnTypeText, paramCount, bracketCount, hasBodyFlag, stmtCount);
+        return new FunctionDeclInfo(clonedName, isExported, isAsync, clonedTypeParamSummary, clonedParamSummary, clonedReturnSummary, typeParameters, params, clonedReturnTypeText, paramCount, bracketCount, hasBodyFlag, stmtCount, bodyLetCount, bodyReturnCount, bodyIfCount, bodyWhileCount, bodyForCount, bodyAssignCount);
     }
 
     private appendImportText(current: string, token: Token): string {
