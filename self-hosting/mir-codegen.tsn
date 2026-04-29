@@ -1,0 +1,245 @@
+// LLVM IR Codegen from MIR
+
+import { Array } from "std:array";
+import { log } from "std:console";
+import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, MIRConstant, MIRGlobal, MIRInst, MIRBinaryInst, MIRLoadInst, MIRStoreInst, MIRCallInst, MIRReturnInst, MIRBranchInst, MIRJumpInst, MIRAllocaInst, MIRGetElementPtrInst } from "./mir.tsn";
+
+export class MIRCodegen {
+    private output: Array<string>;
+    private module: MIRModule;
+
+    constructor(module: MIRModule) {
+        this.module = module;
+        this.output = new Array<string>();
+    }
+
+    public generate(): string {
+        this.emitHeader();
+        this.emitGlobals();
+        this.emitFunctions();
+        return this.joinOutput();
+    }
+
+    private emitHeader(): void {
+        this.output.push("; Generated LLVM IR from MIR");
+        this.output.push("; Module: ");
+        this.output.push(this.module.name);
+        this.output.push("");
+    }
+
+    private emitGlobals(): void {
+        let i = 0;
+        while (i < this.module.globals.length()) {
+            let global = this.module.globals.get(i);
+            this.emitGlobal(global);
+            i = i + 1;
+        }
+    }
+
+    private emitGlobal(global: MIRGlobal): void {
+        this.output.push("@");
+        this.output.push(global.name);
+        this.output.push(" = global ");
+        this.output.push(this.emitType(global.valueType));
+        this.output.push(" zeroinitializer");
+    }
+
+    private emitFunctions(): void {
+        let i = 0;
+        while (i < this.module.functions.length()) {
+            let func = this.module.functions.get(i);
+            this.emitFunction(func);
+            i = i + 1;
+        }
+    }
+
+    private emitFunction(func: MIRFunction): void {
+        this.output.push("");
+        this.output.push("define ");
+        this.output.push(this.emitType(func.returnType));
+        this.output.push(" @");
+        this.output.push(func.name);
+        this.output.push("(");
+        this.emitParams(func);
+        this.output.push(") {");
+        
+        this.emitBlocks(func);
+        
+        this.output.push("}");
+    }
+
+    private emitParams(func: MIRFunction): void {
+        let i = 0;
+        while (i < func.params.length()) {
+            if (i > 0) {
+                this.output.push(", ");
+            }
+            let param = func.params.get(i);
+            this.output.push(this.emitType(param.valueType));
+            this.output.push(" ");
+            this.output.push(this.emitValue(param));
+            i = i + 1;
+        }
+    }
+
+    private emitBlocks(func: MIRFunction): void {
+        let i = 0;
+        while (i < func.blocks.length()) {
+            let block = func.blocks.get(i);
+            this.emitBlock(block);
+            i = i + 1;
+        }
+    }
+
+    private emitBlock(block: MIRBasicBlock): void {
+        this.output.push(block.label);
+        this.output.push(":");
+        
+        let i = 0;
+        while (i < block.instructions.length()) {
+            let inst = block.instructions.get(i);
+            this.output.push("  ");
+            this.emitInstruction(inst);
+            i = i + 1;
+        }
+    }
+
+    private emitInstruction(inst: MIRInst): void {
+        if (inst.opcode == "Add") {
+            this.emitBinaryInst(inst);
+        }
+        if (inst.opcode == "Sub") {
+            this.emitBinaryInst(inst);
+        }
+        if (inst.opcode == "Mul") {
+            this.emitBinaryInst(inst);
+        }
+        if (inst.opcode == "Div") {
+            this.emitBinaryInst(inst);
+        }
+        if (inst.opcode == "Load") {
+            this.emitLoadInst(inst);
+        }
+        if (inst.opcode == "Store") {
+            this.emitStoreInst(inst);
+        }
+        if (inst.opcode == "Call") {
+            this.emitCallInst(inst);
+        }
+        if (inst.opcode == "Return") {
+            this.emitReturnInst(inst);
+        }
+        if (inst.opcode == "Branch") {
+            this.emitBranchInst(inst);
+        }
+        if (inst.opcode == "Jump") {
+            this.emitJumpInst(inst);
+        }
+        if (inst.opcode == "Alloca") {
+            this.emitAllocaInst(inst);
+        }
+        if (inst.opcode == "GetElementPtr") {
+            this.emitGetElementPtrInst(inst);
+        }
+    }
+
+    private emitBinaryInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = ");
+        if (inst.opcode == "Add") {
+            this.output.push("add ");
+        }
+        if (inst.opcode == "Sub") {
+            this.output.push("sub ");
+        }
+        if (inst.opcode == "Mul") {
+            this.output.push("mul ");
+        }
+        if (inst.opcode == "Div") {
+            this.output.push("sdiv ");
+        }
+        this.output.push(this.emitType(inst.result.valueType));
+        this.output.push(" ");
+        this.output.push("0");
+        this.output.push(", ");
+        this.output.push("0");
+    }
+
+    private emitLoadInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = load ");
+        this.output.push(this.emitType(inst.result.valueType));
+        this.output.push(", ptr null");
+    }
+
+    private emitStoreInst(inst: MIRInst): void {
+        this.output.push("store i32 0, ptr null");
+    }
+
+    private emitCallInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = call ");
+        this.output.push(this.emitType(inst.result.valueType));
+        this.output.push(" @unknown()");
+    }
+
+    private emitReturnInst(inst: MIRInst): void {
+        this.output.push("ret ");
+        this.output.push(this.emitType(inst.result.valueType));
+        this.output.push(" ");
+        this.output.push("0");
+    }
+
+    private emitBranchInst(inst: MIRInst): void {
+        this.output.push("br i1 false, label %bb0, label %bb1");
+    }
+
+    private emitJumpInst(inst: MIRInst): void {
+        this.output.push("br label %bb0");
+    }
+
+    private emitAllocaInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = alloca i32");
+    }
+
+    private emitGetElementPtrInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = getelementptr i32, ptr null, i32 0");
+    }
+
+    private emitType(t: MIRType): string {
+        if (t.isPointer) {
+            return "ptr";
+        }
+        return t.name;
+    }
+
+    private emitValue(v: MIRValue): string {
+        if (v.kind == "Constant") {
+            return "0";
+        }
+        if (v.kind == "Register") {
+            return "%0";
+        }
+        if (v.kind == "Global") {
+            return "@global";
+        }
+        return "%unknown";
+    }
+
+    private joinOutput(): string {
+        let result = "";
+        let i = 0;
+        while (i < this.output.length()) {
+            result = result + this.output.get(i);
+            i = i + 1;
+        }
+        return result;
+    }
+}
+
+export function main(): i32 {
+    log("MIR Codegen test");
+    return 0;
+}
