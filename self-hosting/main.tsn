@@ -165,10 +165,34 @@ function parseFile(path: string): i32 {
             logBool("first class first method has body", program.classDecls.get(0).methods.get(0).hasBody);
             log("first class first method body statement count");
             log(program.classDecls.get(0).methods.get(0).bodyStatementCount);
+            log("first class first method body let count");
+            log(program.classDecls.get(0).methods.get(0).bodyLetCount);
+            log("first class first method body return count");
+            log(program.classDecls.get(0).methods.get(0).bodyReturnCount);
+            log("first class first method body if count");
+            log(program.classDecls.get(0).methods.get(0).bodyIfCount);
+            log("first class first method body while count");
+            log(program.classDecls.get(0).methods.get(0).bodyWhileCount);
+            log("first class first method body for count");
+            log(program.classDecls.get(0).methods.get(0).bodyForCount);
+            log("first class first method body assign count");
+            log(program.classDecls.get(0).methods.get(0).bodyAssignCount);
         }
         logBool("first class constructor has body", program.classDecls.get(0).constructorDecl.hasBody);
         log("first class constructor body statement count");
         log(program.classDecls.get(0).constructorDecl.bodyStatementCount);
+        log("first class constructor body let count");
+        log(program.classDecls.get(0).constructorDecl.bodyLetCount);
+        log("first class constructor body return count");
+        log(program.classDecls.get(0).constructorDecl.bodyReturnCount);
+        log("first class constructor body if count");
+        log(program.classDecls.get(0).constructorDecl.bodyIfCount);
+        log("first class constructor body while count");
+        log(program.classDecls.get(0).constructorDecl.bodyWhileCount);
+        log("first class constructor body for count");
+        log(program.classDecls.get(0).constructorDecl.bodyForCount);
+        log("first class constructor body assign count");
+        log(program.classDecls.get(0).constructorDecl.bodyAssignCount);
     }
     log("class count");
     log(program.counts.get(3));

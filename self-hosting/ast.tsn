@@ -88,8 +88,14 @@ export class ClassMemberDecl {
     public typeText: string;
     public hasBody: bool;
     public bodyStatementCount: i32;
+    public bodyLetCount: i32;
+    public bodyReturnCount: i32;
+    public bodyIfCount: i32;
+    public bodyWhileCount: i32;
+    public bodyForCount: i32;
+    public bodyAssignCount: i32;
 
-    constructor(kind: string, name: string, modifierSummary: string, isPublic: bool, isPrivate: bool, isProtected: bool, isStatic: bool, isAsync: bool, isConstructor: bool, typeParamSummary: string, typeParameters: Array<string>, paramSummary: string, params: Array<ParameterInfo>, returnSummary: string, returnTypeText: string, typeSummary: string, typeText: string, hasBody: bool, bodyStatementCount: i32) {
+    constructor(kind: string, name: string, modifierSummary: string, isPublic: bool, isPrivate: bool, isProtected: bool, isStatic: bool, isAsync: bool, isConstructor: bool, typeParamSummary: string, typeParameters: Array<string>, paramSummary: string, params: Array<ParameterInfo>, returnSummary: string, returnTypeText: string, typeSummary: string, typeText: string, hasBody: bool, bodyStatementCount: i32, bodyLetCount: i32, bodyReturnCount: i32, bodyIfCount: i32, bodyWhileCount: i32, bodyForCount: i32, bodyAssignCount: i32) {
         this.kind = kind;
         this.name = name;
         this.modifierSummary = modifierSummary;
@@ -109,6 +115,12 @@ export class ClassMemberDecl {
         this.typeText = typeText;
         this.hasBody = hasBody;
         this.bodyStatementCount = bodyStatementCount;
+        this.bodyLetCount = bodyLetCount;
+        this.bodyReturnCount = bodyReturnCount;
+        this.bodyIfCount = bodyIfCount;
+        this.bodyWhileCount = bodyWhileCount;
+        this.bodyForCount = bodyForCount;
+        this.bodyAssignCount = bodyAssignCount;
     }
 }
 

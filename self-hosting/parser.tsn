@@ -632,7 +632,13 @@ export class Parser {
                         member.summaries.get(13),
                         this.extractTypeText(member.summaries.get(13)),
                         memberStmtCount > 0,
-                        memberStmtCount
+                        memberStmtCount,
+                        member.counts.get(31),
+                        member.counts.get(32),
+                        member.counts.get(33),
+                        member.counts.get(34),
+                        member.counts.get(35),
+                        member.counts.get(36)
                     );
                     if (member.summaries.get(9) != "") {
                         let constructorFlags = this.parseModifierFlags(member.summaries.get(10));
@@ -655,7 +661,13 @@ export class Parser {
                             "",
                             "",
                             memberStmtCount > 0,
-                            memberStmtCount
+                            memberStmtCount,
+                            member.counts.get(31),
+                            member.counts.get(32),
+                            member.counts.get(33),
+                            member.counts.get(34),
+                            member.counts.get(35),
+                            member.counts.get(36)
                         );
                     } else if (member.summaries.get(7) != "") {
                         let fieldFlags = this.parseModifierFlags(member.summaries.get(11));
@@ -678,6 +690,12 @@ export class Parser {
                             member.summaries.get(13),
                             this.extractTypeText(member.summaries.get(13)),
                             false,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
                             0
                         );
                     }
@@ -1251,7 +1269,7 @@ export class Parser {
         let clonedFirstMethodName = this.sliceText(firstMethodName, 0, firstMethodName.length);
         let clonedFirstFieldName = this.sliceText(firstFieldName, 0, firstFieldName.length);
         let clonedFirstConstructorName = this.sliceText(firstConstructorName, 0, firstConstructorName.length);
-        let emptyConstructorDecl = new ClassMemberDecl("", "", "", false, false, false, false, false, false, "", new Array<string>(), "", new Array<ParameterInfo>(), "", "", "", "", false, 0);
+        let emptyConstructorDecl = new ClassMemberDecl("", "", "", false, false, false, false, false, false, "", new Array<string>(), "", new Array<ParameterInfo>(), "", "", "", "", false, 0, 0, 0, 0, 0, 0, 0);
         let info = new ClassDeclInfo(clonedName, isExported, clonedTypeParamSummary, new Array<string>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), new Array<ClassMemberDecl>(), emptyConstructorDecl, methodCount, fieldCount, constructorCount, clonedFirstMethodName, clonedFirstFieldName, clonedFirstConstructorName);
         let typeParamIndex: i32 = 0;
         while (typeParamIndex < typeParameters.length) {
@@ -1274,7 +1292,7 @@ export class Parser {
             let clonedReturnTypeText = this.sliceText(sourceMember.returnTypeText, 0, sourceMember.returnTypeText.length);
             let clonedTypeText = this.sliceText(sourceMember.typeText, 0, sourceMember.typeText.length);
             let memberModifiers = this.parseModifierFlags(clonedModifierSummary);
-            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, memberModifiers.counts.get(13) > 0, memberModifiers.counts.get(14) > 0, memberModifiers.counts.get(15) > 0, memberModifiers.counts.get(16) > 0, memberModifiers.counts.get(17) > 0, this.hasMemberLabel(clonedKind, "constructor"), clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText, sourceMember.hasBody, sourceMember.bodyStatementCount));
+            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, memberModifiers.counts.get(13) > 0, memberModifiers.counts.get(14) > 0, memberModifiers.counts.get(15) > 0, memberModifiers.counts.get(16) > 0, memberModifiers.counts.get(17) > 0, this.hasMemberLabel(clonedKind, "constructor"), clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText, sourceMember.hasBody, sourceMember.bodyStatementCount, sourceMember.bodyLetCount, sourceMember.bodyReturnCount, sourceMember.bodyIfCount, sourceMember.bodyWhileCount, sourceMember.bodyForCount, sourceMember.bodyAssignCount));
             if (this.hasMemberLabel(clonedKind, "field")) {
                 info.fields.push(this.cloneClassMemberDecl(sourceMember));
             } else if (this.hasMemberLabel(clonedKind, "constructor")) {
@@ -1386,7 +1404,7 @@ export class Parser {
         let clonedReturnTypeText = this.sliceText(member.returnTypeText, 0, member.returnTypeText.length);
         let clonedTypeSummary = this.sliceText(member.typeSummary, 0, member.typeSummary.length);
         let clonedTypeText = this.sliceText(member.typeText, 0, member.typeText.length);
-        return new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, member.isPublic, member.isPrivate, member.isProtected, member.isStatic, member.isAsync, member.isConstructor, clonedTypeParamSummary, clonedTypeParameters, clonedParamSummary, clonedParams, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText, member.hasBody, member.bodyStatementCount);
+        return new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, member.isPublic, member.isPrivate, member.isProtected, member.isStatic, member.isAsync, member.isConstructor, clonedTypeParamSummary, clonedTypeParameters, clonedParamSummary, clonedParams, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText, member.hasBody, member.bodyStatementCount, member.bodyLetCount, member.bodyReturnCount, member.bodyIfCount, member.bodyWhileCount, member.bodyForCount, member.bodyAssignCount);
     }
 
     private parseModifierFlags(summary: string): Program {
