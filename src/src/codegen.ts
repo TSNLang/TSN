@@ -643,7 +643,17 @@ export class CodeGenerator {
 
   private getFunctionParamRuntimeType(p: Parameter): string {
     if (p.isRest) return `%${this.getRestArrayClassName(p.type)}`;
-    return p.type.name === 'string' ? 'string' : this.getLLVMType(p.type);
+    if (p.type.name === 'string') return 'string';
+    
+    // Handle generic classes like Array<T>
+    if (p.type.genericArgs && p.type.genericArgs.length > 0) {
+      const resolvedName = this.resolveTypeName(p.type);
+      if (this.classDecls.has(resolvedName)) {
+        return `%${resolvedName}`;
+      }
+    }
+    
+    return this.getLLVMType(p.type);
   }
 
   private getFunctionReturnRuntimeType(t: TypeAnnotation): string {
