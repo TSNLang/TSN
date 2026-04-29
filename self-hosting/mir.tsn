@@ -1,0 +1,228 @@
+// MIR (Mid-level Intermediate Representation) for TSN
+// A simplified IR that bridges AST and LLVM IR
+
+import { Array } from "std:array";
+
+// MIR Types
+
+export class MIRType {
+    public name: string;
+    public isPointer: bool;
+    public size: i32;
+
+    constructor(name: string, isPointer: bool, size: i32) {
+        this.name = name;
+        this.isPointer = isPointer;
+        this.size = size;
+    }
+}
+
+// MIR Values
+
+export class MIRValue {
+    public kind: string;
+    public valueType: MIRType;
+    public name: string;
+
+    constructor(kind: string, valueType: MIRType, name: string) {
+        this.kind = kind;
+        this.valueType = valueType;
+        this.name = name;
+    }
+}
+
+export class MIRConstant extends MIRValue {
+    public value: string;
+
+    constructor(valueType: MIRType, value: string) {
+        super("Constant", valueType, "");
+        this.value = value;
+    }
+}
+
+export class MIRRegister extends MIRValue {
+    public id: i32;
+
+    constructor(valueType: MIRType, id: i32) {
+        super("Register", valueType, "");
+        this.id = id;
+    }
+}
+
+export class MIRGlobal extends MIRValue {
+    public globalName: string;
+
+    constructor(valueType: MIRType, globalName: string) {
+        super("Global", valueType, globalName);
+        this.globalName = globalName;
+    }
+}
+
+// MIR Instructions
+
+export class MIRInst {
+    public opcode: string;
+    public result: MIRValue;
+
+    constructor(opcode: string, result: MIRValue) {
+        this.opcode = opcode;
+        this.result = result;
+    }
+}
+
+export class MIRBinaryInst extends MIRInst {
+    public op: string;
+    public left: MIRValue;
+    public right: MIRValue;
+
+    constructor(op: string, result: MIRValue, left: MIRValue, right: MIRValue) {
+        super("Binary", result);
+        this.op = op;
+        this.left = left;
+        this.right = right;
+    }
+}
+
+export class MIRLoadInst extends MIRInst {
+    public address: MIRValue;
+
+    constructor(result: MIRValue, address: MIRValue) {
+        super("Load", result);
+        this.address = address;
+    }
+}
+
+export class MIRStoreInst extends MIRInst {
+    public value: MIRValue;
+    public address: MIRValue;
+
+    constructor(value: MIRValue, address: MIRValue) {
+        super("Store", new MIRRegister(new MIRType("void", false, 0), 0));
+        this.value = value;
+        this.address = address;
+    }
+}
+
+export class MIRCallInst extends MIRInst {
+    public callee: string;
+    public args: Array<MIRValue>;
+
+    constructor(result: MIRValue, callee: string, args: Array<MIRValue>) {
+        super("Call", result);
+        this.callee = callee;
+        this.args = args;
+    }
+}
+
+export class MIRReturnInst extends MIRInst {
+    public value: MIRValue;
+
+    constructor(value: MIRValue) {
+        super("Return", new MIRRegister(new MIRType("void", false, 0), 0));
+        this.value = value;
+    }
+}
+
+export class MIRBranchInst extends MIRInst {
+    public condition: MIRValue;
+    public trueBlock: i32;
+    public falseBlock: i32;
+
+    constructor(condition: MIRValue, trueBlock: i32, falseBlock: i32) {
+        super("Branch", new MIRRegister(new MIRType("void", false, 0), 0));
+        this.condition = condition;
+        this.trueBlock = trueBlock;
+        this.falseBlock = falseBlock;
+    }
+}
+
+export class MIRJumpInst extends MIRInst {
+    public targetBlock: i32;
+
+    constructor(targetBlock: i32) {
+        super("Jump", new MIRRegister(new MIRType("void", false, 0), 0));
+        this.targetBlock = targetBlock;
+    }
+}
+
+export class MIRAllocaInst extends MIRInst {
+    public allocType: MIRType;
+
+    constructor(result: MIRValue, allocType: MIRType) {
+        super("Alloca", result);
+        this.allocType = allocType;
+    }
+}
+
+export class MIRGetElementPtrInst extends MIRInst {
+    public base: MIRValue;
+    public index: MIRValue;
+
+    constructor(result: MIRValue, base: MIRValue, index: MIRValue) {
+        super("GetElementPtr", result);
+        this.base = base;
+        this.index = index;
+    }
+}
+
+// MIR Basic Block
+
+export class MIRBasicBlock {
+    public id: i32;
+    public label: string;
+    public instructions: Array<MIRInst>;
+
+    constructor(id: i32, label: string) {
+        this.id = id;
+        this.label = label;
+        this.instructions = new Array<MIRInst>();
+    }
+}
+
+// MIR Function
+
+export class MIRFunction {
+    public name: string;
+    public returnType: MIRType;
+    public params: Array<MIRValue>;
+    public blocks: Array<MIRBasicBlock>;
+    public nextRegId: i32;
+    public nextBlockId: i32;
+
+    constructor(name: string, returnType: MIRType) {
+        this.name = name;
+        this.returnType = returnType;
+        this.params = new Array<MIRValue>();
+        this.blocks = new Array<MIRBasicBlock>();
+        this.nextRegId = 0;
+        this.nextBlockId = 0;
+    }
+
+    public createBlock(label: string): i32 {
+        let block = new MIRBasicBlock(this.nextBlockId, label);
+        let blockId = this.nextBlockId;
+        this.nextBlockId = this.nextBlockId + 1;
+        this.blocks.push(block);
+        return blockId;
+    }
+
+    public createRegister(valueType: MIRType): MIRRegister {
+        let reg = new MIRRegister(valueType, this.nextRegId);
+        this.nextRegId = this.nextRegId + 1;
+        return reg;
+    }
+}
+
+// MIR Module
+
+export class MIRModule {
+    public name: string;
+    public functions: Array<MIRFunction>;
+    public globals: Array<MIRGlobal>;
+
+    constructor(name: string) {
+        this.name = name;
+        this.functions = new Array<MIRFunction>();
+        this.globals = new Array<MIRGlobal>();
+    }
+}

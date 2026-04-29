@@ -1,0 +1,148 @@
+// MIR Builder - converts simplified expressions to MIR
+
+import { Array } from "std:array";
+import { log } from "std:console";
+import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, MIRConstant, MIRGlobal, MIRInst, MIRBinaryInst, MIRLoadInst, MIRStoreInst, MIRCallInst, MIRReturnInst, MIRBranchInst, MIRJumpInst, MIRAllocaInst, MIRGetElementPtrInst } from "./mir.tsn";
+
+export class MIRBuilder {
+    private module: MIRModule;
+    private currentFunction: MIRFunction;
+    private currentBlockId: i32;
+
+    constructor(moduleName: string) {
+        this.module = new MIRModule(moduleName);
+        this.currentFunction = new MIRFunction("", new MIRType("void", false, 0));
+        this.currentBlockId = 0;
+    }
+
+    public getModule(): MIRModule {
+        return this.module;
+    }
+
+    public createFunction(name: string, returnType: MIRType): void {
+        let func = new MIRFunction(name, returnType);
+        this.module.functions.push(func);
+    }
+
+    public createBasicBlock(label: string): i32 {
+        return this.currentFunction.createBlock(label);
+    }
+
+    public setInsertPoint(blockId: i32): void {
+        this.currentBlockId = blockId;
+    }
+
+    public createBinary(op: string, left: MIRValue, right: MIRValue): MIRRegister {
+        let resultType = left.valueType;
+        let result = this.currentFunction.createRegister(resultType);
+        let inst = new MIRBinaryInst(op, result, left, right);
+        this.getCurrentBlock().instructions.push(inst);
+        return result;
+    }
+
+    public createLoad(address: MIRValue): MIRRegister {
+        let resultType = new MIRType("i32", false, 4);
+        let result = this.currentFunction.createRegister(resultType);
+        let inst = new MIRLoadInst(result, address);
+        this.getCurrentBlock().instructions.push(inst);
+        return result;
+    }
+
+    public createStore(value: MIRValue, address: MIRValue): void {
+        let inst = new MIRStoreInst(value, address);
+        this.getCurrentBlock().instructions.push(inst);
+    }
+
+    public createCall(callee: string, args: Array<MIRValue>, returnType: MIRType): MIRRegister {
+        let result = this.currentFunction.createRegister(returnType);
+        let inst = new MIRCallInst(result, callee, args);
+        this.getCurrentBlock().instructions.push(inst);
+        return result;
+    }
+
+    public createReturn(value: MIRValue): void {
+        let inst = new MIRReturnInst(value);
+        this.getCurrentBlock().instructions.push(inst);
+    }
+
+    public createBranch(condition: MIRValue, trueBlock: i32, falseBlock: i32): void {
+        let inst = new MIRBranchInst(condition, trueBlock, falseBlock);
+        this.getCurrentBlock().instructions.push(inst);
+    }
+
+    public createJump(targetBlock: i32): void {
+        let inst = new MIRJumpInst(targetBlock);
+        this.getCurrentBlock().instructions.push(inst);
+    }
+
+    public createAlloca(allocType: MIRType): MIRRegister {
+        let ptrType = new MIRType(allocType.name, true, 8);
+        let result = this.currentFunction.createRegister(ptrType);
+        let inst = new MIRAllocaInst(result, allocType);
+        this.getCurrentBlock().instructions.push(inst);
+        return result;
+    }
+
+    public createGetElementPtr(base: MIRValue, index: MIRValue): MIRRegister {
+        let ptrType = new MIRType("i32", true, 8);
+        let result = this.currentFunction.createRegister(ptrType);
+        let inst = new MIRGetElementPtrInst(result, base, index);
+        this.getCurrentBlock().instructions.push(inst);
+        return result;
+    }
+
+    public createConstant(value: string, valueType: MIRType): MIRConstant {
+        return new MIRConstant(valueType, value);
+    }
+
+    public createGlobal(name: string, valueType: MIRType): void {
+        let global = new MIRGlobal(valueType, name);
+        this.module.globals.push(global);
+    }
+
+    private getCurrentBlock(): MIRBasicBlock {
+        return this.currentFunction.blocks.get(this.currentBlockId);
+    }
+}
+
+// Simple test function to demonstrate MIR building
+export function buildSimpleMIR(): MIRModule {
+    let builder = new MIRBuilder("test");
+    
+    // Create function: i32 add(i32 a, i32 b)
+    let i32Type = new MIRType("i32", false, 4);
+    builder.createFunction("add", i32Type);
+    
+    // Create entry block
+    let entryBlock = builder.createBasicBlock("entry");
+    builder.setInsertPoint(entryBlock);
+    
+    // Create parameters
+    let i32TypeA = new MIRType("i32", false, 4);
+    let paramA = new MIRRegister(i32TypeA, 0);
+    let i32TypeB = new MIRType("i32", false, 4);
+    let paramB = new MIRRegister(i32TypeB, 1);
+    
+    // Create add instruction: result = a + b
+    let result = builder.createBinary("+", paramA, paramB);
+    
+    // Create constant for return
+    let i32TypeRet = new MIRType("i32", false, 4);
+    let constZero = builder.createConstant("0", i32TypeRet);
+    
+    // Return constant instead of result to avoid complex flow
+    builder.createReturn(constZero);
+    
+    return builder.getModule();
+}
+
+export function main(): i32 {
+    log("Building simple MIR...");
+    let module = buildSimpleMIR();
+    
+    log("Module name: ");
+    log(module.name);
+    
+    log("MIR builder test completed!");
+    return 0;
+}

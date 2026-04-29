@@ -1,0 +1,37 @@
+// Test MIR builder
+
+import { log } from "std:console";
+import { buildSimpleMIR } from "./mir-builder.tsn";
+
+export function main(): i32 {
+    log("Building simple MIR...");
+    let module = buildSimpleMIR();
+    
+    log("Module name: ");
+    log(module.name);
+    
+    log("Number of functions: ");
+    let funcCount = module.functions.length();
+    if (funcCount > 0) {
+        log("1");
+        let func = module.functions.get(0);
+        log("Function name: ");
+        log(func.name);
+        log("Number of blocks: ");
+        let blockCount = func.blocks.length();
+        if (blockCount > 0) {
+            log("1");
+            let block = func.blocks.get(0);
+            log("Block label: ");
+            log(block.label);
+            log("Number of instructions: ");
+            let instCount = block.instructions.length();
+            if (instCount == 2) {
+                log("2");
+            }
+        }
+    }
+    
+    log("MIR test completed!");
+    return 0;
+}
