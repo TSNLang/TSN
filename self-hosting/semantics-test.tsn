@@ -1,0 +1,40 @@
+import { Semantics, Symbol, Type, TypeKind } from "self-hosting/semantics.tsn";
+import { console } from "std/console.tsn";
+import { string } from "std/string.tsn";
+
+function testSemantics(): void {
+    let semVar: Semantics;
+    semVar = new Semantics();
+    
+    let intType = new Type(TypeKind.Int, "i32");
+    let globalVar = new Symbol("g", intType, true, false);
+    
+    semVar.globalScope.define(globalVar);
+    console.log("Defined global 'g'");
+
+    let s1 = semVar.currentScope.lookup("g");
+    console.log("Lookup 'g' in global: " + s1.name);
+
+    semVar.enterScope();
+    console.log("Entered scope");
+
+    let localVar = new Symbol("l", intType, false, false);
+    semVar.currentScope.define(localVar);
+    console.log("Defined local 'l'");
+
+    let s2 = semVar.currentScope.lookup("l");
+    console.log("Lookup 'l' in local: " + s2.name);
+
+    let s3 = semVar.currentScope.lookup("g");
+    console.log("Lookup 'g' from local: " + s3.name);
+
+    semVar.exitScope();
+    console.log("Exited scope");
+
+    let s4 = semVar.currentScope.lookup("l");
+    console.log("Lookup 'l' after exit (should be unknown): " + s4.symbolType.name);
+}
+
+function main(): void {
+    testSemantics();
+}

@@ -1,0 +1,124 @@
+import { Array } from "std/array.tsn";
+import { string } from "std/string.tsn";
+
+export enum TypeKind {
+    Void,
+    Int,
+    Bool,
+    String,
+    Class,
+    Function,
+    GenericParam,
+    Null,
+    Unknown
+}
+
+export class Type {
+    public kind: i32;
+    public name: string;
+    // For Class: list of properties/methods, for Function: params and return type
+    // We'll expand this as needed
+
+    constructor(kind: i32, name: string) {
+        this.kind = kind;
+        this.name = name;
+    }
+}
+
+export class Symbol {
+    public name: string;
+    public symbolType: Type;
+    public isGlobal: bool;
+    public isConstant: bool;
+
+    constructor(name: string, symbolType: Type, isGlobal: bool, isConstant: bool) {
+        this.name = name;
+        this.symbolType = symbolType;
+        this.isGlobal = isGlobal;
+        this.isConstant = isConstant;
+    }
+}
+
+export class SymbolTable {
+    public symbols: Array<Symbol>;
+    public parent: SymbolTable; // Optional
+
+    constructor() {
+        this.symbols = new Array<Symbol>();
+        this.parent = this; // Use self as a sentinel if needed, or check carefully
+    }
+
+    public define(symbol: Symbol): void {
+        this.symbols.push(symbol);
+    }
+
+    public lookup(name: string): Symbol {
+        let i = 0;
+        while (i < this.symbols.length) {
+            let s = this.symbols.get(i);
+            if (s.name == name) {
+                return s;
+            }
+            i = i + 1;
+        }
+        
+        // Use a simple identity check if parent is not self
+        // This is a workaround for null check issues
+        if (this.parent.symbols.length != this.symbols.length) {
+             return this.parent.lookup(name);
+        }
+
+        return new Symbol(name, new Type(TypeKind.Unknown, "unknown"), false, false);
+    }
+}
+
+export class Semantics {
+    public globalScope: SymbolTable;
+    public currentScope: SymbolTable;
+    public typeCache: Array<Type>;
+
+    constructor() {
+        this.globalScope = new SymbolTable();
+        this.currentScope = this.globalScope;
+        this.typeCache = new Array<Type>();
+        this.registerBuiltinTypes();
+    }
+
+    private registerBuiltinTypes(): void {
+        this.typeCache.push(new Type(TypeKind.Void, "void"));
+        this.typeCache.push(new Type(TypeKind.Int, "i32"));
+        this.typeCache.push(new Type(TypeKind.Bool, "bool"));
+        this.typeCache.push(new Type(TypeKind.String, "string"));
+    }
+
+    public resolveType(name: string): Type {
+        let i = 0;
+        while (i < this.typeCache.length) {
+            let t = this.typeCache.get(i);
+            if (t.name == name) {
+                return t;
+            }
+            i = i + 1;
+        }
+
+        // Handle Array<T> or other generics simply for now
+        // If it contains '<', we might want to create a new type
+        // For now, if not found, return a new unknown class type
+        let newType = new Type(TypeKind.Class, name);
+        this.typeCache.push(newType);
+        return newType;
+    }
+
+    public enterScope(): void {
+        let newScope = new SymbolTable();
+        newScope.parent = this.currentScope;
+        this.currentScope = newScope;
+    }
+
+    public exitScope(): void {
+        // Simple way to check if we are not at global scope
+        if (this.currentScope.parent.symbols.length != this.currentScope.symbols.length) {
+            this.currentScope = this.currentScope.parent;
+        }
+    }
+}
