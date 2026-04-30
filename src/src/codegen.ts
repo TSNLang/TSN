@@ -1000,12 +1000,6 @@ export class CodeGenerator {
     }
   }
 
-  private toLLVMType(t: string): string {
-    if (this.isPointerType(t) || this.isClassType(t)) return 'ptr';
-    if (t.startsWith('%') && this.interfaceDecls.has(t.substring(1))) return 'ptr';
-    return t;
-  }
-
   private generateVarDecl(s: VarDecl): void {
     let t = this.localVarTypes.get(s.name) || (s.type ? this.getLLVMType(s.type) : 'i32');
     
@@ -2400,17 +2394,42 @@ export class CodeGenerator {
     if (map[n]) return map[n];
     if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return `%${n}`;
     if (this.structDecls.has(n)) return `%${n}`;
+    const imported = this.importedSymbols.get(n);
+    if (imported && (imported.kind === 'class' || imported.kind === 'interface')) return `%${n}`;
     return (n === 'string') ? 'ptr' : 'i32';
   }
 
   private isClassType(llvmType: string): boolean {
     const name = llvmType.startsWith('%') ? llvmType.substring(1) : llvmType;
-    return this.classDecls.has(name);
+    if (this.classDecls.has(name)) return true;
+    if (this.structs.has(name)) return true;
+    const imported = this.importedSymbols.get(name);
+    if (imported && imported.kind === 'class') return true;
+    if (name.includes('_')) {
+        const parts = name.split('_');
+        for (const part of parts) {
+            if (this.genericClasses.has(part)) return true;
+            const imp = this.importedSymbols.get(part);
+            if (imp && imp.kind === 'class') return true;
+        }
+    }
+    return false;
   }
 
   private isInterfaceType(llvmType: string): boolean {
     const name = llvmType.startsWith('%') ? llvmType.substring(1) : llvmType;
-    return this.interfaceDecls.has(name);
+    if (this.interfaceDecls.has(name)) return true;
+    const imported = this.importedSymbols.get(name);
+    if (imported && imported.kind === 'interface') return true;
+    if (name.includes('_')) {
+        const parts = name.split('_');
+        for (const part of parts) {
+            if (this.genericInterfaces.has(part)) return true;
+            const imp = this.importedSymbols.get(part);
+            if (imp && imp.kind === 'interface') return true;
+        }
+    }
+    return false;
   }
 
   private isStructType(llvmType: string): boolean {
@@ -2434,7 +2453,14 @@ export class CodeGenerator {
 
   private toLLVMType(t: string): string {
     if (this.isPointerType(t) || this.isClassType(t)) return 'ptr';
-    if (t.startsWith('%') && this.interfaceDecls.has(t.substring(1))) return 'ptr';
+    if (t.startsWith('%')) {
+        const name = t.substring(1);
+        if (this.classDecls.has(name) || this.interfaceDecls.has(name)) return 'ptr';
+        if (name.includes('_')) { // Handle instantiated generic classes like Array_Type
+            const baseName = name.split('_')[0];
+            if (this.genericClasses.has(baseName) || this.genericInterfaces.has(baseName)) return 'ptr';
+        }
+    }
     return t;
   }
 
