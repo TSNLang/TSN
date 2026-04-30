@@ -179,7 +179,9 @@ export class CodeGenerator {
     return this.exportedSymbols;
   }
 
+  private currentProgram: Program | null = null;
   generate(program: Program): string {
+    this.currentProgram = program;
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
     this.externalDecls = []; this.exportedSymbols = [];
     this.emittedVTables.clear();
@@ -191,6 +193,21 @@ export class CodeGenerator {
 
     // PRE-SCAN: Collect all signatures
     for (const decl of program.declarations) this.preScanDeclaration(decl);
+
+    // Scan for external constructors before generating code
+    for (const decl of program.declarations) {
+        if (decl.kind === ASTKind.FunctionDecl) {
+            this.scanAndInstantiateNewExpr((decl as FunctionDecl).body);
+        } else if (decl.kind === ASTKind.ClassDecl) {
+            const c = decl as ClassDecl;
+            if (c.constructorDecl) this.scanAndInstantiateNewExpr(c.constructorDecl.body);
+            for (const m of c.methods) this.scanAndInstantiateNewExpr(m.body);
+        } else if (decl.kind === ASTKind.NamespaceDecl) {
+            for (const sub of (decl as NamespaceDecl).body) {
+                if (sub.kind === ASTKind.FunctionDecl) this.scanAndInstantiateNewExpr((sub as FunctionDecl).body);
+            }
+        }
+    }
 
     // Phase 2: Struct definitions
     for (const decl of program.declarations) this.generateStructsRecursive(decl);
@@ -393,6 +410,13 @@ export class CodeGenerator {
           kind: 'class',
           ast: cls
         });
+      } else if (innerDecl.kind === ASTKind.EnumDecl) {
+        const en = innerDecl as EnumDecl;
+        this.exportedSymbols.push({
+          name: en.name,
+          kind: 'enum',
+          ast: en
+        });
       }
     } else if (decl.kind === ASTKind.NamespaceDecl) {
       const ns = decl as NamespaceDecl;
@@ -487,6 +511,39 @@ export class CodeGenerator {
     if (!exports) return;
     
     this.importedModules.set(decl.source, exports);
+
+    // Register ALL classes/interfaces/enums from the module so we know their types
+    for (const sym of exports.symbols) {
+        if ((sym.kind === 'class' || sym.kind === 'interface' || sym.kind === 'enum') && sym.ast) {
+            const name = sym.name;
+            if (sym.kind === 'class') {
+                const cls = sym.ast as ClassDecl;
+                if (cls.typeParameters && cls.typeParameters.length > 0) {
+                    if (!this.genericClasses.has(name)) this.genericClasses.set(name, cls);
+                } else {
+                    if (!this.classDecls.has(name)) {
+                        this.classDecls.set(name, cls);
+                        this.buildVTable(cls, name);
+                    }
+                }
+            } else if (sym.kind === 'interface') {
+                const iface = sym.ast as InterfaceDecl;
+                if (iface.typeParameters && iface.typeParameters.length > 0) {
+                    if (!this.genericInterfaces.has(name)) this.genericInterfaces.set(name, iface);
+                } else {
+                    if (!this.interfaceDecls.has(name)) {
+                        this.interfaceDecls.set(name, iface);
+                        this.buildInterfaceVTable(iface);
+                    }
+                }
+            } else if (sym.kind === 'enum') {
+                if (!this.enums.has(name)) {
+                    this.processEnum(sym.ast as EnumDecl);
+                }
+            }
+        }
+    }
+
     const imported = this.moduleResolver.getImportedSymbols(decl, exports);
     
     for (const [name, sym] of imported) {
@@ -568,6 +625,16 @@ export class CodeGenerator {
   private mangleName(name: string, params: Parameter[], isExternal: boolean = false): string {
     if (isExternal) return name;
     if (this.scopeStack.length === 0 && params.length === 0 && name === 'main') return 'main';
+    
+    // Check if it's a known global function (e.g. from imports) that should not be mangled
+    if (this.scopeStack.length === 0) {
+        const fullPath = name;
+        const sym = this.importedSymbols.get(fullPath);
+        if (sym && sym.kind === 'function') {
+            return sym.name; // Use the mangled name from metadata
+        }
+    }
+
     let res = '_T';
     for (const s of this.scopeStack) res += `${s.length}${s}`;
     res += `${name.length}${name}E`;
@@ -603,13 +670,32 @@ export class CodeGenerator {
   }
 
   private ensureExternalDeclaration(mangled: string, sym: ExportedSymbol): void {
-    if (this.functions.has(mangled) && !(this.functions.get(mangled) as any).isExternal) return; // Don't declare if we defined it here
+    const existing = this.functions.get(mangled);
+    // Don't declare if we defined it locally or if it's already declared with same signature
+    if (existing && !(existing as any).isExternal) return; 
 
-    if (sym.kind === 'function') {
+    if (sym.kind === 'function' || !sym.kind) {
       const params = (sym.paramTypes || []).map(p => this.toLLVMType(p)).join(', ');
       const rt = this.toLLVMType(sym.llvmType || 'void');
       const declLine = `declare ${rt} @${mangled}(${params})`;
+      
+      // If we already have this exact declaration, skip
       if (this.externalDecls.includes(declLine)) return;
+
+      // If we have a local definition in the output buffer, don't declare
+      const defPattern = `define ${rt} @${mangled}(`;
+      if (this.output.some(line => line.includes(defPattern)) || this.globalBuffer.some(line => line.includes(defPattern))) {
+          return;
+      }
+      
+      // Also check if this mangled name exists in current function list as a local (not external)
+      const localFunc = this.functions.get(mangled);
+      if (localFunc && !(localFunc as any).isExternal) return;
+
+      // If we have a declaration with same name but different signature, remove it first
+      const namePattern = `@${mangled}(`;
+      this.externalDecls = this.externalDecls.filter(d => !d.includes(namePattern));
+      
       this.externalDecls.push(declLine);
     }
   }
@@ -1404,7 +1490,26 @@ export class CodeGenerator {
     
     // 2. Call constructor
     const scopedCtor = `${className}.constructor`;
-    const info = this.functions.get(scopedCtor);
+    let info = this.functions.get(scopedCtor);
+    
+    // If not found locally, check if it's an imported class
+    if (!info) {
+        const cDecl = this.classDecls.get(className);
+        if (cDecl && !this.isLocalDeclaration(cDecl, this.currentProgram)) {
+            const mName = this.mangleNameWithScope(className, 'constructor', cDecl.constructorDecl.params);
+            const mInfo = {
+                name: mName,
+                kind: 'function',
+                llvmType: 'void',
+                paramTypes: ['ptr', ...cDecl.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))]
+            };
+            this.ensureExternalDeclaration(mName, mInfo as any);
+            this.functions.set(scopedCtor, mInfo as any);
+            this.functions.set(mName, mInfo as any);
+            info = mInfo as any;
+        }
+    }
+
     if (info) {
       const args = e.args.map(a => this.generateExpression(a));
       const aStr = [`ptr ${ptr}`, ...args.map((a, i) => {
@@ -1813,26 +1918,46 @@ export class CodeGenerator {
     if (m.object.kind === ASTKind.Identifier) {
         const ns = (m.object as Identifier).name;
         const fullName = `${ns}.${m.member}`;
+        
+        // Check if 'ns' is an imported namespace or module
+        const isImportedNS = this.importedModules.has(ns) || this.importedSymbols.has(ns);
         const importedSym = this.importedSymbols.get(fullName);
         const hasNamespaceFunction = this.functions.has(fullName)
           && !this.localVarTypes.has(ns)
           && !this.currentFunctionParams.has(ns)
           && !this.globals.has(ns);
 
-        if (importedSym && importedSym.kind === 'function') {
-            if (genericArgs && genericArgs.length > 0 && importedSym.ast) {
-                const instName = this.instantiateFunction(fullName, genericArgs);
-                return this.generateInternalCall(instName, args);
+        if (isImportedNS || importedSym || hasNamespaceFunction) {
+            if (importedSym && importedSym.kind === 'function') {
+                if (genericArgs && genericArgs.length > 0 && importedSym.ast) {
+                    const instName = this.instantiateFunction(fullName, genericArgs);
+                    return this.generateInternalCall(instName, args);
+                }
+                const mName = importedSym.name;
+                const mInfo = {
+                    name: mName,
+                    kind: 'function',
+                    llvmType: importedSym.llvmType,
+                    paramTypes: importedSym.paramTypes
+                };
+                this.ensureExternalDeclaration(mName, mInfo as any);
+                return this.generateImportedCall(fullName, mName, mInfo as any, args);
             }
-            return this.generateImportedCall(fullName, fullName, importedSym, args);
-        }
 
-        if (hasNamespaceFunction) {
-            if (genericArgs && genericArgs.length > 0) {
-                const instName = this.instantiateFunction(fullName, genericArgs);
-                return this.generateInternalCall(instName, args);
+            if (hasNamespaceFunction) {
+                if (genericArgs && genericArgs.length > 0) {
+                    const instName = this.instantiateFunction(fullName, genericArgs);
+                    return this.generateInternalCall(instName, args);
+                }
+                return this.generateInternalCall(fullName, args);
             }
-            return this.generateInternalCall(fullName, args);
+            
+            // If it's a namespace but we didn't find the function yet, 
+            // it might be a fatal error or a special case.
+            // But we MUST NOT fall through to generateExpression(m.object) if it's a known namespace.
+            if (isImportedNS) {
+                throw new Error(`Symbol '${m.member}' not found in namespace '${ns}'.`);
+            }
         }
     }
 
@@ -2190,18 +2315,38 @@ export class CodeGenerator {
 
   private generateMemberExpr(e: MemberExpr): string {
     if (e.object.kind === ASTKind.Identifier) {
-      const enumName = (e.object as Identifier).name;
-      const en = this.enums.get(enumName);
-      if (en && en.has(e.member)) return en.get(e.member)!.toString();
-      const importedEnum = this.importedSymbols.get(enumName);
+      const name = (e.object as Identifier).name;
+      const fullName = `${name}.${e.member}`;
+
+      // Enum check
+      const en = this.enums.get(name);
+      if (en) {
+          if (en.has(e.member)) return en.get(e.member)!.toString();
+          throw new Error(`Enum '${name}' does not have member '${e.member}'`);
+      }
+      const importedEnum = this.importedSymbols.get(name);
       if (importedEnum?.kind === 'enum' && importedEnum.ast) {
         const enumDecl = importedEnum.ast as EnumDecl;
         const member = enumDecl.members.find(m => m.name === e.member);
         if (member) {
-          if (!this.enums.has(enumName)) this.processEnum(enumDecl);
-          const resolved = this.enums.get(enumName);
+          if (!this.enums.has(name)) this.processEnum(enumDecl);
+          const resolved = this.enums.get(name);
           if (resolved && resolved.has(e.member)) return resolved.get(e.member)!.toString();
+        } else {
+            throw new Error(`Imported Enum '${name}' does not have member '${e.member}'`);
         }
+      }
+
+      // Namespace constant check (e.g. memory.HEAP_ZERO_MEMORY)
+      const importedConst = this.importedSymbols.get(fullName);
+      if (importedConst && (importedConst.kind === 'const' || importedConst.kind === 'let')) {
+          const g = this.globals.get(fullName);
+          if (g) {
+              const t = this.newTemp();
+              this.emit(`${t} = load ${g.type}, ptr @${g.name}, align 4`);
+              this.tempTypes.set(t, g.type);
+              return t;
+          }
       }
     }
     const obj = this.generateExpression(e.object);
@@ -2461,6 +2606,13 @@ export class CodeGenerator {
             if (this.genericClasses.has(baseName) || this.genericInterfaces.has(baseName)) return 'ptr';
         }
     }
+    // Fallback: if it's a known class/interface from ANY loaded module
+    const rawName = t.startsWith('%') ? t.substring(1) : t;
+    for (const mod of this.importedModules.values()) {
+        if (mod.symbols.some(s => s.name === rawName && (s.kind === 'class' || s.kind === 'interface'))) {
+            return 'ptr';
+        }
+    }
     return t;
   }
 
@@ -2673,11 +2825,26 @@ export class CodeGenerator {
   private newLabel(p: string): string { return `${p}.${this.labelCounter++}`; }
   private emit(l: string): void { (this.currentOutput ?? this.output).push('  '.repeat(this.indent) + l); }
 
+  private isLocalDeclaration(decl: any, program: Program): boolean {
+    for (const d of program.declarations) {
+      if (d === decl) return true;
+      if (d.kind === ASTKind.ExportDecl && (d as ExportDecl).declaration === decl) return true;
+      if (d.kind === ASTKind.NamespaceDecl) {
+        if (this.isLocalDeclaration(decl, { declarations: (d as NamespaceDecl).body } as any)) return true;
+      }
+    }
+    return false;
+  }
+
   private buildVTable(c: ClassDecl, customName?: string): void {
       if (c.typeParameters && c.typeParameters.length > 0) return;
 
       const className = customName || c.name;
       if (this.vTables.has(className)) return;
+
+      // Check if this class is defined in the current module
+      const isLocal = this.isLocalDeclaration(c, this.currentProgram!);
+      const isImported = !isLocal;
 
       const methodNames: string[] = [];
       const mangledNames: string[] = [];
@@ -2718,6 +2885,13 @@ export class CodeGenerator {
           }
           const idx = methodNames.indexOf(m.name);
           const currentMangled = this.mangleNameWithScope(c.name, m.name, m.params);
+          
+          if (isImported && currentMangled !== 'null') {
+              const rt = this.getFunctionReturnRuntimeType(m.returnType);
+              const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
+              this.ensureExternalDeclaration(currentMangled, { name: currentMangled, kind: 'function', llvmType: rt, paramTypes: pts } as any);
+          }
+
           if (idx !== -1) {
               // Override or Implement Interface
               mangledNames[idx] = currentMangled;
@@ -2799,8 +2973,16 @@ export class CodeGenerator {
     instantiatedDecl.name = mangledName;
     instantiatedDecl.typeParameters = [];
 
-    // Add to decls and generate
     this.classDecls.set(mangledName, instantiatedDecl);
+    
+    // Check if this is a local instantiation or from an imported generic
+    const isLocal = this.isLocalDeclaration(baseDecl, this.currentProgram);
+    if (!isLocal) {
+        // For imported generic classes, mark all its methods as external initially
+        // They will be defined if we are currently "in" that module's compilation
+        // but here they should be treated as potential external calls.
+    }
+
     this.buildVTable(instantiatedDecl);
     
     const oldVTable = this.output.length;
@@ -2815,7 +2997,7 @@ export class CodeGenerator {
     if (instantiatedDecl.constructorDecl) {
         const mName = this.mangleName('constructor', instantiatedDecl.constructorDecl.params);
         const pts = ['ptr', ...instantiatedDecl.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
-        const mInfo = { name: mName, returnType: 'void', paramTypes: pts, isExternal: false };
+        const mInfo = { name: mName, returnType: 'void', paramTypes: pts, isExternal: !isLocal };
         this.functions.set(`${mangledName}.constructor`, mInfo as any);
         this.functions.set(mName, mInfo as any);
     }
@@ -2829,7 +3011,7 @@ export class CodeGenerator {
         const mName = this.mangleName(m.name, m.params);
         const rt = this.getLLVMType(m.returnType);
         const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
-        const mInfo = { name: mName, returnType: rt, paramTypes: pts, isExternal: false };
+        const mInfo = { name: mName, returnType: rt, paramTypes: pts, isExternal: !isLocal };
         this.functions.set(`${mangledName}.${m.name}`, mInfo as any);
         this.functions.set(mName, mInfo as any);
     }
@@ -2970,38 +3152,51 @@ export class CodeGenerator {
     return mangledName;
   }
 
+  private ensureGenericOptionalAvailable(): void {
+    if (this.genericFunctions.has('None')) return;
+    const optionModule = this.moduleResolver.resolveModule('std:option');
+    if (optionModule) {
+      for (const sym of optionModule.symbols) {
+        if (sym.kind === 'function' && (sym.name === 'None' || sym.name === 'Some')) {
+          this.genericFunctions.set(sym.name, sym.ast);
+        }
+      }
+    }
+  }
+
   private scanAndInstantiateNewExpr(stmts: Statement[]): void {
     const scanExpr = (expr: Expression): void => {
       if (!expr) return;
       
       if (expr.kind === ASTKind.NewExpr) {
         const newExpr = expr as NewExpr;
+        let className = newExpr.className;
         if (newExpr.genericArgs && newExpr.genericArgs.length > 0) {
-          this.instantiateClass(newExpr.className, newExpr.genericArgs);
+          className = this.instantiateClass(newExpr.className, newExpr.genericArgs);
         }
-        // Scan constructor arguments
+        
+        const cDecl = this.classDecls.get(className);
+        if (cDecl && !this.isLocalDeclaration(cDecl, this.currentProgram)) {
+            const mName = this.mangleNameWithScope(className, 'constructor', cDecl.constructorDecl.params);
+            const mInfo = {
+                name: mName,
+                kind: 'function',
+                llvmType: 'void',
+                paramTypes: ['ptr', ...cDecl.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))]
+            };
+            this.ensureExternalDeclaration(mName, mInfo as any);
+            this.functions.set(`${className}.constructor`, mInfo as any);
+        }
+
         if (newExpr.args) {
-          for (const arg of newExpr.args) {
-            scanExpr(arg);
-          }
+          for (const arg of newExpr.args) scanExpr(arg);
         }
       } else if (expr.kind === ASTKind.CallExpr) {
-        const callExpr = expr as CallExpr;
-        if (callExpr.callee.kind === ASTKind.Identifier && callExpr.genericArgs && callExpr.genericArgs.length > 0) {
-          this.instantiateFunction((callExpr.callee as Identifier).name, callExpr.genericArgs);
-        }
-        if (callExpr.args) {
-          for (const arg of callExpr.args) {
-            scanExpr(arg);
-          }
-        }
-      } else if (expr.kind === ASTKind.BinaryExpr) {
         const binExpr = expr as BinaryExpr;
         scanExpr(binExpr.left);
         scanExpr(binExpr.right);
       } else if (expr.kind === ASTKind.UnaryExpr) {
-        const unExpr = expr as UnaryExpr;
-        scanExpr(unExpr.operand);
+        scanExpr((expr as UnaryExpr).operand);
       } else if (expr.kind === ASTKind.MemberExpr) {
         const memExpr = expr as MemberExpr;
         scanExpr(memExpr.object);
@@ -3009,6 +3204,8 @@ export class CodeGenerator {
         const idxExpr = expr as IndexExpr;
         scanExpr(idxExpr.object);
         scanExpr(idxExpr.index);
+      } else if (expr.kind === ASTKind.CastExpr) {
+        scanExpr((expr as CastExpr).expr);
       }
     };
 

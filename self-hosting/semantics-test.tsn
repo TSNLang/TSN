@@ -1,5 +1,5 @@
 import { Semantics, Symbol, Type, TypeKind } from "self-hosting/semantics.tsn";
-import { console } from "std/console.tsn";
+import * as console from "std/console.tsn";
 import { string } from "std/string.tsn";
 
 function testSemantics(): void {
@@ -18,7 +18,8 @@ function testSemantics(): void {
     semVar.enterScope();
     console.log("Entered scope");
 
-    let localVar = new Symbol("l", intType, false, false);
+    let intType2 = new Type(TypeKind.Int, "i32");
+    let localVar = new Symbol("l", intType2, false, false);
     semVar.currentScope.define(localVar);
     console.log("Defined local 'l'");
 

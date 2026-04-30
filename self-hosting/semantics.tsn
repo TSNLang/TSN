@@ -1,5 +1,6 @@
 import { Array } from "std/array.tsn";
 import { string } from "std/string.tsn";
+import * as memory from "std/memory.tsn";
 
 export enum TypeKind {
     Void,
@@ -52,6 +53,11 @@ export class SymbolTable {
         this.symbols.push(symbol);
     }
 
+    public checkExpression(expr: any): Type {
+        // Simple mock for now
+        return new Type(TypeKind.Int, "i32");
+    }
+
     public lookup(name: string): Symbol {
         let i = 0;
         while (i < this.symbols.length) {
@@ -101,12 +107,21 @@ export class Semantics {
             i = i + 1;
         }
 
-        // Handle Array<T> or other generics simply for now
-        // If it contains '<', we might want to create a new type
-        // For now, if not found, return a new unknown class type
-        let newType = new Type(TypeKind.Class, name);
+        // Primitive type check for common names if not in cache
+        if (name == "i32") return this.typeCache.get(1);
+        if (name == "bool") return this.typeCache.get(2);
+        if (name == "string") return this.typeCache.get(3);
+        if (name == "void") return this.typeCache.get(0);
+
+        // For classes/generics, create new type
+        let kind = TypeKind.Class;
+        if (name.startsWith("ptr<") || name.startsWith("rawPtr<")) {
+            kind = TypeKind.Class; // Treat as class for pointer logic
+        }
+
+        let newType = new Type(kind, name);
         this.typeCache.push(newType);
-        return newType;
+        return this.typeCache.get(this.typeCache.length - 1);
     }
 
     public enterScope(): void {

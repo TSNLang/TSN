@@ -326,6 +326,9 @@ export class ModuleResolver {
   }
 
   private resolveSourcePath(modulePath: string): string {
+    if (modulePath.startsWith('std/')) {
+        return `src/${modulePath}`;
+    }
     if (!modulePath.startsWith('/') && !modulePath.match(/^[A-Z]:/)) {
       return `${this.baseDir}/${modulePath}`;
     }
@@ -334,9 +337,19 @@ export class ModuleResolver {
 
   // Generate .meta file path from .tsn path
   resolveMetaPath(modulePath: string): string {
+    if (modulePath.startsWith('std/')) {
+        return `src/${modulePath.replace(/\.tsn$/, '.meta')}`;
+    }
     let resolved = modulePath;
     if (!modulePath.startsWith('/') && !modulePath.match(/^[A-Z]:/)) {
-      resolved = `${this.baseDir}/${modulePath}`;
+      // If modulePath already starts with baseDir, don't prepend it again
+      const normalizedBase = this.baseDir.replace(/\\/g, '/');
+      const normalizedModule = modulePath.replace(/\\/g, '/');
+      if (normalizedModule.startsWith(normalizedBase + '/')) {
+        resolved = normalizedModule;
+      } else {
+        resolved = `${this.baseDir}/${modulePath}`;
+      }
     }
     return resolved.replace(/\.tsn$/, '.meta');
   }
