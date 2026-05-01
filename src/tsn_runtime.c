@@ -122,10 +122,9 @@ void tsn_incRef(void* p) {
 void tsn_decRef(void* p) {
     if (!p) return;
     int* refCount = (int*)p;
+    if (*refCount <= 0) return; 
     (*refCount)--;
-    // printf("DEBUG: RC decreased to %d at %p\n", *refCount, p);
     if (*refCount <= 0) {
-        // printf("DEBUG: Freeing object at %p\n", p);
         free(p);
     }
 }

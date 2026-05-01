@@ -65,8 +65,16 @@ export class ModuleResolver {
 
   // Resolve a module path to its exports
   resolveModule(modulePath: string): ModuleExports | null {
+    console.log(`--- moduleResolver.resolve: ${modulePath}`);
     if (this.moduleCache.has(modulePath)) {
+      console.log(`--- moduleResolver.resolve: cache hit for ${modulePath}`);
       return this.moduleCache.get(modulePath)!;
+    }
+
+    if (modulePath.startsWith('std/')) {
+      const parts = modulePath.split('/');
+      const name = parts[parts.length - 1];
+      return this.resolveStdModule('std:' + (name.endsWith('.tsn') ? name.substring(0, name.length - 4) : name));
     }
 
     if (modulePath.startsWith('std:')) {
@@ -84,6 +92,8 @@ export class ModuleResolver {
     const result = new Map<string, ExportedSymbol>();
     const namespace = importDecl.namespace;
 
+    console.log(`--- getImportedSymbols: import from ${importDecl.source}, symbols count=${moduleExports.symbols.length}`);
+
     // Handle default import: import Optional from 'std:option'
     if (importDecl.defaultImport) {
         const symName = importDecl.defaultImport;
@@ -95,12 +105,14 @@ export class ModuleResolver {
 
     if (namespace) {
       for (const sym of moduleExports.symbols) {
+        console.log(`--- getImportedSymbols: namespace=${namespace}, sym.name=${sym.name}, sym.realName=${sym.realName}`);
         result.set(`${importDecl.namespace}.${sym.name}`, sym);
       }
     } else {
       for (const spec of importDecl.specifiers) {
-        const exported = moduleExports.symbols.find((s) => s.name === spec.imported);
+        const exported = moduleExports.symbols.find((s) => s.name === spec.imported || s.name.endsWith("." + spec.imported));
         if (exported) {
+          console.log(`--- getImportedSymbols: spec.local=${spec.local}, exported.name=${exported.name}, exported.realName=${exported.realName}`);
           result.set(spec.local, exported);
         }
       }
@@ -122,11 +134,12 @@ export class ModuleResolver {
     for (const sym of moduleExports.symbols) {
       if (sym.kind === 'function') {
         const params = (sym.paramTypes || []).join(', ');
-        const mangledName = namespace ? `${namespace}_${sym.name}` : sym.name;
+        const mangledName = sym.realName || (namespace ? `${namespace}_${sym.name}` : sym.name);
 
         declarations.push(`declare ${sym.llvmType} @${mangledName}(${params})`);
       } else if (sym.kind === 'const' || sym.kind === 'let') {
-        declarations.push(`@${sym.name} = external global ${sym.varType}`);
+        const mangledName = sym.realName || sym.name;
+        declarations.push(`@${mangledName} = external global ${sym.varType}`);
       }
     }
 
@@ -134,6 +147,7 @@ export class ModuleResolver {
   }
 
   private resolveStdModule(modulePath: string): ModuleExports | null {
+    console.log(`--- resolveStdModule start: ${modulePath}`);
     if (STD_MODULES[modulePath]) {
         return {
           modulePath,
@@ -145,6 +159,7 @@ export class ModuleResolver {
     // Attempt to resolve as a TSN standard module in src/std/
     const stdName = modulePath.substring(4); // remove 'std:'
     const stdPath = `src/std/${stdName}.tsn`;
+    console.log(`--- resolveStandardModule: modulePath=${modulePath}, stdPath=${stdPath}`);
     
     try {
         console.log(`🔍 Loading std module from: ${stdPath}`);
@@ -160,49 +175,95 @@ export class ModuleResolver {
         const sourceLines = content.split(/\r?\n/);
         const seenSymbols = new Set<string>();
 
-        const addExportedSymbol = (innerDecl: FunctionDecl | ClassDecl | VarDecl | EnumDecl) => {
+        const addExportedSymbol = (innerDecl: any, namespace?: string) => {
+            console.log(`--- addExportedSymbol: start, innerDecl.kind=${innerDecl.kind}, namespace=${namespace}`);
+            if (innerDecl.kind === ASTKind.NamespaceDecl) {
+              const ns = innerDecl as NamespaceDecl;
+              console.log(`--- addExportedSymbol: entering namespace ${ns.name}, body size=${ns.body.length}`);
+              for (const sub of ns.body) {
+                if (sub.kind === ASTKind.FunctionDecl || sub.kind === ASTKind.ClassDecl || sub.kind === ASTKind.VarDecl || sub.kind === ASTKind.EnumDecl) {
+                  addExportedSymbol(sub as any, ns.name);
+                } else if (sub.kind === ASTKind.ExportDecl) {
+                  const exportDecl = sub as ExportDecl;
+                  addExportedSymbol(exportDecl.declaration, ns.name);
+                } else {
+                  console.log(`--- addExportedSymbol: skipping sub kind=${sub.kind}`);
+                }
+              }
+              return;
+            }
             if (innerDecl.kind === ASTKind.ClassDecl) {
                 const c = innerDecl as ClassDecl;
-                if (seenSymbols.has(`class:${c.name}`)) return;
-                seenSymbols.add(`class:${c.name}`);
-                symbols.push({ name: c.name, kind: 'class', ast: c });
+                const fullName = namespace ? `${namespace}.${c.name}` : c.name;
+                if (seenSymbols.has(`class:${fullName}`)) return;
+                seenSymbols.add(`class:${fullName}`);
+                symbols.push({ name: fullName, kind: 'class', ast: c });
             } else if (innerDecl.kind === ASTKind.FunctionDecl) {
                 const f = innerDecl as FunctionDecl;
-                if (!codegen.isTargetOSMatch(f.targetOS) || seenSymbols.has(`function:${f.name}`)) return;
-                seenSymbols.add(`function:${f.name}`);
+                const fullName = namespace ? `${namespace}.${f.name}` : f.name;
+                if (!codegen.isTargetOSMatch(f.targetOS) || seenSymbols.has(`function:${fullName}`)) return;
+                seenSymbols.add(`function:${fullName}`);
+                
+                // Mangle names for stdlib functions so they match when imported
+                const oldScopeStack = (codegen as any).scopeStack;
+                (codegen as any).scopeStack = namespace ? [namespace] : [];
+                const mangledName = (codegen as any).mangleName(f.name, f.params, !!f.ffiLib || f.isDeclare);
+                (codegen as any).scopeStack = oldScopeStack;
+                
+                // If it's a namespaced function, use the namespaced name in metadata
+                const metaName = mangledName;
+                console.log(`--- addExportedSymbol: fullName=${fullName}, metaName=${metaName}, mangledName=${mangledName}`);
+
                 symbols.push({
-                  name: f.name,
+                  name: fullName,
+                  realName: metaName,
                   kind: 'function',
                   llvmType: toLLVMTypeName(f.returnType),
                   paramTypes: f.params.map((p) => toLLVMTypeName(p.type)),
                   ast: f,
+                  isExternal: !!f.ffiLib || f.isDeclare // Mark as external if it's FFI or declare
                 });
             } else if (innerDecl.kind === ASTKind.VarDecl) {
                 const v = innerDecl as VarDecl;
-                if (seenSymbols.has(`var:${v.name}`)) return;
-                seenSymbols.add(`var:${v.name}`);
+                const fullName = namespace ? `${namespace}.${v.name}` : v.name;
+                if (seenSymbols.has(`var:${fullName}`)) return;
+                seenSymbols.add(`var:${fullName}`);
                 symbols.push({
-                    name: v.name,
+                    name: fullName,
                     kind: v.isConst ? 'const' : 'let',
                     varType: toLLVMTypeName(v.type || { name: 'i32' } as any),
                     ast: v
                 });
             } else if (innerDecl.kind === ASTKind.EnumDecl) {
                 const enumDecl = innerDecl as EnumDecl;
-                if (seenSymbols.has(`enum:${enumDecl.name}`)) return;
-                seenSymbols.add(`enum:${enumDecl.name}`);
-                symbols.push({ name: enumDecl.name, kind: 'enum', ast: enumDecl });
+                const fullName = namespace ? `${namespace}.${enumDecl.name}` : enumDecl.name;
+                if (seenSymbols.has(`enum:${fullName}`)) return;
+                seenSymbols.add(`enum:${fullName}`);
+                symbols.push({ name: fullName, kind: 'enum', ast: enumDecl });
             }
         };
 
-        const isInlineExportedDecl = (decl: FunctionDecl | ClassDecl | VarDecl | EnumDecl): boolean => {
+        const isInlineExportedDecl = (decl: any): boolean => {
           const lineText = sourceLines[decl.line - 1] || '';
           return /\bexport\b/.test(lineText);
         };
         
         for (const decl of program.declarations) {
+            console.log(`--- resolveStandardModule: top-level decl kind=${decl.kind}, line=${decl.line}`);
             if (decl.kind === ASTKind.ExportDecl) {
                 addExportedSymbol((decl as ExportDecl).declaration as FunctionDecl | ClassDecl | VarDecl | EnumDecl);
+                continue;
+            }
+
+            if (decl.kind === ASTKind.NamespaceDecl) {
+                const ns = decl as NamespaceDecl;
+                const lineText = sourceLines[ns.line - 1] || '';
+                const isNSExported = /\bexport\b/.test(lineText);
+                console.log(`--- resolveStandardModule: checking namespace ${ns.name}, lineText="${lineText}", isNSExported=${isNSExported}`);
+                // For stdlib, we treat all namespaces as exported if they are top-level
+                if (isNSExported || true) {
+                    addExportedSymbol(ns);
+                }
                 continue;
             }
 

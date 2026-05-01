@@ -33,7 +33,7 @@ function testSemantics(): void {
     console.log("Exited scope");
 
     let s4 = semVar.currentScope.lookup("l");
-    console.log("Lookup 'l' after exit (should be unknown): " + s4.symbolType.name);
+    console.log("Lookup 'l' after exit (should be unknown): " + s4.name);
 }
 
 function main(): void {

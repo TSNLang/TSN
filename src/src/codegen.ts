@@ -70,6 +70,7 @@ export class CodeGenerator {
   private importedModules: Map<string, ModuleExports> = new Map();
   private includedModulePaths: Set<string> = new Set();
   private externalDecls: string[] = [];
+  private localDecls: Set<Declaration> = new Set();
   private currentOutput: string[] | null = null;
   private globalBuffer: string[] = [];
   private instantiationTargetOutput: string[] | null = null;
@@ -155,8 +156,8 @@ export class CodeGenerator {
         this.emit(`call void @${disposeInfo.name}(ptr ${ptr})`);
       }
     }
-    this.ensureExternalDeclaration('memory_free', { name: 'memory_free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
-    this.emit(`call void @memory_free(ptr ${ptr})`);
+    this.ensureExternalDeclaration('tsn_decRef', { name: 'tsn_decRef', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+    this.emit(`call void @tsn_decRef(ptr ${ptr})`);
     this.emit(`br label %${cleanupDoneLabel}`);
     this.indent--;
     this.emit(`\n${cleanupDoneLabel}:`);
@@ -182,6 +183,10 @@ export class CodeGenerator {
   private currentProgram: Program | null = null;
   generate(program: Program): string {
     this.currentProgram = program;
+    if (this.localDecls.size === 0) {
+        this.localDecls = new Set(program.declarations);
+    }
+    Deno.writeTextFileSync("codegen_debug.txt", `--- generate start: program declarations=${program.declarations.length}\n`, { append: true });
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
     this.externalDecls = []; this.exportedSymbols = [];
     this.emittedVTables.clear();
@@ -189,25 +194,41 @@ export class CodeGenerator {
     this.globalBuffer.push('@__tsn_argc = global i32 0, align 4');
     this.globalBuffer.push('@__tsn_argv = global ptr null, align 8');
     this.importedSymbols.clear(); this.importedModules.clear(); this.includedModulePaths.clear();
+    this.classDecls.clear(); this.interfaceDecls.clear(); this.structDecls.clear();
+    this.functions.clear(); this.genericClasses.clear(); this.genericFunctions.clear();
+    this.genericMethods.clear(); this.genericInterfaces.clear();
+    this.instantiatedNames.clear(); this.vTables.clear();
+    this.enums.clear(); this.globals.clear(); this.typeAliases.clear();
+    this.stringLiterals.clear();
 
 
     // PRE-SCAN: Collect all signatures
-    for (const decl of program.declarations) this.preScanDeclaration(decl);
+    for (const decl of program.declarations) {
+        this.preScanDeclaration(decl);
+    }
 
     // Scan for external constructors before generating code
-    for (const decl of program.declarations) {
+    const scanBodyRecursive = (decl: any) => {
+        Deno.writeTextFileSync("codegen_debug.txt", `--- scanBodyRecursive: scanning ${decl.kind} at line ${decl.line}\n`, { append: true });
         if (decl.kind === ASTKind.FunctionDecl) {
             this.scanAndInstantiateNewExpr((decl as FunctionDecl).body);
         } else if (decl.kind === ASTKind.ClassDecl) {
             const c = decl as ClassDecl;
-            if (c.constructorDecl) this.scanAndInstantiateNewExpr(c.constructorDecl.body);
-            for (const m of c.methods) this.scanAndInstantiateNewExpr(m.body);
-        } else if (decl.kind === ASTKind.NamespaceDecl) {
-            for (const sub of (decl as NamespaceDecl).body) {
-                if (sub.kind === ASTKind.FunctionDecl) this.scanAndInstantiateNewExpr((sub as FunctionDecl).body);
+            if (c.constructorDecl) {
+                Deno.writeTextFileSync("codegen_debug.txt", `--- scanBodyRecursive: scanning constructor of ${c.name}\n`, { append: true });
+                this.scanAndInstantiateNewExpr(c.constructorDecl.body);
             }
+            for (const m of c.methods) {
+                Deno.writeTextFileSync("codegen_debug.txt", `--- scanBodyRecursive: scanning method ${m.name} of ${c.name}\n`, { append: true });
+                this.scanAndInstantiateNewExpr(m.body);
+            }
+        } else if (decl.kind === ASTKind.NamespaceDecl) {
+            for (const sub of (decl as NamespaceDecl).body) scanBodyRecursive(sub);
+        } else if (decl.kind === ASTKind.ExportDecl) {
+            scanBodyRecursive((decl as ExportDecl).declaration);
         }
     }
+    for (const decl of program.declarations) scanBodyRecursive(decl);
 
     // Phase 2: Struct definitions
     for (const decl of program.declarations) this.generateStructsRecursive(decl);
@@ -252,14 +273,55 @@ export class CodeGenerator {
     }
     this.output.splice(stringLiteralMarkerIdx, 2, ...strLines, '');
 
+    // Cleanup external declarations: remove any that are defined in the output
+    const allOutput = this.output.join('\n') + '\n' + this.globalBuffer.join('\n');
+    this.externalDecls = this.externalDecls.filter(decl => {
+        const match = decl.match(/declare\s+[^@]+@([^(]+)\(/);
+        if (match) {
+            const mangled = match[1];
+            const definePattern = new RegExp(`define\\s+[^@]+@${mangled.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`);
+            if (definePattern.test(allOutput)) {
+                console.log(`--- finalize: removing duplicate declare for ${mangled}`);
+                return false;
+            }
+        }
+        return true;
+    });
+
     if (this.externalDecls.length > 0) this.output.unshift(...this.externalDecls, '');
+
+    // Add linkage for globals
+    const isMain = this.currentProgram?.declarations.some(d => d.kind === ASTKind.FunctionDecl && (d as FunctionDecl).name === 'main');
+    if (!isMain) {
+        this.globalBuffer = this.globalBuffer.map(line => {
+            if (line.startsWith('@__tsn_argc')) return '@__tsn_argc = external global i32';
+            if (line.startsWith('@__tsn_argv')) return '@__tsn_argv = external global ptr';
+            return line;
+        });
+    }
+
     if (this.globalBuffer.length > 0) this.output.unshift(...this.globalBuffer, '');
     return this.output.join('\n');
   }
 
+  private markAsLocalRecursive(decl: Declaration): void {
+    this.localDecls.add(decl);
+    if (decl.kind === ASTKind.NamespaceDecl) {
+        for (const sub of (decl as NamespaceDecl).body) this.markAsLocalRecursive(sub);
+    } else if (decl.kind === ASTKind.ClassDecl) {
+        const c = decl as ClassDecl;
+        if (c.constructorDecl) this.localDecls.add(c.constructorDecl as any);
+        for (const m of c.methods) this.localDecls.add(m as any);
+    } else if (decl.kind === ASTKind.ExportDecl) {
+        this.markAsLocalRecursive((decl as ExportDecl).declaration);
+    }
+  }
+
   private preScanDeclaration(decl: Declaration): void {
-    if (decl.kind === ASTKind.ImportDecl) this.processImport(decl as ImportDecl);
-    else if (decl.kind === ASTKind.TypeAliasDecl) this.typeAliases.set((decl as TypeAliasDecl).name, (decl as TypeAliasDecl).type);
+    if (decl.kind === ASTKind.ImportDecl) {
+        Deno.writeTextFileSync("codegen_debug.txt", `--- preScan: processing import from ${(decl as ImportDecl).source}\n`, { append: true });
+        this.processImport(decl as ImportDecl);
+    } else if (decl.kind === ASTKind.TypeAliasDecl) this.typeAliases.set((decl as TypeAliasDecl).name, (decl as TypeAliasDecl).type);
     else if (decl.kind === ASTKind.VarDecl) {
         const v = decl as VarDecl;
         const mName = this.scopeStack.length > 0 ? this.scopeStack.join('_') + '_' + v.name : v.name;
@@ -379,10 +441,14 @@ export class CodeGenerator {
   }
 
   private generateFunctionsRecursive(decl: Declaration): void {
-    if (decl.kind === ASTKind.FunctionDecl) this.generateFunction(decl as FunctionDecl);
+    if (decl.kind === ASTKind.FunctionDecl) {
+        this.generateFunction(decl as FunctionDecl);
+    }
     else if (decl.kind === ASTKind.ClassDecl) {
       const c = decl as ClassDecl;
-      if (!c.typeParameters || c.typeParameters.length === 0) this.generateClassMethods(c);
+      if (!c.typeParameters || c.typeParameters.length === 0) {
+          this.generateClassMethods(c);
+      }
     }
     else if (decl.kind === ASTKind.NamespaceDecl) {
       this.scopeStack.push((decl as NamespaceDecl).name);
@@ -472,6 +538,7 @@ export class CodeGenerator {
   }
 
   private generateClassMethods(c: ClassDecl): void {
+    const isLocalClass = this.localDecls.has(c);
     const oldScope = this.scopeStack;
     const oldName = this.currentClassName;
     this.scopeStack = [c.name]; this.currentClassName = c.name;
@@ -485,7 +552,7 @@ export class CodeGenerator {
         isUnsafe: !!c.constructorDecl.isUnsafe,
         kind: ASTKind.FunctionDecl 
       } as any;
-      this.generateFunction(fn, true);
+      this.generateFunction(fn, true, isLocalClass);
     }
     for (const m of c.methods) {
       // Skip generic methods - they'll be instantiated on demand
@@ -501,7 +568,7 @@ export class CodeGenerator {
         isUnsafe: !!m.isUnsafe,
         isDeclare: false 
       } as any;
-      this.generateFunction(fn, true);
+      this.generateFunction(fn, true, isLocalClass);
     }
     this.currentClassName = oldName; this.scopeStack = oldScope;
   }
@@ -511,6 +578,9 @@ export class CodeGenerator {
     if (!exports) return;
     
     this.importedModules.set(decl.source, exports);
+    if (decl.namespace) {
+        this.importedModules.set(decl.namespace, exports);
+    }
 
     // Register ALL classes/interfaces/enums from the module so we know their types
     for (const sym of exports.symbols) {
@@ -524,6 +594,33 @@ export class CodeGenerator {
                     if (!this.classDecls.has(name)) {
                         this.classDecls.set(name, cls);
                         this.buildVTable(cls, name);
+                    }
+                    
+                    // Register methods and constructor for the class so they are known even if not explicitly imported
+                    if (cls.constructorDecl) {
+                        const ctorName = `${name}.constructor`;
+                        if (!this.functions.has(ctorName)) {
+                            this.scopeStack.push(cls.name);
+                            const mName = this.mangleName('constructor', cls.constructorDecl.params);
+                            this.scopeStack.pop();
+                            const pts = ['ptr', ...cls.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
+                            this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts });
+                        }
+                    }
+                    for (const m of cls.methods) {
+                        const methodName = `${name}.${m.name}`;
+                        if (!this.functions.has(methodName)) {
+                            this.scopeStack.push(cls.name);
+                            const mName = this.mangleName(m.name, m.params);
+                            this.scopeStack.pop();
+                            
+                            const rt = this.getFunctionReturnRuntimeType(m.returnType);
+                            const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
+                            const fInfo = { name: mName, returnType: rt, paramTypes: pts };
+                            this.functions.set(methodName, fInfo);
+                            this.functions.set(mName, fInfo); // Also register by mangled name for VTable lookup
+                            console.log(`--- processImport: auto-registered method ${methodName}, mangled=${mName}, returnType=${rt}`);
+                        }
                     }
                 }
             } else if (sym.kind === 'interface') {
@@ -546,18 +643,27 @@ export class CodeGenerator {
 
     const imported = this.moduleResolver.getImportedSymbols(decl, exports);
     
+    // First pass: Register all imported classes/interfaces/enums into classDecls/interfaceDecls
     for (const [name, sym] of imported) {
         this.importedSymbols.set(name, sym);
         if (sym.kind === 'class' && sym.ast) {
             const cls = sym.ast as ClassDecl;
-            
-            // Only add to genericClasses if it has type parameters
             if (cls.typeParameters && cls.typeParameters.length > 0) {
                 this.genericClasses.set(name, cls);
             } else {
                 this.classDecls.set(name, cls);
-                this.buildVTable(cls, name); // Build namespaced VTable
+                this.buildVTable(cls, name);
             }
+        } else if (sym.kind === 'interface' && sym.ast) {
+            this.interfaceDecls.set(name, sym.ast as InterfaceDecl);
+        } else if (sym.kind === 'enum' && sym.ast) {
+            this.processEnum(sym.ast as EnumDecl);
+        }
+    }
+
+    for (const [name, sym] of imported) {
+        if (sym.kind === 'class' && sym.ast) {
+            const cls = sym.ast as ClassDecl;
             
             // Register methods and constructor for the imported class name
             // e.g. if name is "time.StopWatch", register "time.StopWatch.elapsed"
@@ -576,6 +682,7 @@ export class CodeGenerator {
                     this.scopeStack.pop();
                     
                     const rt = this.getFunctionReturnRuntimeType(m.returnType);
+                    console.log(`--- processImport: registered method ${name}.${m.name}, mangled=${mName}, returnType=${rt}`);
                     const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
                     this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
                 }
@@ -631,7 +738,7 @@ export class CodeGenerator {
         const fullPath = name;
         const sym = this.importedSymbols.get(fullPath);
         if (sym && sym.kind === 'function') {
-            return sym.name; // Use the mangled name from metadata
+            return sym.realName || sym.name; // Use the real mangled name from metadata
         }
     }
 
@@ -670,9 +777,13 @@ export class CodeGenerator {
   }
 
   private ensureExternalDeclaration(mangled: string, sym: ExportedSymbol): void {
+    console.log(`--- ensureExternalDeclaration: ${mangled}`);
     const existing = this.functions.get(mangled);
     // Don't declare if we defined it locally or if it's already declared with same signature
-    if (existing && !(existing as any).isExternal) return; 
+    if (existing && !(existing as any).isExternal) {
+        console.log(`--- ensureExternalDeclaration: skipping ${mangled} because it's in functions map as local`);
+        return; 
+    }
 
     if (sym.kind === 'function' || !sym.kind) {
       const params = (sym.paramTypes || []).map(p => this.toLLVMType(p)).join(', ');
@@ -682,20 +793,19 @@ export class CodeGenerator {
       // If we already have this exact declaration, skip
       if (this.externalDecls.includes(declLine)) return;
 
-      // If we have a local definition in the output buffer, don't declare
-      const defPattern = `define ${rt} @${mangled}(`;
-      if (this.output.some(line => line.includes(defPattern)) || this.globalBuffer.some(line => line.includes(defPattern))) {
+      // Final check: scan the entire output for the definition to be sure
+      const allOutput = this.output.join('\n') + '\n' + this.globalBuffer.join('\n');
+      const definePattern = new RegExp(`define\\s+[^@]+@${mangled.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`);
+      if (definePattern.test(allOutput)) {
+          console.log(`--- ensureExternalDeclaration: skipping ${mangled} because it is found in joined output via regex`);
           return;
       }
-      
-      // Also check if this mangled name exists in current function list as a local (not external)
-      const localFunc = this.functions.get(mangled);
-      if (localFunc && !(localFunc as any).isExternal) return;
 
       // If we have a declaration with same name but different signature, remove it first
       const namePattern = `@${mangled}(`;
       this.externalDecls = this.externalDecls.filter(d => !d.includes(namePattern));
       
+      console.log(`--- ensureExternalDeclaration: adding ${declLine}`);
       this.externalDecls.push(declLine);
     }
   }
@@ -768,14 +878,29 @@ export class CodeGenerator {
     if (decl.type?.isArray) {
       const size = decl.type.arraySize || 0, et = this.getLLVMType({ name: decl.type.name, isPointer: false, isArray: false });
       this.globals.set(decl.name, { name: mName, type: `[${size} x ${et}]`, isConst: decl.isConst });
-      this.emit(`@${mName} = ${decl.isConst ? 'constant' : 'global'} [${size} x ${et}] zeroinitializer, align 4`);
+      const isLocal = this.localDecls.has(decl);
+      if (!isLocal) this.globalBuffer.push(`$${mName} = comdat any`);
+      const linkagePrefix = isLocal ? '' : 'linkonce_odr ';
+      const comdat = isLocal ? '' : `, comdat($${mName})`;
+      this.emit(`@${mName} = ${linkagePrefix}${decl.isConst ? 'constant' : 'global'} [${size} x ${et}] zeroinitializer${comdat}, align 4`);
     } else if (isPointerLike && (!decl.init || (decl.init.kind === ASTKind.NumberLiteral && (decl.init as NumberLiteral).value === 0))) {
       this.globals.set(decl.name, { name: mName, type: t, isConst: decl.isConst });
-      this.emit(`@${mName} = ${decl.isConst ? 'constant' : 'global'} ${this.toLLVMType(t)} null, align 8`);
+      const isLocal = this.localDecls.has(decl);
+      if (!isLocal) this.globalBuffer.push(`$${mName} = comdat any`);
+      const linkagePrefix = isLocal ? '' : 'linkonce_odr ';
+      const comdat = isLocal ? '' : `, comdat($${mName})`;
+      this.emit(`@${mName} = ${linkagePrefix}${decl.isConst ? 'constant' : 'global'} ${this.toLLVMType(t)} null${comdat}, align 8`);
     } else {
       const val = (decl.init?.kind === ASTKind.NumberLiteral) ? (decl.init as NumberLiteral).value : 0;
       this.globals.set(decl.name, { name: mName, type: t, isConst: decl.isConst });
-      this.emit(`@${mName} = ${decl.isConst ? 'constant' : 'global'} ${this.toLLVMType(t)} ${val}, align 4`);
+      const isLocal = this.localDecls.has(decl);
+      if (!isLocal) {
+          this.globalBuffer.push(`$${mName} = comdat any`);
+      }
+      const linkagePrefix = isLocal ? '' : 'linkonce_odr ';
+      const comdat = isLocal ? '' : `, comdat($${mName})`;
+      const linkage = decl.isConst ? linkagePrefix + 'constant' : linkagePrefix + 'global';
+      this.emit(`@${mName} = ${linkage} ${this.toLLVMType(t)} ${val}${comdat}, align 4`);
     }
   }
 
@@ -786,7 +911,7 @@ export class CodeGenerator {
     this.emit(`%${decl.name} = type { ${llvm.join(', ')} }`);
   }
 
-  private generateFunction(decl: FunctionDecl, isMethod: boolean = false): void {
+  private generateFunction(decl: FunctionDecl, isMethod: boolean = false, isLocalMethod: boolean = false): void {
     if (!this.isTargetOSMatch(decl.targetOS)) return;
 
     const mName = this.mangleName(decl.name, decl.params, !!decl.ffiLib || decl.isDeclare);
@@ -804,12 +929,19 @@ export class CodeGenerator {
       return;
     }
 
+    const isLocal = this.localDecls.has(decl) || isLocalMethod;
+    const isMain = decl.name === 'main' && this.scopeStack.length === 0;
+
+    if (!isLocal && !isMain) {
+        this.globalBuffer.push(`$${mName} = comdat any`);
+    }
+
     const oldRet = this.currentFunctionReturnType, oldParams = this.currentFunctionParams, oldParamTypes = this.currentFunctionParamTypes;
     const oldHoisted = this.hoistedVars, oldLocalVarTypes = this.localVarTypes, oldMovedLocals = this.movedLocals;
     const oldUnsafe = this.isUnsafeContext, oldClassName = this.currentClassName, oldIsMain = this.isCurrentMain;
-    this.isUnsafeContext = !!decl.isUnsafe;
-    this.isCurrentMain = decl.name === 'main' && this.scopeStack.length === 0;
 
+    this.isUnsafeContext = !!decl.isUnsafe;
+    this.isCurrentMain = isMain;
     this.currentFunctionParams = new Set();
     this.currentFunctionParamTypes = new Map();
     this.currentFunctionReturnType = rt;
@@ -831,7 +963,9 @@ export class CodeGenerator {
 
     const llvmRt = this.isCurrentMain ? 'i32' : this.toLLVMType(rt);
     const finalParamsStr = this.isCurrentMain ? 'i32 %argc, ptr %argv' : paramsStr;
-    this.emit(`define ${llvmRt} @${mName}(${finalParamsStr}) {`);
+    const linkage = (isLocal || this.isCurrentMain) ? 'define' : 'define linkonce_odr';
+    const comdat = (isLocal || this.isCurrentMain) ? '' : ` comdat($${mName})`;
+    this.emit(`${linkage} ${llvmRt} @${mName}(${finalParamsStr})${comdat} {`);
     this.emit('entry:'); this.indent++;
 
     if (this.isCurrentMain) {
@@ -1473,6 +1607,7 @@ export class CodeGenerator {
     if (e.genericArgs && e.genericArgs.length > 0) {
         className = this.instantiateClass(e.className, e.genericArgs);
     }
+    console.log(`--- generateNew: className=${className}`);
 
     const st = this.structs.get(className);
     if (!st) return 'null';
@@ -1860,7 +1995,9 @@ export class CodeGenerator {
     if (e.genericArgs && e.genericArgs.length > 0) {
         name = this.instantiateFunction(name, e.genericArgs);
     }
+    console.log(`--- generateCallExpr: name=${name}, scopeStack=${this.scopeStack.join('.')}`);
     let mangled = this.resolveMangledName(name);
+    console.log(`--- generateCallExpr: resolveMangledName returned ${mangled}`);
     const imported = this.importedSymbols.get(name);
     if (imported && imported.kind === 'function') {
         this.ensureExternalDeclaration(name, imported);
@@ -1918,9 +2055,10 @@ export class CodeGenerator {
     if (m.object.kind === ASTKind.Identifier) {
         const ns = (m.object as Identifier).name;
         const fullName = `${ns}.${m.member}`;
+        console.log(`--- generateMemberCallExpr: fullName=${fullName}, ns=${ns}`);
         
         // Check if 'ns' is an imported namespace or module
-        const isImportedNS = this.importedModules.has(ns) || this.importedSymbols.has(ns);
+        const isImportedNS = this.importedModules.has(ns);
         const importedSym = this.importedSymbols.get(fullName);
         const hasNamespaceFunction = this.functions.has(fullName)
           && !this.localVarTypes.has(ns)
@@ -1933,12 +2071,13 @@ export class CodeGenerator {
                     const instName = this.instantiateFunction(fullName, genericArgs);
                     return this.generateInternalCall(instName, args);
                 }
-                const mName = importedSym.name;
+                const mName = importedSym.realName || importedSym.name;
                 const mInfo = {
                     name: mName,
                     kind: 'function',
                     llvmType: importedSym.llvmType,
-                    paramTypes: importedSym.paramTypes
+                    paramTypes: importedSym.paramTypes,
+                    isExternal: true
                 };
                 this.ensureExternalDeclaration(mName, mInfo as any);
                 return this.generateImportedCall(fullName, mName, mInfo as any, args);
@@ -1949,6 +2088,11 @@ export class CodeGenerator {
                     const instName = this.instantiateFunction(fullName, genericArgs);
                     return this.generateInternalCall(instName, args);
                 }
+                // Check if this is a standard library function that we know is external
+                const info = this.functions.get(fullName);
+                if (info && (info as any).isExternal) {
+                    this.ensureExternalDeclaration(info.name, info as any);
+                }
                 return this.generateInternalCall(fullName, args);
             }
             
@@ -1956,7 +2100,15 @@ export class CodeGenerator {
             // it might be a fatal error or a special case.
             // But we MUST NOT fall through to generateExpression(m.object) if it's a known namespace.
             if (isImportedNS) {
-                throw new Error(`Symbol '${m.member}' not found in namespace '${ns}'.`);
+                // Special case: if the symbol is not found in the namespace, it might be that
+                // the namespace itself was wrongly identified as an object.
+                // For 'memory', we know it's a namespace in std.
+                if (ns === 'memory') {
+                    throw new Error(`Symbol '${m.member}' not found in namespace 'memory'.`);
+                }
+                if (ns === 'console') {
+                    throw new Error(`Symbol '${m.member}' not found in namespace 'console'.`);
+                }
             }
         }
     }
@@ -2257,7 +2409,8 @@ export class CodeGenerator {
   }
 
   private generateImportedCall(local: string, mangled: string, sym: ExportedSymbol, args: Expression[]): string {
-    if ((local === 'log' || local === 'console.log') && args.length === 1) {
+    // console.log optimization
+    if ((local === 'log' || local === 'console.log' || local.endsWith('.log')) && args.length === 1) {
       const value = this.generateExpression(args[0]);
       const valueType = this.getValueType(value);
       const numericPrinter = valueType === 'i32'
@@ -2280,19 +2433,23 @@ export class CodeGenerator {
       }
     }
 
-    if (sym.ast && sym.kind === 'function') {
-      return this.generateInternalCall(sym.name, args);
+    const actualMangled = sym.name || mangled;
+    // For stdlib or namespaced calls, we usually want the mangled name from metadata
+    // unless it's a local call to a function in the same module.
+    if (sym.ast && sym.kind === 'function' && !(sym as any).isExternal && !local.includes('.')) {
+      return this.generateInternalCall(actualMangled, args);
     }
 
-    this.ensureExternalDeclaration(mangled, sym);
+    this.ensureExternalDeclaration(actualMangled, sym);
     const pts = sym.paramTypes || [], aStr = args.map((arg, i) => {
       const v = this.generateExpression(arg), t = pts[i] ?? this.getValueType(v);
       return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
     }).join(', ');
     const rt = sym.llvmType || 'void';
     const llvmRt = this.toLLVMType(rt);
-    if (llvmRt === 'void') { this.emit(`call void @${mangled}(${aStr})`); return '0'; }
-    const t = this.newTemp(); this.emit(`${t} = call ${llvmRt} @${mangled}(${aStr})`); this.tempTypes.set(t, rt); return t;
+    console.log(`--- generateImportedCall: local=${local}, actualMangled=${actualMangled}, symName=${sym.name}`);
+    if (llvmRt === 'void') { this.emit(`call void @${actualMangled}(${aStr})`); return '0'; }
+    const t = this.newTemp(); this.emit(`${t} = call ${llvmRt} @${actualMangled}(${aStr})`); this.tempTypes.set(t, rt); return t;
   }
 
   private generateIndexExpr(e: IndexExpr): string {
@@ -2317,6 +2474,22 @@ export class CodeGenerator {
     if (e.object.kind === ASTKind.Identifier) {
       const name = (e.object as Identifier).name;
       const fullName = `${name}.${e.member}`;
+
+      // Namespace check - prevent namespace being treated as object
+      if (this.importedModules.has(name) && !this.localVarTypes.has(name) && !this.currentFunctionParams.has(name) && !this.globals.has(name)) {
+          const sym = this.importedSymbols.get(fullName);
+          if (sym && (sym.kind === 'const' || sym.kind === 'let')) {
+              const g = this.globals.get(fullName);
+              if (g) {
+                  const t = this.newTemp();
+                  this.emit(`${t} = load ${g.type}, ptr @${g.name}, align 4`);
+                  this.tempTypes.set(t, g.type);
+                  return t;
+              }
+          }
+          // If it's a namespace but member not found, it's an error
+          throw new Error(`Symbol '${e.member}' not found in namespace '${name}'.`);
+      }
 
       // Enum check
       const en = this.enums.get(name);
@@ -2956,6 +3129,7 @@ export class CodeGenerator {
       return className;
     }
 
+    Deno.writeTextFileSync("codegen_debug.txt", `--- instantiateClass: ${className} as ${mangledName}\n`, { append: true });
     this.instantiatedNames.add(mangledName);
 
     const oldOutput = this.currentOutput;
@@ -2977,12 +3151,7 @@ export class CodeGenerator {
     
     // Check if this is a local instantiation or from an imported generic
     const isLocal = this.isLocalDeclaration(baseDecl, this.currentProgram);
-    if (!isLocal) {
-        // For imported generic classes, mark all its methods as external initially
-        // They will be defined if we are currently "in" that module's compilation
-        // but here they should be treated as potential external calls.
-    }
-
+    
     this.buildVTable(instantiatedDecl);
     
     const oldVTable = this.output.length;
@@ -3000,6 +3169,9 @@ export class CodeGenerator {
         const mInfo = { name: mName, returnType: 'void', paramTypes: pts, isExternal: !isLocal };
         this.functions.set(`${mangledName}.constructor`, mInfo as any);
         this.functions.set(mName, mInfo as any);
+        if (!isLocal) {
+            this.ensureExternalDeclaration(mName, { name: mName, kind: 'function', llvmType: 'void', paramTypes: pts } as any);
+        }
     }
     for (const m of instantiatedDecl.methods) {
         // If method has type parameters, register it as a generic method
@@ -3014,6 +3186,9 @@ export class CodeGenerator {
         const mInfo = { name: mName, returnType: rt, paramTypes: pts, isExternal: !isLocal };
         this.functions.set(`${mangledName}.${m.name}`, mInfo as any);
         this.functions.set(mName, mInfo as any);
+        if (!isLocal) {
+            this.ensureExternalDeclaration(mName, { name: mName, kind: 'function', llvmType: rt, paramTypes: pts } as any);
+        }
     }
     this.scopeStack = oldScopeInst;
 
@@ -3027,8 +3202,10 @@ export class CodeGenerator {
       }
     }
 
-    // Generate methods
-    this.generateClassMethods(instantiatedDecl);
+    // Generate methods if local
+    if (isLocal) {
+        this.generateClassMethods(instantiatedDecl);
+    }
 
     const targetOutput = oldInstantiationTargetOutput ?? oldOutput ?? this.globalBuffer;
     targetOutput.push(...instantiationOutput, ...deferredInstantiationOutput);
@@ -3111,6 +3288,7 @@ export class CodeGenerator {
       return fnName;
     }
 
+    const isLocal = this.isLocalDeclaration(baseDecl, this.currentProgram);
     const oldScope = this.scopeStack;
     this.scopeStack = [...scopeParts];
     const mName = this.mangleName(instantiatedDecl.name, instantiatedDecl.params);
@@ -3120,6 +3298,8 @@ export class CodeGenerator {
     // back to this instantiated function while we are still building its body.
     this.functions.set(mangledName, { name: mName, returnType: 'ptr', paramTypes: pts });
     this.functions.set(mName, { name: mName, returnType: 'ptr', paramTypes: pts });
+
+    console.log(`--- instantiateFunction: registered ${mangledName} as ${mName}`);
 
     // Instantiate generic classes used in return type
     this.instantiateTypeAnnotationClasses(instantiatedDecl.returnType);
@@ -3133,8 +3313,12 @@ export class CodeGenerator {
     this.scanAndInstantiateNewExpr(instantiatedDecl.body);
 
     const rt = this.getFunctionReturnRuntimeType(instantiatedDecl.returnType);
-    this.functions.set(mangledName, { name: mName, returnType: rt, paramTypes: pts });
-    this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts });
+    const mInfo = { name: mName, returnType: rt, paramTypes: pts, isExternal: !isLocal };
+    this.functions.set(mangledName, mInfo as any);
+    this.functions.set(mName, mInfo as any);
+    if (!isLocal) {
+        this.ensureExternalDeclaration(mName, { name: mName, kind: 'function', llvmType: rt, paramTypes: pts } as any);
+    }
 
     const oldOutput = this.currentOutput;
     const oldInstantiationTargetOutput = this.instantiationTargetOutput;
@@ -3165,12 +3349,16 @@ export class CodeGenerator {
   }
 
   private scanAndInstantiateNewExpr(stmts: Statement[]): void {
+    if (!stmts) return;
+    Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: scanning ${stmts.length} statements\n`, { append: true });
     const scanExpr = (expr: Expression): void => {
       if (!expr) return;
+      // Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: expr.kind=${expr.kind}\n`, { append: true });
       
       if (expr.kind === ASTKind.NewExpr) {
         const newExpr = expr as NewExpr;
         let className = newExpr.className;
+        Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: NewExpr className=${className}, genericArgs=${newExpr.genericArgs?.length}\n`, { append: true });
         if (newExpr.genericArgs && newExpr.genericArgs.length > 0) {
           className = this.instantiateClass(newExpr.className, newExpr.genericArgs);
         }
@@ -3182,7 +3370,8 @@ export class CodeGenerator {
                 name: mName,
                 kind: 'function',
                 llvmType: 'void',
-                paramTypes: ['ptr', ...cDecl.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))]
+                paramTypes: ['ptr', ...cDecl.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))],
+                isExternal: true
             };
             this.ensureExternalDeclaration(mName, mInfo as any);
             this.functions.set(`${className}.constructor`, mInfo as any);
@@ -3192,6 +3381,17 @@ export class CodeGenerator {
           for (const arg of newExpr.args) scanExpr(arg);
         }
       } else if (expr.kind === ASTKind.CallExpr) {
+        const call = expr as CallExpr;
+        if (call.genericArgs && call.genericArgs.length > 0) {
+            if (call.callee.kind === ASTKind.Identifier) {
+                this.instantiateFunction((call.callee as Identifier).name, call.genericArgs);
+            }
+        }
+        scanExpr(call.callee);
+        if (call.args) {
+          for (const arg of call.args) scanExpr(arg);
+        }
+      } else if (expr.kind === ASTKind.BinaryExpr) {
         const binExpr = expr as BinaryExpr;
         scanExpr(binExpr.left);
         scanExpr(binExpr.right);
@@ -3215,6 +3415,7 @@ export class CodeGenerator {
       if (stmt.kind === ASTKind.VarDecl) {
         const varDecl = stmt as VarDecl;
         if (varDecl.init) scanExpr(varDecl.init);
+        if (varDecl.type) this.instantiateTypeAnnotationClasses(varDecl.type);
       } else if (stmt.kind === ASTKind.ReturnStmt) {
         const retStmt = stmt as ReturnStmt;
         if (retStmt.value) scanExpr(retStmt.value);
@@ -3419,7 +3620,12 @@ export class CodeGenerator {
     const declarations: Declaration[] = [];
     const included = new Set<string>();
 
-    const visitProgram = (current: Program, keepImports: boolean) => {
+    this.localDecls.clear();
+    for (const decl of program.declarations) {
+        this.markAsLocalRecursive(decl);
+    }
+
+    const visitProgram = (current: Program) => {
       for (const decl of current.declarations) {
         if (decl.kind === ASTKind.ImportDecl) {
           const importDecl = decl as ImportDecl;
@@ -3427,7 +3633,7 @@ export class CodeGenerator {
           const moduleExports = this.moduleResolver.resolveModule(importDecl.source);
           if (moduleExports?.program && !included.has(moduleExports.modulePath)) {
             included.add(moduleExports.modulePath);
-            visitProgram(moduleExports.program, false);
+            visitProgram(moduleExports.program);
           }
           continue;
         }
@@ -3435,7 +3641,7 @@ export class CodeGenerator {
       }
     };
 
-    visitProgram(program, true);
+    visitProgram(program);
     return { ...program, declarations };
   }
 }

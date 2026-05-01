@@ -39,82 +39,58 @@ export const HEAP_ZERO_MEMORY: i32 = 8;
 /**
  * Cấp phát một vùng nhớ mới (Windows).
  */
-@target_os("windows")
-export @unsafe function alloc(size: i64): rawPtr<void> {
-    return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
-}
+export namespace memory {
+    @target_os("windows")
+    export @unsafe function alloc(size: i64): rawPtr<void> {
+        return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
+    }
 
-/**
- * Giải phóng vùng nhớ (Windows).
- */
-@target_os("windows")
-export @unsafe function free(p: rawPtr<void>): void {
-    if (p == null) return;
-    HeapFree(GetProcessHeap(), 0, p);
-}
+    @target_os("windows")
+    export @unsafe function free(p: rawPtr<void>): void {
+        if (p == null) return;
+        HeapFree(GetProcessHeap(), 0, p);
+    }
 
-/**
- * Thay đổi kích thước vùng nhớ (Windows).
- */
-@target_os("windows")
-export @unsafe function realloc(p: rawPtr<void>, newSize: i64): rawPtr<void> {
-    if (p == null) return alloc(newSize);
-    return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, p, newSize);
-}
+    @target_os("windows")
+    export @unsafe function realloc(p: rawPtr<void>, newSize: i64): rawPtr<void> {
+        if (p == null) return alloc(newSize);
+        return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, p, newSize);
+    }
 
-/**
- * Sao chép vùng nhớ (Windows).
- */
-@target_os("windows")
-export @unsafe function copy(dst: rawPtr<void>, src: rawPtr<void>, size: i64): void {
-    RtlMoveMemory(dst, src, size);
-}
+    @target_os("windows")
+    export @unsafe function copy(dst: rawPtr<void>, src: rawPtr<void>, size: i64): void {
+        RtlMoveMemory(dst, src, size);
+    }
 
-/**
- * Điền giá trị vào vùng nhớ (Windows).
- */
-@target_os("windows")
-export @unsafe function fill(p: rawPtr<void>, value: i8, size: i64): void {
-    RtlFillMemory(p, size, value);
-}
+    @target_os("windows")
+    export @unsafe function fill(p: rawPtr<void>, value: i8, size: i64): void {
+        RtlFillMemory(p, size, value);
+    }
 
-/** Utility Functions (OS Independent logic using raw pointer arithmetic) **/
+    export @unsafe function offset(p: rawPtr<void>, bytes: i64): rawPtr<void> {
+        let addr: i64 = p;
+        let res: i64 = addr + bytes;
+        let pRes: rawPtr<void> = res;
+        return pRes;
+    }
 
-/**
- * Trả về con trỏ mới với một khoảng offset (tính bằng byte).
- */
-export @unsafe function offset(p: rawPtr<void>, bytes: i64): rawPtr<void> {
-    let addr: i64 = p;
-    let res: i64 = addr + bytes;
-    let pRes: rawPtr<void> = res;
-    return pRes;
-}
+    export @unsafe function getByte(p: rawPtr<void>, i: i64): i8 {
+        let target = offset(p, i);
+        let ptrI8: rawPtr<i8> = target;
+        return ptrI8.get();
+    }
 
-/**
- * Đọc 1 byte tại vị trí con trỏ + offset.
- */
-export @unsafe function getByte(p: rawPtr<void>, i: i64): i8 {
-    let target = offset(p, i);
-    let ptrI8: rawPtr<i8> = target;
-    return ptrI8.get();
-}
+    export @unsafe function setByte(p: rawPtr<void>, i: i64, value: i8): void {
+        let target = offset(p, i);
+        let ptrI8: rawPtr<i8> = target;
+        ptrI8.set(value);
+    }
 
-/**
- * Ghi 1 byte vào vị trí con trỏ + offset.
- */
-export @unsafe function setByte(p: rawPtr<void>, i: i64, value: i8): void {
-    let target = offset(p, i);
-    let ptrI8: rawPtr<i8> = target;
-    ptrI8.set(value);
-}
-
-/**
- * Đọc một con trỏ 64-bit từ vị trí con trỏ hiện tại + offset.
- */
-export @unsafe function getPointer(p: rawPtr<void>, i: i64): rawPtr<void> {
-    let target = offset(p, i);
-    let ptrI64: rawPtr<i64> = target;
-    let addr: i64 = ptrI64.get();
-    let res: rawPtr<void> = addr;
-    return res;
+    export @unsafe function getPointer(p: rawPtr<void>, i: i64): rawPtr<void> {
+        let target = offset(p, i);
+        let ptrI64: rawPtr<i64> = target;
+        let addr: i64 = ptrI64.get();
+        let res: rawPtr<void> = addr;
+        return res;
+    }
 }
