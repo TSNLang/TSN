@@ -149,6 +149,20 @@ Parser subset cung da tu-parse `main.tsn` va xac nhan cac ket qua sau:
 - `self-parse main: firstFunctionParamSummary = (empty — main() takes no params)`
 - `self-parse main: firstFunctionReturnSummary = main: i32`
 
+### 0.17.5 Milestone: Semantics Logic & Windows Linkage Stability
+
+Đã đạt được bước tiến quan trọng trong việc thực thi logic phức tạp và ổn định hóa quy trình build trên Windows:
+- ✅ **Windows LNK2005 Fixed**: Giải quyết triệt để lỗi trùng lặp symbol (`alloc`, `free`, ...) khi link nhiều module trên Windows bằng cơ chế `linkonce_odr comdat`.
+- ✅ **Cross-Module Type Safety**: Sửa lỗi suy luận kiểu trả về (`ptr` vs `i32`) cho các phương thức class khi import chéo giữa các module.
+- ✅ **Semantics Validation**: File `semantics-test.tsn` đã compile, link và chạy thành công, xác nhận logic `SymbolTable` và `Scope` hoạt động đúng trong môi trường native.
+- ✅ **Runtime Memory Safety**: Cải thiện `tsn_decRef` để bảo vệ chương trình khỏi crash khi gặp lỗi quản lý vòng đời đối tượng phức tạp.
+
+Kết quả test logic ngữ nghĩa:
+- `Lookup 'g' in global: g` (Thành công)
+- `Lookup 'l' in local: l` (Thành công)
+- `Lookup 'g' from local: g` (Thành công)
+- `Exit code: 0` (Hoàn thành chu kỳ thực thi sạch)
+
 ### 0.17.4 Milestone: Track Logic Operators và Assignment
 
 Parser subset đã được mở rộng để track các toán tử logic và phép gán:

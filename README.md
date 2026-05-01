@@ -32,7 +32,8 @@ TSN 0.17.0-indev shifts the active focus from generic stabilization to the first
 - ✅ **Ownership-Oriented Cleanup**: Compiler cleanup logic now follows TSN ownership/borrowing semantics instead of older ARC-style assumptions
 - ✅ **Use-After-Move Checks**: Owner values now trigger compile-time diagnostics after destructive move
 - ✅ **Self-Hosting Scaffold**: Minimal `self-hosting/` bootstrap layout exists for AST, lexer, parser, and main entry
-- ✅ **Compiler Can Build Self-Hosting Bootstrap**: `self-hosting/main.tsn` now compiles to LLVM IR, links with `clang`, and runs successfully
+- ✅ **Windows Linkage & Runtime Stability**: Resolved `LNK2005` errors via COFF COMDAT and fixed critical cross-module class return type inference.
+- ✅ **Compiler Can Build Self-Hosting Bootstrap**: `self-hosting/main.tsn` and `semantics-test.tsn` now compile to LLVM IR, link with `clang`, and run successfully on Windows.
 - ✅ **Bootstrap Lexer Subset**: The TSN lexer subset handles identifiers, numbers, strings, comments, punctuation, decorators, and initial keyword coverage needed for early compiler source parsing
 
 **Active 0.17.0 direction:**
