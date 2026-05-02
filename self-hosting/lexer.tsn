@@ -1,4 +1,3 @@
-import { log } from "std:console";
 import { Array } from "std:array";
 import { Token, TokenKind } from "./ast.tsn";
 
@@ -16,11 +15,7 @@ export class Lexer {
     }
 
     tokenize(): Array<Token> {
-        log("tokenize start");
-        console.log("tokenize start");
         let tokens = new Array<Token>();
-        log("Array created");
-        console.log("Array created");
 
         while (this.pos < this.source.length) {
             this.skipWhitespaceAndComments();
