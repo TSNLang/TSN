@@ -47,7 +47,7 @@ function compileFile(inputFile: string, outputFile: string, baseDir: string): bo
     const resolver = new ModuleResolver(baseDir);
     const codegen = new CodeGenerator(resolver);
     const linkedAst = codegen.includeImportedModulePrograms(ast);
-    const llvmIR = codegen.generate(linkedAst);
+    const llvmIR = codegen.generate(linkedAst, undefined);
     console.log(`   ✓ ${llvmIR.split('\n').length} lines of LLVM IR`);
 
     // Write output .ll

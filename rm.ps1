@@ -11,11 +11,17 @@ $filteredFiles = $filesToDelete | Where-Object {
     # Điều kiện 1: Không xóa file bắt đầu bằng .git hoặc git
     $isGitFile = $_.Name -like ".git*" -or $_.Name -like "git*"
     
-    # Điều kiện 2: Nếu là file *.tsn VÀ nằm trong thư mục "examples" thì bỏ qua
+    # Điều kiện 2: Không xóa file .ts trong src/src
+    $isSourceTs = $_.Extension -eq ".ts" -and $_.FullName -like "*\src\src\*"
+
+    # Điều kiện 3: Không xóa file .tsn trong self-hosting hoặc src/std
+    $isSourceTsn = $_.Extension -eq ".tsn" -and ($_.FullName -like "*\self-hosting\*" -or $_.FullName -like "*\src\std\*")
+
+    # Điều kiện 4: Nếu là file *.tsn VÀ nằm trong thư mục "examples" thì bỏ qua
     $isTsnInExamples = $_.Extension -eq ".tsn" -and $_.FullName -like "*\examples\*"
 
-    # Chỉ giữ lại những file KHÔNG vi phạm 2 điều kiện trên
-    return (-not $isGitFile) -and (-not $isTsnInExamples)
+    # Chỉ giữ lại những file KHÔNG vi phạm các điều kiện trên
+    return (-not $isGitFile) -and (-not $isSourceTs) -and (-not $isSourceTsn) -and (-not $isTsnInExamples)
 }
 
 # 3. Thực hiện xóa

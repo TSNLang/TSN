@@ -185,3 +185,4 @@ char** os_get_argv() {
     return __tsn_argv;
 }
 
+void tsn_exit(int code) { exit(code); }

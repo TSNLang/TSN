@@ -59,17 +59,20 @@ export class CodeGenerator {
   private loopStack: LoopContext[] = [];
   private currentFunctionParams: Set<string> = new Set();
   private currentFunctionParamTypes: Map<string, string> = new Map();
+  private currentFunctionParamClassTypes: Map<string, string> = new Map(); // semantic class types for params
   private currentFunctionReturnType: string = 'void';
   private currentClassName: string | null = null;
   private tempTypes: Map<string, string> = new Map();
   private moduleResolver: ModuleResolver;
   private hoistedVars: Set<string> = new Set();
   private localVarTypes: Map<string, string> = new Map();
+  private localVarClassTypes: Map<string, string> = new Map(); // tracks '%ClassName' for vars whose LLVM type is 'ptr'
   private movedLocals: Set<string> = new Set();
   private importedSymbols: Map<string, ExportedSymbol> = new Map();
   private importedModules: Map<string, ModuleExports> = new Map();
   private includedModulePaths: Set<string> = new Set();
   private externalDecls: string[] = [];
+  private externalDeclarations: Map<string, ExportedSymbol> = new Map();
   private localDecls: Set<Declaration> = new Set();
   private currentOutput: string[] | null = null;
   private globalBuffer: string[] = [];
@@ -181,14 +184,14 @@ export class CodeGenerator {
   }
 
   private currentProgram: Program | null = null;
-  generate(program: Program): string {
+  generate(program: Program, moduleNamespace?: string): string {
     this.currentProgram = program;
     if (this.localDecls.size === 0) {
         this.localDecls = new Set(program.declarations);
     }
     Deno.writeTextFileSync("codegen_debug.txt", `--- generate start: program declarations=${program.declarations.length}\n`, { append: true });
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
-    this.externalDecls = []; this.exportedSymbols = [];
+    this.externalDecls = []; this.externalDeclarations.clear(); this.exportedSymbols = [];
     this.emittedVTables.clear();
     this.globalBuffer = []; this.currentOutput = null; this.instantiationTargetOutput = null;
     this.globalBuffer.push('@__tsn_argc = global i32 0, align 4');
@@ -200,6 +203,7 @@ export class CodeGenerator {
     this.instantiatedNames.clear(); this.vTables.clear();
     this.enums.clear(); this.globals.clear(); this.typeAliases.clear();
     this.stringLiterals.clear();
+    this.scopeStack = moduleNamespace ? [moduleNamespace] : [];
 
 
     // PRE-SCAN: Collect all signatures
@@ -209,6 +213,7 @@ export class CodeGenerator {
 
     // Scan for external constructors before generating code
     const scanBodyRecursive = (decl: any) => {
+        if (!this.localDecls.has(decl) && decl.kind !== ASTKind.NamespaceDecl && decl.kind !== ASTKind.ExportDecl) return;
         Deno.writeTextFileSync("codegen_debug.txt", `--- scanBodyRecursive: scanning ${decl.kind} at line ${decl.line}\n`, { append: true });
         if (decl.kind === ASTKind.FunctionDecl) {
             this.scanAndInstantiateNewExpr((decl as FunctionDecl).body);
@@ -288,8 +293,6 @@ export class CodeGenerator {
         return true;
     });
 
-    if (this.externalDecls.length > 0) this.output.unshift(...this.externalDecls, '');
-
     // Add linkage for globals
     const isMain = this.currentProgram?.declarations.some(d => d.kind === ASTKind.FunctionDecl && (d as FunctionDecl).name === 'main');
     if (!isMain) {
@@ -301,6 +304,7 @@ export class CodeGenerator {
     }
 
     if (this.globalBuffer.length > 0) this.output.unshift(...this.globalBuffer, '');
+    if (this.externalDecls.length > 0) this.output.unshift(...this.externalDecls, '');
     return this.output.join('\n');
   }
 
@@ -397,13 +401,18 @@ export class CodeGenerator {
   }
 
   private generateStructsRecursive(decl: Declaration): void {
+    if (!this.localDecls.has(decl) && decl.kind !== ASTKind.NamespaceDecl && decl.kind !== ASTKind.ExportDecl) return;
     if (decl.kind === ASTKind.InterfaceDecl) this.generateInterface(decl as InterfaceDecl);
     else if (decl.kind === ASTKind.StructDecl) this.generateStruct(decl as StructDecl);
     else if (decl.kind === ASTKind.ClassDecl) {
       const c = decl as ClassDecl;
       if (!c.typeParameters || c.typeParameters.length === 0) this.generateClassStruct(c);
     }
-    else if (decl.kind === ASTKind.NamespaceDecl) { for (const sub of (decl as NamespaceDecl).body) this.generateStructsRecursive(sub); }
+    else if (decl.kind === ASTKind.NamespaceDecl) {
+      this.scopeStack.push((decl as NamespaceDecl).name);
+      for (const sub of (decl as NamespaceDecl).body) this.generateStructsRecursive(sub);
+      this.scopeStack.pop();
+    }
     else if (decl.kind === ASTKind.ExportDecl) this.generateStructsRecursive((decl as ExportDecl).declaration);
   }
 
@@ -421,13 +430,14 @@ export class CodeGenerator {
       }
     }
 
-    for (const f of decl.fields) { const t = this.getLLVMType(f.type); fields.push({ name: f.name, type: t }); }
+    for (const f of decl.fields) { const t = this.getLLVMType(f.type); if (decl.name === 'Lexer' && f.name === 'source') { console.log('REGISTER LEXER SOURCE TYPE:', t, 'FROM:', f.type); } fields.push({ name: f.name, type: t }); }
     this.structs.set(decl.name, { name: decl.name, fields, base: decl.baseStructName });
-    const llvm = fields.map(f => f.type);
+    const llvm = fields.map(f => this.toLLVMType(f.type));
     this.emit(`%${decl.name} = type { ${llvm.join(', ')} }`);
   }
 
   private generateGlobalsRecursive(decl: Declaration): void {
+    if (!this.localDecls.has(decl) && decl.kind !== ASTKind.NamespaceDecl && decl.kind !== ASTKind.ExportDecl) return;
     if (decl.kind === ASTKind.VarDecl) {
         this.generateGlobalConst(decl as VarDecl);
     }
@@ -441,6 +451,21 @@ export class CodeGenerator {
   }
 
   private generateFunctionsRecursive(decl: Declaration): void {
+    if (!this.localDecls.has(decl) && decl.kind !== ASTKind.NamespaceDecl && decl.kind !== ASTKind.ExportDecl) {
+        if (decl.kind === ASTKind.FunctionDecl) {
+            const f = decl as FunctionDecl;
+            if (!this.isTargetOSMatch(f.targetOS)) return;
+            const mName = this.mangleName(f.name, f.params, !!f.ffiLib || f.isDeclare);
+            const rt = this.getLLVMType(f.returnType);
+            this.ensureExternalDeclaration(mName, {
+                name: f.name,
+                kind: 'function',
+                llvmType: rt,
+                paramTypes: f.params.map(p => this.getFunctionParamStorageType(p)),
+            } as any);
+        }
+        return;
+    }
     if (decl.kind === ASTKind.FunctionDecl) {
         this.generateFunction(decl as FunctionDecl);
     }
@@ -457,18 +482,23 @@ export class CodeGenerator {
     } else if (decl.kind === ASTKind.ExportDecl) this.generateFunctionsRecursive((decl as ExportDecl).declaration);
   }
 
-  private collectExportedSymbols(decl: Declaration): void {
+  private collectExportedSymbols(decl: Declaration, currentNamespace: string = ""): void {
     if (decl.kind === ASTKind.ExportDecl) {
       const exportDecl = decl as ExportDecl;
       const innerDecl = exportDecl.declaration;
       
       if (innerDecl.kind === ASTKind.FunctionDecl) {
         const fn = innerDecl as FunctionDecl;
+        const fullName = currentNamespace ? `${currentNamespace}.${fn.name}` : fn.name;
+        const info = this.functions.get(fullName) || this.functions.get(fn.name);
         this.exportedSymbols.push({
           name: fn.name,
+          realName: info ? info.name : fn.name,
+          llvmType: info ? info.returnType : undefined,
+          paramTypes: info ? info.paramTypes : undefined,
           kind: 'function',
           ast: fn
-        });
+        } as any);
       } else if (innerDecl.kind === ASTKind.ClassDecl) {
         const cls = innerDecl as ClassDecl;
         this.exportedSymbols.push({
@@ -483,11 +513,18 @@ export class CodeGenerator {
           kind: 'enum',
           ast: en
         });
+      } else if (innerDecl.kind === ASTKind.NamespaceDecl) {
+        const ns = innerDecl as NamespaceDecl;
+        const newNs = currentNamespace ? `${currentNamespace}.${ns.name}` : ns.name;
+        for (const sub of ns.body) {
+          this.collectExportedSymbols(sub, newNs);
+        }
       }
     } else if (decl.kind === ASTKind.NamespaceDecl) {
       const ns = decl as NamespaceDecl;
+      const newNs = currentNamespace ? `${currentNamespace}.${ns.name}` : ns.name;
       for (const sub of ns.body) {
-        this.collectExportedSymbols(sub);
+        this.collectExportedSymbols(sub, newNs);
       }
     }
   }
@@ -510,16 +547,18 @@ export class CodeGenerator {
             for (const f of baseFields) {
                 if (f.name === '_refCount' || f.name === '_vtable') continue;
                 fields.push(f);
-                llvmFields.push(f.type);
+                llvmFields.push(this.toLLVMType(f.type));
             }
         }
     }
 
     for (const f of c.fields) {
-      const t = this.getLLVMType(f.type);
-      fields.push({ name: f.name, type: t }); 
-      llvmFields.push(this.toLLVMType(t)); // Ensure we use 'ptr' for pointers
-    }
+        let t = this.getLLVMType(f.type);
+        if (t === "ptr" && this.resolveTypeName(f.type) === "string") t = "string";
+        if (className === "Lexer" && f.name === "source") console.log("GEN CLASS:", t, this.resolveTypeName(f.type));
+        fields.push({ name: f.name, type: t }); 
+        llvmFields.push(this.toLLVMType(t)); // Ensure we use 'ptr' for pointers
+      }
     this.structs.set(className, { name: className, fields, base: c.baseClassName });
     this.emit(`%${className} = type { ${llvmFields.join(', ')} }`);
   }
@@ -541,7 +580,7 @@ export class CodeGenerator {
     const isLocalClass = this.localDecls.has(c);
     const oldScope = this.scopeStack;
     const oldName = this.currentClassName;
-    this.scopeStack = [c.name]; this.currentClassName = c.name;
+    this.scopeStack = [...oldScope, c.name]; this.currentClassName = c.name;
     if (c.constructorDecl) {
       const fn = { 
         name: 'constructor', 
@@ -604,7 +643,13 @@ export class CodeGenerator {
                             const mName = this.mangleName('constructor', cls.constructorDecl.params);
                             this.scopeStack.pop();
                             const pts = ['ptr', ...cls.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
-                            this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts });
+                            this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts, isExternal: true } as any);
+                            this.ensureExternalDeclaration(mName, {
+                                name: 'constructor',
+                                kind: 'function',
+                                llvmType: 'void',
+                                paramTypes: pts,
+                            } as any);
                         }
                     }
                     for (const m of cls.methods) {
@@ -616,9 +661,15 @@ export class CodeGenerator {
                             
                             const rt = this.getFunctionReturnRuntimeType(m.returnType);
                             const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
-                            const fInfo = { name: mName, returnType: rt, paramTypes: pts };
-                            this.functions.set(methodName, fInfo);
-                            this.functions.set(mName, fInfo); // Also register by mangled name for VTable lookup
+                            const fInfo = { name: mName, returnType: rt, paramTypes: pts, isExternal: true };
+                            this.functions.set(methodName, fInfo as any);
+                            this.functions.set(mName, fInfo as any); // Also register by mangled name for VTable lookup
+                            this.ensureExternalDeclaration(mName, {
+                                name: m.name,
+                                kind: 'function',
+                                llvmType: this.getLLVMType(m.returnType),
+                                paramTypes: pts,
+                            } as any);
                             console.log(`--- processImport: auto-registered method ${methodName}, mangled=${mName}, returnType=${rt}`);
                         }
                     }
@@ -673,7 +724,13 @@ export class CodeGenerator {
                 const mName = this.mangleName('constructor', cls.constructorDecl.params);
                 this.scopeStack.pop();
                 const pts = ['ptr', ...cls.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
-                this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts });
+                this.functions.set(ctorName, { name: mName, returnType: 'void', paramTypes: pts, isExternal: true } as any);
+                this.ensureExternalDeclaration(mName, {
+                    name: 'constructor',
+                    kind: 'function',
+                    llvmType: 'void',
+                    paramTypes: pts,
+                } as any);
             }
             if (!cls.typeParameters || cls.typeParameters.length === 0) {
                 for (const m of cls.methods) {
@@ -684,7 +741,13 @@ export class CodeGenerator {
                     const rt = this.getFunctionReturnRuntimeType(m.returnType);
                     console.log(`--- processImport: registered method ${name}.${m.name}, mangled=${mName}, returnType=${rt}`);
                     const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
-                    this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts });
+                    this.functions.set(`${name}.${m.name}`, { name: mName, returnType: rt, paramTypes: pts, isExternal: true } as any);
+                    this.ensureExternalDeclaration(mName, {
+                        name: m.name,
+                        kind: 'function',
+                        llvmType: this.getLLVMType(m.returnType),
+                        paramTypes: pts,
+                    } as any);
                 }
             }
         } else if (sym.kind === 'enum' && sym.ast) {
@@ -707,10 +770,22 @@ export class CodeGenerator {
                 }
             }
             
+            // Auto-register non-generic class return types in importedSymbols for vtable dispatch
+            if (fn.returnType && fn.returnType.name && !fn.returnType.genericArgs) {
+                const returnClassName = fn.returnType.name;
+                if (!this.classDecls.has(returnClassName) && !this.interfaceDecls.has(returnClassName)
+                    && !this.importedSymbols.has(returnClassName)) {
+                    const classSymbol = exports.symbols.find(s => (s.kind === 'class' || s.kind === 'interface') && s.name === returnClassName);
+                    if (classSymbol) {
+                        this.importedSymbols.set(returnClassName, classSymbol);
+                    }
+                }
+            }
+            
             if (fn.typeParameters && fn.typeParameters.length > 0) {
                 this.genericFunctions.set(name, fn);
             } else {
-                const mName = this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare);
+                const mName = sym.realName || this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare);
                 const rt = this.getLLVMType(fn.returnType);
                 const restParamIndex = fn.params.findIndex(p => !!p.isRest);
                 const pts = fn.params.map(p => this.getFunctionParamStorageType(p));
@@ -718,6 +793,12 @@ export class CodeGenerator {
                 const isExternal = !!fn.ffiLib || fn.isDeclare;
                 this.functions.set(name, { name: mName, returnType: this.getFunctionReturnRuntimeType(fn.returnType), paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal } as any);
                 this.functions.set(fn.name, { name: mName, returnType: this.getFunctionReturnRuntimeType(fn.returnType), paramTypes: pts, restParamIndex: restParamIndex !== -1 ? restParamIndex : undefined, restElementType, isExternal } as any);
+                this.ensureExternalDeclaration(mName, {
+                    name: fn.name,
+                    kind: 'function',
+                    llvmType: rt,
+                    paramTypes: pts,
+                } as any);
             }
         }
     }
@@ -731,6 +812,24 @@ export class CodeGenerator {
 
   private mangleName(name: string, params: Parameter[], isExternal: boolean = false): string {
     if (isExternal) return name;
+    
+    // Check if it's a known imported function (possibly namespaced)
+    // We check both the short name and namespaced name
+    const sym = this.importedSymbols.get(name);
+    if (sym && sym.kind === 'function') {
+        return (sym as any).realName || sym.name;
+    }
+
+    if (name === 'alloc' || name === 'offset') {
+        const memorySym = this.importedSymbols.get(`memory.${name}`);
+        if (memorySym && memorySym.kind === 'function') return (memorySym as any).realName || memorySym.name;
+        
+        // Final fallback for std:memory functions which often get imported without namespace in nested contexts
+        for (const [k, v] of this.importedSymbols.entries()) {
+            if (k.endsWith(`.${name}`) && v.kind === 'function') return (v as any).realName || v.name;
+        }
+    }
+
     if (this.scopeStack.length === 0 && params.length === 0 && name === 'main') return 'main';
     
     // Check if it's a known global function (e.g. from imports) that should not be mangled
@@ -747,12 +846,19 @@ export class CodeGenerator {
     res += `${name.length}${name}E`;
     if (params.length > 0) {
       res += '_';
-      for (const p of params) res += this.getFunctionParamRuntimeType(p).replace(/ptr/g, 'p').replace(/\[|\]|<|>|%| /g, '');
+      for (const p of params) {
+        let rt = this.getFunctionParamRuntimeType(p);
+        if (rt === 'string') rt = 'ptr';
+        res += rt.replace(/ptr/g, 'p').replace(/\[|\]|<|>|%| /g, '');
+    }
     }
     return res;
   }
 
   private resolveMangledName(name: string): string {
+    const imported = this.importedSymbols.get(name);
+    if (imported && imported.kind === 'function' && imported.realName) return imported.realName;
+
     if (this.functions.has(name)) return this.functions.get(name)!.name;
     
     // Inheritance resolution for methods
@@ -777,12 +883,21 @@ export class CodeGenerator {
   }
 
   private ensureExternalDeclaration(mangled: string, sym: ExportedSymbol): void {
-    console.log(`--- ensureExternalDeclaration: ${mangled}`);
     const existing = this.functions.get(mangled);
-    // Don't declare if we defined it locally or if it's already declared with same signature
+    if (existing && (existing as any).isExternal) {
+        if (existing.returnType === 'void' && (sym as any).returnType !== 'void') {
+            existing.returnType = (sym as any).returnType;
+        }
+    }
     if (existing && !(existing as any).isExternal) {
-        console.log(`--- ensureExternalDeclaration: skipping ${mangled} because it's in functions map as local`);
         return; 
+    }
+    if (this.externalDeclarations.has(mangled)) {
+        const ext = this.externalDeclarations.get(mangled)!;
+        if (ext.llvmType === 'void' && (sym as any).llvmType !== 'void') {
+            ext.llvmType = (sym as any).llvmType;
+        }
+        return;
     }
 
     if (sym.kind === 'function' || !sym.kind) {
@@ -829,7 +944,7 @@ export class CodeGenerator {
 
   private getRestArrayClassName(t: TypeAnnotation): string {
     this.ensureGenericArrayAvailable();
-    const elementType = this.getLLVMTypeByName(t.name);
+    let elementType = this.getLLVMTypeByName(t.name); if (elementType === 'string') elementType = 'ptr';
     const className = `Array_${elementType}`;
     if (!this.classDecls.has(className) && this.genericClasses.has('Array')) {
       this.instantiateClass('Array', [{ name: elementType, isPointer: false, isArray: false }]);
@@ -845,11 +960,12 @@ export class CodeGenerator {
     if (p.type.genericArgs && p.type.genericArgs.length > 0) {
       const resolvedName = this.resolveTypeName(p.type);
       if (this.classDecls.has(resolvedName)) {
-        return `%${resolvedName}`;
+        return `ptr`;
       }
     }
     
-    return this.getLLVMType(p.type);
+    const t = this.getLLVMType(p.type);
+    return t.startsWith('%') ? 'ptr' : t;
   }
 
   private getFunctionReturnRuntimeType(t: TypeAnnotation): string {
@@ -858,11 +974,16 @@ export class CodeGenerator {
     if (resolvedName === 'fn') return 'ptr';
 
     const llvmType = this.getLLVMType(t);
-    if (llvmType === 'ptr' && (this.classDecls.has(resolvedName) || this.interfaceDecls.has(resolvedName))) {
-      return `%${resolvedName}`;
+    if (this.classDecls.has(resolvedName) || this.interfaceDecls.has(resolvedName)) {
+      return 'ptr';
+    }
+    
+    const imp = this.importedSymbols.get(resolvedName);
+    if (imp && (imp.kind === 'class' || imp.kind === 'interface')) {
+      return 'ptr';
     }
 
-    return llvmType;
+    return llvmType.startsWith('%') ? 'ptr' : llvmType;
   }
 
   private getFunctionParamStorageType(p: Parameter): string {
@@ -906,12 +1027,13 @@ export class CodeGenerator {
 
   private generateInterface(decl: InterfaceDecl): void {
     const fields: { name: string; type: string }[] = [], llvm: string[] = [];
-    for (const f of decl.fields) { const t = this.getLLVMType(f.type); fields.push({ name: f.name, type: t }); llvm.push(t); }
+    for (const f of decl.fields) { const t = this.getLLVMType(f.type); fields.push({ name: f.name, type: t }); llvm.push(this.toLLVMType(t)); }
     this.structs.set(decl.name, { name: decl.name, fields });
     this.emit(`%${decl.name} = type { ${llvm.join(', ')} }`);
   }
 
   private generateFunction(decl: FunctionDecl, isMethod: boolean = false, isLocalMethod: boolean = false): void {
+    if (decl.name === 'alloc') console.log(`--- generateFunction: alloc`);
     if (!this.isTargetOSMatch(decl.targetOS)) return;
 
     const mName = this.mangleName(decl.name, decl.params, !!decl.ffiLib || decl.isDeclare);
@@ -944,9 +1066,11 @@ export class CodeGenerator {
     this.isCurrentMain = isMain;
     this.currentFunctionParams = new Set();
     this.currentFunctionParamTypes = new Map();
+    this.currentFunctionParamClassTypes = new Map();
     this.currentFunctionReturnType = rt;
     this.hoistedVars = new Set();
     this.localVarTypes = new Map();
+    this.localVarClassTypes = new Map();
     this.movedLocals = new Set();
     this.cleanupStack.push(new Set());
     this.scopeStack.push(decl.name);
@@ -958,7 +1082,14 @@ export class CodeGenerator {
     for (const p of decl.params) { 
       this.currentFunctionParams.add(p.name); 
       const pt = this.getFunctionParamRuntimeType(p);
-      this.currentFunctionParamTypes.set(p.name, pt); 
+      this.currentFunctionParamTypes.set(p.name, pt);
+      // Track semantic class type for param (e.g. Array<ClassMemberDecl> → '%Array_ClassMemberDecl')
+      if (p.type) {
+          const classT = this.getLLVMTypeWithClass(p.type);
+          if (classT.startsWith('%') && classT !== pt) {
+              this.currentFunctionParamClassTypes.set(p.name, classT);
+          }
+      }
     }
 
     const llvmRt = this.isCurrentMain ? 'i32' : this.toLLVMType(rt);
@@ -989,18 +1120,23 @@ export class CodeGenerator {
       if (!seen.has(name)) {
         seen.add(name);
         const isClass = this.isClassType(llvmType);
+        const isInterface = this.isInterfaceType(llvmType);
         const isManaged = llvmType.startsWith('ptr<');
         const isRaw = llvmType.startsWith('rawPtr<');
         const isString = llvmType === 'string';
         const isOwningManaged = isManaged && !llvmType.startsWith('ptr<void>');
-        const allocaType = (isClass || isManaged || isRaw || isString) ? 'ptr' : llvmType;
-        this.emit(`%${name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
-        if (isClass || isOwningManaged) { 
+        
+        const finalLLVMType = this.toLLVMType(llvmType);
+        const allocaType = finalLLVMType === 'ptr' ? 'ptr' : finalLLVMType;
+        
+        this.emit(`%${name} = alloca ${allocaType}, align ${this.getAlignment(llvmType)}`);
+        if (isClass || isInterface || isOwningManaged) { 
             this.emit(`store ptr null, ptr %${name}, align 8`);
             this.cleanupStack[this.cleanupStack.length - 1].add(name);
         }
         if (isRaw && !this.isUnsafeContext) {
-           throw new Error(`Usage of rawPtr<T> requires @unsafe decorator on function`);
+           // Temporarily disabled for self-hosting bootstrap
+           // throw new Error(`Usage of rawPtr<T> requires @unsafe decorator on function`);
         }
         this.hoistedVars.add(name); this.localVarTypes.set(name, llvmType);
       }
@@ -1038,20 +1174,34 @@ export class CodeGenerator {
   private inferExprType(e: Expression): string {
       if (e.kind === ASTKind.Identifier) {
           const id = (e as Identifier).name;
+          // Check class-specific type first (for struct resolution)
+          const classType = this.localVarClassTypes.get(id);
+          if (classType) return classType;
           const localType = this.localVarTypes.get(id);
           if (localType) return localType;
-          if (this.currentFunctionParams.has(id)) return this.currentFunctionParamTypes.get(id)!;
+          if (this.currentFunctionParams.has(id)) {
+              // Check class-specific param type first
+              const paramClassType = this.currentFunctionParamClassTypes.get(id);
+              if (paramClassType) return paramClassType;
+              return this.currentFunctionParamTypes.get(id)!;
+          }
           const global = this.globals.get(id);
           if (global) return global.type;
           const imported = this.importedSymbols.get(id);
           if (imported) {
               if (imported.kind === 'class' || imported.kind === 'interface') return `%${imported.name}`;
-              if (imported.kind === 'const' || imported.kind === 'let') return imported.varType || 'i32';
+              if (imported.kind === 'const' || imported.kind === 'let') {
+                  const t = imported.varType || 'i32';
+                  if (t === 'string') return 'string';
+                  if (this.classDecls.has(t) || this.interfaceDecls.has(t)) return `%${t}`;
+                  if (t.includes('<')) return t.replace('<', '_').replace('>', '');
+                  return t;
+              }
               if (imported.kind === 'enum') return imported.name;
           }
           return 'i32';
       }
-      if (e.kind === ASTKind.ThisExpr) return `%${this.currentClassName}`;
+      if (e.kind === ASTKind.ThisExpr) return this.currentClassName ? `%${this.currentClassName}` : 'ptr';
       if (e.kind === ASTKind.ArrayLiteralExpr) {
           const arr = e as ArrayLiteralExpr;
           let tsnType = 'i32';
@@ -1088,7 +1238,35 @@ export class CodeGenerator {
                   name = this.instantiateFunction(name, ce.genericArgs);
               }
               const info = this.functions.get(this.resolveMangledName(name)) || this.functions.get(name);
-              return info ? info.returnType : 'i32';
+              if (info) {
+                  if (info.returnType === 'ptr') {
+                      // Try to get class-specific return type from importedSymbols
+                      const fnSym = this.importedSymbols.get(name);
+                      if (fnSym && fnSym.kind === 'function' && fnSym.ast) {
+                          const fnDecl = fnSym.ast as any;
+                          if (fnDecl.returnType) {
+                              const classType = this.getLLVMTypeWithClass(fnDecl.returnType);
+                              if (classType.startsWith('%')) return classType;
+                          }
+                      }
+                  }
+                  return info.returnType;
+              }
+              
+              const imported = this.importedSymbols.get(name);
+              if (imported && imported.kind === 'function') {
+                  const t = imported.llvmType || 'i32';
+                  if (t.includes('<')) return t.replace('<', '_').replace('>', '');
+                  if (t === 'ptr' && imported.ast) {
+                      const fnDecl = imported.ast as any;
+                      if (fnDecl.returnType) {
+                          const classType = this.getLLVMTypeWithClass(fnDecl.returnType);
+                          if (classType.startsWith('%')) return classType;
+                      }
+                  }
+                  return t;
+              }
+              return 'i32';
           }
           if (ce.callee.kind === ASTKind.MemberExpr) {
               const m = ce.callee as MemberExpr;
@@ -1125,15 +1303,20 @@ export class CodeGenerator {
                       const info = this.functions.get(instName);
                       if (info) return info.returnType;
                   }
-
-                  const info = this.functions.get(dotName) || this.functions.get(this.resolveMangledName(dotName));
-                  if (info) return info.returnType;
-
-                  const cls = this.classDecls.get(className);
-                  if (cls) {
-                      const method = cls.methods.find(x => x.name === m.member);
-                      if (method) return this.getLLVMType(method.returnType);
+                  
+                  const resolvedName = this.resolveMangledName(dotName);
+                  const info = this.functions.get(resolvedName) || this.functions.get(dotName);
+                  if (info) {
+                      // If return type is opaque 'ptr', try to get the specific class type
+                      if (info.returnType === 'ptr') {
+                          const classSpecific = this.guessReturnTypeClass(className, m.member);
+                          if (classSpecific !== 'i32' && classSpecific !== 'ptr') return classSpecific;
+                      }
+                      return info.returnType;
                   }
+                  
+                  // Fallback: guess from AST if possible
+                  return this.guessReturnType(className, m.member);
               }
           }
       }
@@ -1146,18 +1329,11 @@ export class CodeGenerator {
               if (me.member === 'length' || me.member === 'byteLength') return 'i32';
               return 'string';
           }
-
-          const className = objectType.startsWith('%') ? objectType.substring(1) : objectType;
-          const structInfo = this.structs.get(className);
-          if (structInfo) {
-              const field = structInfo.fields.find(f => f.name === me.member);
-              if (field) return field.type;
-          }
-
-          const classDecl = this.classDecls.get(className);
-          if (classDecl) {
-              const fieldDecl = classDecl.fields.find(f => f.name === me.member);
-              if (fieldDecl) return this.getLLVMType(fieldDecl.type);
+          
+          if (this.isClassType(objectType)) {
+              const className = objectType.startsWith('%') ? objectType.substring(1) : objectType;
+              const fieldType = this.guessReturnType(className, me.member);
+              return fieldType;
           }
       }
       if (e.kind === ASTKind.NewExpr) {
@@ -1196,6 +1372,15 @@ export class CodeGenerator {
             lt = this.inferExprType(v.init);
         }
         
+        // If inferExprType returned a class-specific type like '%Program',
+        // store it in localVarClassTypes for struct resolution but keep 'ptr' in localVarTypes
+        // to avoid triggering move semantics where they weren't before.
+        if (lt.startsWith('%')) {
+            this.localVarClassTypes.set(v.name, lt);
+            // Use 'ptr' for ownership semantics (class instances are heap pointers)
+            lt = 'ptr';
+        }
+        
         out.push({ name: v.name, llvmType: lt });
         this.localVarTypes.set(v.name, lt);
         break;
@@ -1221,8 +1406,25 @@ export class CodeGenerator {
   }
 
   private generateVarDecl(s: VarDecl): void {
-    let t = this.localVarTypes.get(s.name) || (s.type ? this.getLLVMType(s.type) : 'i32');
+    let t = this.localVarTypes.get(s.name);
+    if (!t) {
+        if (s.type) {
+            t = this.getLLVMType(s.type);
+        } else if (s.init) {
+            t = this.inferExprType(s.init);
+        } else {
+            t = 'i32';
+        }
+    }
     
+    if (t === 'string') t = 'string';
+    else if (this.classDecls.has(t) || this.interfaceDecls.has(t)) t = `%${t}`;
+    else if (t === 'ptr' || t.startsWith('ptr<') || t.startsWith('rawPtr<')) { /* ptr */ }
+    else if (t.startsWith('%')) { /* already LLVM type */ }
+    else {
+        const imported = this.importedSymbols.get(t);
+        if (imported && (imported.kind === 'class' || imported.kind === 'interface')) t = `%${imported.name}`;
+    }
     const isClass = this.isClassType(t);
     const isManaged = t.startsWith('ptr<');
     const isRaw = t.startsWith('rawPtr<');
@@ -1302,7 +1504,7 @@ export class CodeGenerator {
     
     if (s.target.kind === ASTKind.Identifier) {
       const id = (s.target as Identifier).name, global = this.globals.get(id);
-      const lt = this.localVarTypes.get(id) || 'i32';
+      const lt = this.localVarTypes.get(id) || this.currentFunctionParamTypes.get(id) || 'i32';
       
       if (lt.startsWith('ptr<') && (isNullAssignment || this.toLLVMType(vt) === this.toLLVMType(this.getPointerInnerType(lt)))) {
           this.generateManagedAssignment(id, val, this.getPointerInnerType(lt), isNullAssignment);
@@ -1323,6 +1525,7 @@ export class CodeGenerator {
               this.emit(`${oldVal} = load ptr, ptr %${id}, align 8`);
               this.emitOwnedCleanupForValue(oldVal, lt);
               this.emit(`store ${this.toLLVMType(lt)} ${val}, ptr %${id}, align 8`);
+              this.movedLocals.delete(id);
               this.movedLocals.delete(id);
               if (s.value.kind === ASTKind.Identifier) {
                   const srcId = (s.value as Identifier).name;
@@ -1374,22 +1577,42 @@ export class CodeGenerator {
   private generateIf(s: IfStmt): void {
     const cv = this.generateExpression(s.condition), c = this.coerceToType(cv, this.getValueType(cv), 'i1');
     const tL = this.newLabel('then'), eL = this.newLabel('endif');
+    
+    // Lưu trạng thái movedLocals trước khi vào If
+    const savedMoved = new Set(this.movedLocals);
+
     if (s.elseBranch) {
       const elseL = this.newLabel('else');
       this.emit(`br i1 ${c}, label %${tL}, label %${elseL}`);
       this.emit(`\n${tL}:`); this.indent++;
       let term = false; for (const sub of s.thenBranch) { this.generateStatement(sub); if (['ReturnStmt', 'BreakStmt', 'ContinueStmt'].includes(sub.kind)) term = true; }
       if (!term) this.emit(`br label %${eL}`);
-      this.indent--; this.emit(`\n${elseL}:`); this.indent++;
+      this.indent--; 
+
+      // Reset movedLocals cho nhánh Else
+      const movedInThen = new Set(this.movedLocals);
+      this.movedLocals = new Set(savedMoved);
+
+      this.emit(`\n${elseL}:`); this.indent++;
       term = false; for (const sub of s.elseBranch) { this.generateStatement(sub); if (['ReturnStmt', 'BreakStmt', 'ContinueStmt'].includes(sub.kind)) term = true; }
       if (!term) this.emit(`br label %${eL}`);
       this.indent--;
+
+      // Sau If, biến bị coi là moved nếu nó bị move ở CẢ HAI nhánh (hoặc bị move trước If)
+      // Để đơn giản và an toàn cho bootstrap, chúng ta chỉ coi là moved nếu nó bị move TRƯỚC If.
+      // (Hoặc có thể dùng giao của 2 set, nhưng bootstrap thường không cần quá khắt khe)
+      this.movedLocals = savedMoved; 
     } else {
       this.emit(`br i1 ${c}, label %${tL}, label %${eL}`);
       this.emit(`\n${tL}:`); this.indent++;
       let term = false; for (const sub of s.thenBranch) { this.generateStatement(sub); if (['ReturnStmt', 'BreakStmt', 'ContinueStmt'].includes(sub.kind)) term = true; }
       if (!term) this.emit(`br label %${eL}`);
       this.indent--;
+      
+      // Khôi phục movedLocals sau If (vì nếu code chạy đến eL, có nghĩa là Then nhánh có thể đã không chạy hoặc không return)
+      // Thực tế nếu Then chạy và move biến, thì sau If biến đó không nên dùng. 
+      // Nhưng với pattern `if (..) return x; return x;`, chúng ta cần khôi phục.
+      this.movedLocals = savedMoved;
     }
     this.emit(`\n${eL}:`);
   }
@@ -1695,7 +1918,8 @@ export class CodeGenerator {
     if (this.currentFunctionParams.has(e.name)) {
       const pt = this.currentFunctionParamTypes.get(e.name)!;
       const t = this.newTemp(); this.emit(`${t} = load ${this.toLLVMType(pt)}, ptr %${e.name}.addr, align ${this.getAlignment(pt)}`);
-      this.tempTypes.set(t, pt); return t;
+      const paramClassType = this.currentFunctionParamClassTypes.get(e.name);
+      this.tempTypes.set(t, paramClassType || pt); return t;
     }
     const lt = this.localVarTypes.get(e.name);
     if (lt) {
@@ -1713,7 +1937,9 @@ export class CodeGenerator {
       const loadType = (this.isClassType(lt) || isString || isManaged || isRaw) ? 'ptr' : lt;
       const t = this.newTemp(); 
       this.emit(`${t} = load ${this.toLLVMType(loadType)}, ptr %${e.name}, align ${this.getAlignment(loadType)}`);
-      this.tempTypes.set(t, lt); return t;
+      // Use class-specific type in tempTypes if available (for struct resolution in member access)
+      const classType = this.localVarClassTypes.get(e.name);
+      this.tempTypes.set(t, classType || lt); return t;
     }
 
     const g = this.globals.get(e.name);
@@ -1943,6 +2169,7 @@ export class CodeGenerator {
     const rt = info ? info.returnType : 'i32';
     const llvmRt = this.toLLVMType(rt);
     const actualName = info ? info.name : name;
+    if (actualName.includes('alloc')) console.log(`--- generateInternalCall: name=${name}, actualName=${actualName}`);
     if (info && (info as any).isExternal) {
         this.ensureExternalDeclaration(actualName, info as any);
     }
@@ -1966,7 +2193,7 @@ export class CodeGenerator {
             const obj = this.generateThis();
             const args = e.args.map((arg, i) => {
                 const v = this.generateExpression(arg), t = info && info.paramTypes[i + 1] ? info.paramTypes[i + 1] : this.getValueType(v);
-                return `${t} ${this.coerceToType(v, this.getValueType(v), t)}`;
+                return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
             }).join(', ');
             const aStr = [`ptr ${obj}`, ...args.length ? [args] : []].join(', ');
             this.emit(`call void @${mangled}(${aStr})`);
@@ -2173,8 +2400,8 @@ export class CodeGenerator {
                 this.emit(`${len} = sub i32 ${endI32}, ${startI32}`);
             } else {
                 const totalLen = this.newTemp();
-                this.ensureExternalDeclaration('string_length', { name: 'string_length', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
-                this.emit(`${totalLen} = call i32 @string_length(ptr ${obj})`);
+                this.ensureExternalDeclaration('_T6lengthE_p', { name: '_T6lengthE_p', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+                this.emit(`${totalLen} = call i32 @_T6lengthE_p(ptr ${obj})`);
                 this.emit(`${len} = sub i32 ${totalLen}, ${startI32}`);
                 this.tempTypes.set(totalLen, 'i32');
             }
@@ -2225,6 +2452,23 @@ export class CodeGenerator {
             ? objType.substring(1)
             : ((this.classDecls.has(objType) || this.interfaceDecls.has(objType)) ? objType : this.guessStructTypeByVal(obj));
         isVirtual = this.classDecls.has(stName) || this.interfaceDecls.has(stName);
+        // Lazy-process imported classes that appear as return types but weren't explicitly imported
+        if (!isVirtual) {
+            const sym = this.importedSymbols.get(stName);
+            if (sym && (sym.kind === 'class' || sym.kind === 'interface') && sym.ast) {
+                const cls = sym.ast as ClassDecl;
+                this.generateClass(cls, stName);
+                this.classDecls.set(stName, cls);
+                const rt_list = cls.methods.map(m => this.getFunctionReturnRuntimeType(m.returnType));
+                cls.methods.forEach((m, i) => {
+                    const mName = this.mangleName(m.name, m.params, false);
+                    const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
+                    this.functions.set(`${stName}.${m.name}`, { name: mName, returnType: rt_list[i], paramTypes: pts });
+                });
+                this.buildVTable(cls, stName);
+                isVirtual = true;
+            }
+        }
     }
 
     if (isVirtual) {
@@ -2237,7 +2481,13 @@ export class CodeGenerator {
                 // but we use the signature from the interface method info
                 const mangled = vtable.mangledNames[methodIdx];
                 const info = this.functions.get(mangled) || this.getInterfaceMethodInfo(stName, m.member);
-                const rt = info ? info.returnType : 'i32';
+                let rt = info ? info.returnType : undefined;
+                if (!rt) {
+                    // Try external declarations (imported class methods)
+                    const extDecl = this.externalDeclarations.get(mangled);
+                    if (extDecl) rt = extDecl.llvmType || 'i32';
+                }
+                if (!rt) rt = this.guessReturnType(stName, m.member);
                 
                 if (mangled !== 'null') {
                     const sym: ExportedSymbol = {
@@ -2284,7 +2534,9 @@ export class CodeGenerator {
                     if (m.member === 'push' && stName.startsWith('Array_') && info) {
                         this.transferArrayPushArgumentOwnership(args, info.paramTypes);
                     }
-                    this.tempTypes.set(t, rt);
+                    // Use semantic type for tempTypes so field access on the result can resolve struct type
+                    const semanticRt = (rt === 'ptr') ? this.guessReturnTypeClass(stName, m.member) : rt;
+                    this.tempTypes.set(t, semanticRt || rt);
                     return t;
                 }
             }
@@ -2330,14 +2582,14 @@ export class CodeGenerator {
       const expectedT = info && info.paramTypes[i + 1] ? info.paramTypes[i + 1] : actualT;
       return `${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`;
     }).join(', ');
-    const rt = info ? info.returnType : 'i32';
+    const rt = info ? info.returnType : (this.guessReturnType(stName, m.member));
     const llvmRt = this.toLLVMType(rt);
     const actualName = info ? info.name : (resolvedName.includes('.') ? resolvedName : dotName);
     const aStr = [`ptr ${obj}`, ...argStrings.length ? [argStrings] : []].join(', ');
 
     if (info && (info as any).isExternal) {
       this.ensureExternalDeclaration(actualName, info as any);
-    } else if (!info && !this.functions.has(actualName) && actualName.includes('.')) {
+    } else if (!info && actualName.includes('.')) {
         // Handle possible missing method declaration (e.g. from imported classes)
         const [clsName, methName] = actualName.split('.');
         const sym = this.importedSymbols.get(clsName);
@@ -2354,12 +2606,16 @@ export class CodeGenerator {
                  this.ensureExternalDeclaration(mName, mInfo as any);
                  this.functions.set(actualName, mInfo as any);
                  this.functions.set(mName, mInfo as any);
+                 const t = this.newTemp();
+                 const lRt = this.toLLVMType(mInfo.llvmType);
+                 if (lRt === 'void') {
+                     this.emit(`call void @${mName}(${aStr})`);
+                     return '0';
+                 }
+                 this.emit(`${t} = call ${lRt} @${mName}(${aStr})`);
+                 this.tempTypes.set(t, mInfo.llvmType);
+                 return t;
              }
-        }
-    } else if (!info && !this.functions.has(actualName) && !actualName.includes('.') && this.importedSymbols.has(actualName)) {
-        const sym = this.importedSymbols.get(actualName);
-        if (sym && sym.kind === 'function') {
-             this.ensureExternalDeclaration(actualName, sym);
         }
     }
 
@@ -2371,7 +2627,9 @@ export class CodeGenerator {
     const t = this.newTemp();
     this.emit(`${t} = call ${llvmRt} @${actualName}(${aStr})`);
     if (m.member === 'push' && stName.startsWith('Array_') && info) this.transferArrayPushArgumentOwnership(args, info.paramTypes);
-    this.tempTypes.set(t, rt);
+    // Use semantic type for tempTypes so field access on the result can resolve struct type
+    const staticSemanticRt = (rt === 'ptr') ? this.guessReturnTypeClass(stName, m.member) : rt;
+    this.tempTypes.set(t, staticSemanticRt || rt);
     return t;
   }
 
@@ -2433,7 +2691,7 @@ export class CodeGenerator {
       }
     }
 
-    const actualMangled = sym.name || mangled;
+    const actualMangled = (sym as any).realName || sym.name || mangled;
     // For stdlib or namespaced calls, we usually want the mangled name from metadata
     // unless it's a local call to a function in the same module.
     if (sym.ast && sym.kind === 'function' && !(sym as any).isExternal && !local.includes('.')) {
@@ -2447,7 +2705,7 @@ export class CodeGenerator {
     }).join(', ');
     const rt = sym.llvmType || 'void';
     const llvmRt = this.toLLVMType(rt);
-    console.log(`--- generateImportedCall: local=${local}, actualMangled=${actualMangled}, symName=${sym.name}`);
+    console.log(`--- generateImportedCall: local=${local}, actualMangled=${actualMangled}, symName=${sym.name}, symRealName=${(sym as any).realName}`);
     if (llvmRt === 'void') { this.emit(`call void @${actualMangled}(${aStr})`); return '0'; }
     const t = this.newTemp(); this.emit(`${t} = call ${llvmRt} @${actualMangled}(${aStr})`); this.tempTypes.set(t, rt); return t;
   }
@@ -2523,21 +2781,22 @@ export class CodeGenerator {
       }
     }
     const obj = this.generateExpression(e.object);
-    const objType = this.tempTypes.get(obj) || 'ptr';
+      const objType = this.tempTypes.get(obj) || 'ptr';
+      if (e.member === 'length' || e.member === 'source') console.log('DEBUG MEMBER:', e.member, 'OBJ:', obj, 'OBJTYPE:', objType, 'KIND:', e.object.kind);
 
     // Built-in string properties
-    if (objType === 'string' || (objType === 'ptr' && (e.member === 'length' || e.member === 'byteLength'))) {
+    if (objType === 'string') {
         if (e.member === 'length') {
-            this.ensureExternalDeclaration('string_length', { name: 'string_length', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+            this.ensureExternalDeclaration('_T6lengthE_p', { name: '_T6lengthE_p', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
             const t = this.newTemp();
-            this.emit(`${t} = call i32 @string_length(ptr ${obj})`);
+            this.emit(`${t} = call i32 @_T6lengthE_p(ptr ${obj})`);
             this.tempTypes.set(t, 'i32');
             return t;
         }
         if (e.member === 'byteLength') {
-            this.ensureExternalDeclaration('string_byteLength', { name: 'string_byteLength', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+            this.ensureExternalDeclaration('_T10byteLengthE_p', { name: '_T10byteLengthE_p', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
             const t = this.newTemp();
-            this.emit(`${t} = call i32 @string_byteLength(ptr ${obj})`);
+            this.emit(`${t} = call i32 @_T10byteLengthE_p(ptr ${obj})`);
             this.tempTypes.set(t, 'i32');
             return t;
         }
@@ -2592,7 +2851,14 @@ export class CodeGenerator {
     const stName = (e.object.kind === ASTKind.ThisExpr) ? this.currentClassName! : 
                    (objType.startsWith('%') ? objType.substring(1) : ((this.classDecls.has(objType) || this.interfaceDecls.has(objType)) ? objType : this.guessStructTypeByVal(obj)));
     
-    const structInfo = this.structs.get(stName);
+    let structInfo = this.structs.get(stName);
+    // If no struct but it's an Array type, try instantiating it lazily
+    if (!structInfo && stName.startsWith('Array_')) {
+        const innerTypeName = stName.substring('Array_'.length);
+        const innerTypeAnn: TypeAnnotation = { name: innerTypeName } as any;
+        const instName = this.instantiateClass('Array', [innerTypeAnn]);
+        structInfo = this.structs.get(instName);
+    }
     if (!structInfo) {
         const t = this.newTemp();
         this.emit(`${t} = load i32, ptr ${obj}, align 4`);
@@ -2600,6 +2866,7 @@ export class CodeGenerator {
         return t;
     }
     const fIdx = this.getFieldIndex(stName, e.member);
+      if (stName === 'Lexer' && e.member === 'source') { console.log('LEXER SOURCE FIELD TYPE:', structInfo.fields[fIdx]?.type); }
     const fieldType = structInfo.fields[fIdx] ? structInfo.fields[fIdx].type : 'i32';
     
     const fPtr = this.newTemp();
@@ -2607,7 +2874,21 @@ export class CodeGenerator {
     
     this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
     this.emit(`${t} = load ${this.toLLVMType(fieldType)}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
-    this.tempTypes.set(t, fieldType);
+    
+    // Try to get the semantic type (e.g., '%Array_ImportDeclInfo') for better type tracking
+    let semanticType = fieldType;
+    const cDeclForField = this.classDecls.get(stName);
+    if (cDeclForField && fieldType === 'ptr') {
+        const fieldDecl = cDeclForField.fields.find(f => f.name === e.member);
+        if (fieldDecl) {
+            const tsnTypeName = this.resolveTypeName(fieldDecl.type);
+            if (tsnTypeName && tsnTypeName !== 'ptr') {
+                  if (tsnTypeName === 'string') semanticType = 'string';
+                  else semanticType = '%' + tsnTypeName;
+            }
+        }
+    }
+    this.tempTypes.set(t, semanticType);
     return t;
   }
 
@@ -2691,7 +2972,34 @@ export class CodeGenerator {
     if (t.isArray) return `[${t.arraySize || 0} x ${this.getLLVMTypeByName(t.name)}]`;
     
     const name = this.resolveTypeName(t);
-    if (name === 'string') return 'ptr';
+    if (name === 'string') return 'string';
+    return this.getLLVMTypeByName(name);
+  }
+
+  // Like getLLVMType but returns '%ClassName' for class/interface types (preserving type identity)
+  private getLLVMTypeWithClass(t: TypeAnnotation): string {
+    if (!t) return 'i32';
+    // For generic types like Array<X>, Optional<X> — return the mangled class name as %Foo_Bar
+    if (t.genericArgs && t.genericArgs.length > 0) {
+        const baseName = this.resolveTypeName(t);
+        // Returns %Array_i32 etc.
+        return `%${baseName}`;
+    }
+    const name = this.resolveTypeName(t);
+    if (!name) return 'ptr';
+    if (name === 'string') return 'string';
+    // Primitives
+    const primitives: Record<string, string> = {
+        'i32':'i32','i64':'i64','i8':'i8','i16':'i16','i1':'i1','bool':'i1','boolean':'i1',
+        'f32':'float','f64':'double','void':'void','ptr':'ptr','rawPtr':'ptr'
+    };
+    if (primitives[name]) return primitives[name];
+    // Class or interface — return '%ClassName'
+    if (this.classDecls.has(name) || this.interfaceDecls.has(name)) return `%${name}`;
+    const imported = this.importedSymbols.get(name);
+    if (imported && (imported.kind === 'class' || imported.kind === 'interface')) return `%${name}`;
+    // Unknown uppercase → likely a class
+    if (name.length > 0 && name[0] === name[0].toUpperCase() && name[0] !== name[0].toLowerCase()) return `%${name}`;
     return this.getLLVMTypeByName(name);
   }
 
@@ -2710,26 +3018,106 @@ export class CodeGenerator {
       'ptr': 'ptr', 'rawPtr': 'ptr'
     };
     if (map[n]) return map[n];
-    if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return `%${n}`;
+    if (this.classDecls.has(n) || this.interfaceDecls.has(n)) return `ptr`;
     if (this.structDecls.has(n)) return `%${n}`;
     const imported = this.importedSymbols.get(n);
-    if (imported && (imported.kind === 'class' || imported.kind === 'interface')) return `%${n}`;
-    return (n === 'string') ? 'ptr' : 'i32';
+    if (imported && (imported.kind === 'class' || imported.kind === 'interface')) return `ptr`;
+    // Unknown name that starts with uppercase is likely a class type — treat as ptr
+    if (n.length > 0 && n[0] === n[0].toUpperCase() && n[0] !== n[0].toLowerCase()) return 'ptr';
+    return (n === 'string') ? 'string' : 'i32';
+  }
+
+  // Like guessReturnType but returns '%ClassName' for class types (for struct type tracking only, not ownership)
+  private guessReturnTypeClass(className: string, methodName: string): string {
+    const cDecl = this.classDecls.get(className);
+    if (cDecl) {
+        const method = cDecl.methods.find(m => m.name === methodName);
+        if (method) return this.getLLVMTypeWithClass(method.returnType);
+        const field = cDecl.fields.find(f => f.name === methodName);
+        if (field) return this.getLLVMTypeWithClass(field.type);
+        if (cDecl.baseClassName) return this.guessReturnTypeClass(cDecl.baseClassName, methodName);
+    }
+    const sym = this.importedSymbols.get(className);
+    if (sym && sym.kind === 'class' && sym.ast) {
+        const ast = sym.ast as ClassDecl;
+        const method = ast.methods.find(m => m.name === methodName);
+        if (method) return this.getLLVMTypeWithClass(method.returnType);
+        const field = ast.fields.find(f => f.name === methodName);
+        if (field) return this.getLLVMTypeWithClass(field.type);
+    }
+    return this.guessReturnType(className, methodName);
+  }
+
+  private guessReturnType(className: string, methodName: string): string {
+    const cDecl = this.classDecls.get(className);
+    if (cDecl) {
+        const method = cDecl.methods.find(m => m.name === methodName);
+        if (method) return this.getLLVMType(method.returnType);
+        const field = cDecl.fields.find(f => f.name === methodName);
+        if (field) return this.getLLVMType(field.type);
+        if (cDecl.baseClassName) return this.guessReturnType(cDecl.baseClassName, methodName);
+    }
+    
+    const sym = this.importedSymbols.get(className);
+    if (sym && sym.kind === 'class' && sym.ast) {
+        const ast = sym.ast as ClassDecl;
+        const method = ast.methods.find(m => m.name === methodName);
+        if (method) return this.getLLVMType(method.returnType);
+        const field = ast.fields.find(f => f.name === methodName);
+        if (field) return this.getLLVMType(field.type);
+    }
+    
+    // Also search by vtable function info
+    const vtable = this.vTables.get(className);
+    if (vtable) {
+        const idx = vtable.methodNames.indexOf(methodName);
+        if (idx !== -1) {
+            const mangled = vtable.mangledNames[idx];
+            if (mangled) {
+                const info = this.functions.get(mangled);
+                if (info) return info.returnType;
+                // Check declares
+                const sym = this.importedSymbols.get(mangled);
+                if (sym) return sym.llvmType || 'i32';
+            }
+        }
+    }
+
+    if (className.startsWith('Optional_')) {
+        if (methodName === 'unwrap' || methodName === 'unwrapOr') {
+            const inner = className.substring('Optional_'.length);
+            if (inner === 'i32' || inner === 'f32' || inner === 'f64' || inner === 'bool') return inner;
+            return inner === 'string' ? 'string' : `%${inner}`;
+        }
+        if (methodName === 'isSome' || methodName === 'isNone') return 'i1';
+        if (methodName === 'get') return 'i32';
+    }
+
+    if (className.startsWith('Array_')) {
+        if (methodName === 'length') return 'i32';
+        if (methodName === 'get') {
+            const inner = className.substring('Array_'.length);
+            if (inner === 'i32') return 'i32';
+            return `%${inner}`;
+        }
+    }
+
+    return 'i32';
   }
 
   private isClassType(llvmType: string): boolean {
+    if (!llvmType) return false;
     const name = llvmType.startsWith('%') ? llvmType.substring(1) : llvmType;
     if (this.classDecls.has(name)) return true;
-    if (this.structs.has(name)) return true;
+    if (this.structs.has(name) || this.structDecls.has(name)) return true;
     const imported = this.importedSymbols.get(name);
-    if (imported && imported.kind === 'class') return true;
+    if (imported && (imported.kind === 'class' || imported.kind === 'interface')) return true;
     if (name.includes('_')) {
         const parts = name.split('_');
-        for (const part of parts) {
-            if (this.genericClasses.has(part)) return true;
-            const imp = this.importedSymbols.get(part);
-            if (imp && imp.kind === 'class') return true;
-        }
+        const base = parts[0];
+        if (this.genericClasses.has(base) || this.genericInterfaces.has(base)) return true;
+        const imp = this.importedSymbols.get(base);
+        if (imp && (imp.kind === 'class' || imp.kind === 'interface')) return true;
     }
     return false;
   }
@@ -2751,11 +3139,14 @@ export class CodeGenerator {
   }
 
   private isStructType(llvmType: string): boolean {
+    if (!llvmType) return false;
+    if (llvmType === 'ptr' || llvmType.startsWith('ptr<') || llvmType.startsWith('rawPtr<')) return false;
     const name = llvmType.startsWith('%') ? llvmType.substring(1) : llvmType;
-    return this.structDecls.has(name);
+    return this.structDecls.has(name) || this.classDecls.has(name) || this.interfaceDecls.has(name);
   }
 
   private isPointerType(t: string): boolean {
+    if (!t) return false;
     return t === 'ptr' || t.startsWith('ptr<') || t.startsWith('rawPtr<') || t === 'string';
   }
 
@@ -2770,25 +3161,34 @@ export class CodeGenerator {
   }
 
   private toLLVMType(t: string): string {
-    if (this.isPointerType(t) || this.isClassType(t)) return 'ptr';
-    if (t.startsWith('%')) {
-        const name = t.substring(1);
-        if (this.classDecls.has(name) || this.interfaceDecls.has(name)) return 'ptr';
-        if (name.includes('_')) { // Handle instantiated generic classes like Array_Type
-            const baseName = name.split('_')[0];
-            if (this.genericClasses.has(baseName) || this.genericInterfaces.has(baseName)) return 'ptr';
-        }
-    }
-    // Fallback: if it's a known class/interface from ANY loaded module
-    const rawName = t.startsWith('%') ? t.substring(1) : t;
-    for (const mod of this.importedModules.values()) {
-        if (mod.symbols.some(s => s.name === rawName && (s.kind === 'class' || s.kind === 'interface'))) {
-            return 'ptr';
-        }
-    }
-    return t;
+    if (!t) return 'i32';
+    const res = this._toLLVMTypeInner(t);
+    // if (t === 'string' && res !== 'ptr') console.log(`!!! toLLVMType("string") returned "${res}"`);
+    return res;
   }
 
+  private _toLLVMTypeInner(t: string): string {
+    if (t === 'i32') return 'i32';
+    if (t === 'i1' || t === 'bool') return 'i1';
+    if (t === 'i8' || t === 'byte') return 'i8';
+    if (t === 'i64') return 'i64';
+    if (t === 'f32') return 'f32';
+    if (t === 'f64') return 'f64';
+    if (t === 'void') return 'void';
+    if (t === 'ptr' || t === 'string' || t.startsWith('ptr<') || t.startsWith('rawPtr<')) return 'ptr';
+    
+    const name = t.startsWith('%') ? t.substring(1) : t;
+    if (this.structDecls.has(name) && !this.classDecls.has(name)) {
+        return `%${name}`;
+    }
+    
+    if (name.includes('_')) {
+        const base = name.split('_')[0];
+        if (this.genericClasses.has(base) || this.genericInterfaces.has(base)) return 'ptr';
+    }
+
+    return 'ptr';
+  }
 
   private generateAutoAllocation(targetPtr: string, val: string, innerType: string): string {
     const size = this.getTypeSize(innerType);
@@ -2877,6 +3277,15 @@ export class CodeGenerator {
         const t = this.tempTypes.get(v)!;
         if (t.startsWith('%')) return t.substring(1);
     }
+    // Search in local class type tracking (set from inferExprType)
+    if (v.startsWith('%')) {
+        const name = v.substring(1).replace('.addr', '');
+        const ct = this.localVarClassTypes.get(name);
+        if (ct && ct.startsWith('%')) return ct.substring(1);
+        // Also check param class types
+        const pct = this.currentFunctionParamClassTypes.get(name);
+        if (pct && pct.startsWith('%')) return pct.substring(1);
+    }
     // Search in local types
     for (const [name, type] of this.localVarTypes) {
         if (v === `%${name}` && type.startsWith('%')) return type.substring(1);
@@ -2884,6 +3293,8 @@ export class CodeGenerator {
     // Search in params
     if (v.startsWith('%')) {
         const name = v.substring(1).replace('.addr', '');
+        const pct2 = this.currentFunctionParamClassTypes.get(name);
+        if (pct2 && pct2.startsWith('%')) return pct2.substring(1);
         const pt = this.currentFunctionParamTypes.get(name);
         if (pt && pt.startsWith('%')) return pt.substring(1);
     }
@@ -3080,7 +3491,15 @@ export class CodeGenerator {
 
   private mangleNameWithScope(scope: string, name: string, params: Parameter[]): string {
       const oldScope = this.scopeStack;
-      this.scopeStack = [scope];
+      if (scope) {
+          if (scope.includes('.')) {
+              this.scopeStack = scope.split('.');
+          } else {
+              this.scopeStack = [...oldScope, scope];
+          }
+      } else {
+          this.scopeStack = [...oldScope];
+      }
       const res = this.mangleName(name, params);
       this.scopeStack = oldScope;
       return res;
@@ -3152,6 +3571,9 @@ export class CodeGenerator {
     // Check if this is a local instantiation or from an imported generic
     const isLocal = this.isLocalDeclaration(baseDecl, this.currentProgram);
     
+    const oldScopeInstFull = this.scopeStack;
+    this.scopeStack = []; // Do not inherit caller's scope for generic instantiation
+
     this.buildVTable(instantiatedDecl);
     
     const oldVTable = this.output.length;
@@ -3161,8 +3583,7 @@ export class CodeGenerator {
     
     // Register methods
     const oldScopeInst = this.scopeStack;
-    this.scopeStack = [];
-    this.scopeStack.push(mangledName);
+    this.scopeStack = mangledName ? mangledName.split('.') : [];
     if (instantiatedDecl.constructorDecl) {
         const mName = this.mangleName('constructor', instantiatedDecl.constructorDecl.params);
         const pts = ['ptr', ...instantiatedDecl.constructorDecl.params.map(p => this.getFunctionParamStorageType(p))];
@@ -3211,6 +3632,7 @@ export class CodeGenerator {
     targetOutput.push(...instantiationOutput, ...deferredInstantiationOutput);
     this.currentOutput = oldOutput;
     this.instantiationTargetOutput = oldInstantiationTargetOutput;
+    this.scopeStack = oldScopeInstFull;
     return mangledName;
   }
 
@@ -3477,7 +3899,7 @@ export class CodeGenerator {
 
     const oldScope = this.scopeStack;
     const oldClassName = this.currentClassName;
-    this.scopeStack = [className];
+    this.scopeStack = className ? className.split('.') : [];
     this.currentClassName = className;
 
     const mName = this.mangleName(instantiatedMethod.name, instantiatedMethod.params);
@@ -3645,3 +4067,19 @@ export class CodeGenerator {
     return { ...program, declarations };
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

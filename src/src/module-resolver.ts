@@ -11,7 +11,7 @@ import { CodeGenerator } from './codegen.ts';
 
 function toLLVMTypeName(type: TypeAnnotation): string {
   if (type.isPointer) return `ptr<${toLLVMNamedBaseType(type.name)}>`;
-  if (type.name === 'string') return 'string';
+  if (type.name === 'string') return 'ptr';
   return toLLVMNamedBaseType(type.name);
 }
 
@@ -35,7 +35,8 @@ function toLLVMNamedBaseType(name: string): string {
 // Represents an exported symbol from a module
 export interface ExportedSymbol {
   name: string;            // Symbol name
-  kind: 'function' | 'const' | 'let' | 'interface' | 'class' | 'enum';
+  realName?: string;       // The actual mangled LLVM name
+  kind: 'function' | 'const' | 'let' | 'interface' | 'class' | 'enum' | 'struct';
   llvmType?: string;       // LLVM type for functions: return type
   paramTypes?: string[];   // Parameter types for functions
   varType?: string;        // Variable type
@@ -207,6 +208,15 @@ export class ModuleResolver {
                 // Mangle names for stdlib functions so they match when imported
                 const oldScopeStack = (codegen as any).scopeStack;
                 (codegen as any).scopeStack = namespace ? [namespace] : [];
+                // Special case for stdlib modules: they should be mangled with their module name as prefix if not in a namespace
+                if (!namespace && modulePath.startsWith('std:')) {
+                    // Do not artificially inject stdName namespace to prevent mangling mismatches with classes
+                    // const stdName = modulePath.substring(4);
+                    // (codegen as any).scopeStack = [stdName];
+                } else if (!namespace && modulePath.includes('/')) {
+                    // For local files, we also need to maintain consistency if the host uses file-based mangling
+                    // but since the host doesn't seem to do that, we leave it empty.
+                }
                 const mangledName = (codegen as any).mangleName(f.name, f.params, !!f.ffiLib || f.isDeclare);
                 (codegen as any).scopeStack = oldScopeStack;
                 
@@ -216,7 +226,7 @@ export class ModuleResolver {
 
                 symbols.push({
                   name: fullName,
-                  realName: metaName,
+                  realName: mangledName,
                   kind: 'function',
                   llvmType: toLLVMTypeName(f.returnType),
                   paramTypes: f.params.map((p) => toLLVMTypeName(p.type)),

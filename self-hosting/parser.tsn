@@ -1800,7 +1800,7 @@ export class Parser {
 
     private skipReturnType(): void {
         while (!this.isAtEnd()) {
-            if (this.checkKind(TokenKind.LBrace) || this.checkKind(TokenKind.Semicolon)) {
+            if (this.check(TokenKind.LBrace) || this.check(TokenKind.Semicolon)) {
                 return;
             }
             this.advance();
@@ -2312,14 +2312,14 @@ export class Parser {
     }
 
     private matchKind(kind: i32): bool {
-        if (!this.checkKind(kind)) {
+        if (!this.check(kind)) {
             return false;
         }
         this.pos = this.pos + 1;
         return true;
     }
 
-    private checkKind(kind: i32): bool {
+    private check(kind: i32): bool {
         if (this.isAtEnd()) {
             return false;
         }
@@ -2829,5 +2829,34 @@ export class Parser {
             }
             this.advance();
         }
+    }
+
+    private parseTypeText(): string {
+        let result = "";
+        if (this.peek().kind == TokenKind.Identifier) {
+            result = this.advance().lexeme;
+        } else {
+            return result;
+        }
+        // Handle generic arguments: Foo<A, B>
+        if (this.matchKind(TokenKind.Less)) {
+            result = this.sliceText(result, 0, result.length);
+            result = result + "<";
+            let first = true;
+            while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
+                if (!first) {
+                    result = result + ", ";
+                }
+                first = false;
+                let argType = this.parseTypeText();
+                result = result + argType;
+                if (!this.matchKind(TokenKind.Comma)) {
+                    break;
+                }
+            }
+            this.matchKind(TokenKind.Greater);
+            result = result + ">";
+        }
+        return result;
     }
 }
