@@ -2,6 +2,7 @@ import { log } from "std:console";
 import { readText } from "std:fs";
 import { Lexer } from "./lexer.tsn";
 import { Parser } from "./parser.tsn";
+import { Program } from "./ast.tsn";
 
 function logBool(label: string, value: bool): void {
     log(label);

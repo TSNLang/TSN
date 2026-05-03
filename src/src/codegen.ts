@@ -424,13 +424,13 @@ export class CodeGenerator {
       const base = this.structDecls.get(decl.baseStructName);
       if (base) {
         for (const f of base.fields) {
-          const t = this.getLLVMType(f.type);
-          fields.push({ name: f.name, type: t });
-        }
+            const t = this.getLLVMTypeWithClass(f.type);
+            fields.push({ name: f.name, type: t });
+          }
       }
     }
 
-    for (const f of decl.fields) { const t = this.getLLVMType(f.type); if (decl.name === 'Lexer' && f.name === 'source') { console.log('REGISTER LEXER SOURCE TYPE:', t, 'FROM:', f.type); } fields.push({ name: f.name, type: t }); }
+    for (const f of decl.fields) { const t = this.getLLVMTypeWithClass(f.type); fields.push({ name: f.name, type: t }); }
     this.structs.set(decl.name, { name: decl.name, fields, base: decl.baseStructName });
     const llvm = fields.map(f => this.toLLVMType(f.type));
     this.emit(`%${decl.name} = type { ${llvm.join(', ')} }`);
@@ -632,7 +632,8 @@ export class CodeGenerator {
                 } else {
                     if (!this.classDecls.has(name)) {
                         this.classDecls.set(name, cls);
-                        this.buildVTable(cls, name);
+                  this.buildVTable(cls, name);
+                  this.generateClassStruct(cls, name);
                     }
                     
                     // Register methods and constructor for the class so they are known even if not explicitly imported
@@ -703,10 +704,12 @@ export class CodeGenerator {
                 this.genericClasses.set(name, cls);
             } else {
                 this.classDecls.set(name, cls);
-                this.buildVTable(cls, name);
+                  this.buildVTable(cls, name);
+                  this.generateClassStruct(cls, name);
             }
         } else if (sym.kind === 'interface' && sym.ast) {
             this.interfaceDecls.set(name, sym.ast as InterfaceDecl);
+              this.generateInterface(sym.ast as InterfaceDecl);
         } else if (sym.kind === 'enum' && sym.ast) {
             this.processEnum(sym.ast as EnumDecl);
         }
@@ -1027,7 +1030,7 @@ export class CodeGenerator {
 
   private generateInterface(decl: InterfaceDecl): void {
     const fields: { name: string; type: string }[] = [], llvm: string[] = [];
-    for (const f of decl.fields) { const t = this.getLLVMType(f.type); fields.push({ name: f.name, type: t }); llvm.push(this.toLLVMType(t)); }
+    for (const f of decl.fields) { const t = this.getLLVMTypeWithClass(f.type); fields.push({ name: f.name, type: t }); llvm.push(this.toLLVMType(t)); }
     this.structs.set(decl.name, { name: decl.name, fields });
     this.emit(`%${decl.name} = type { ${llvm.join(', ')} }`);
   }
@@ -2782,7 +2785,7 @@ export class CodeGenerator {
     }
     const obj = this.generateExpression(e.object);
       const objType = this.tempTypes.get(obj) || 'ptr';
-      if (e.member === 'length' || e.member === 'source') console.log('DEBUG MEMBER:', e.member, 'OBJ:', obj, 'OBJTYPE:', objType, 'KIND:', e.object.kind);
+      console.log('DEBUG MEMBER:', e.member, 'OBJ:', obj, 'OBJTYPE:', objType, 'KIND:', e.object.kind);
 
     // Built-in string properties
     if (objType === 'string') {
@@ -2826,7 +2829,21 @@ export class CodeGenerator {
             const structInfo = this.structs.get(stName);
             if (structInfo) {
                 const fIdx = this.getFieldIndex(stName, me.member);
+        if (me.member === "declarations" || me.member === "classMembers") {
+            console.log("DEBUG MEMBER ACC:", me.member, "stName:", stName, "fIdx:", fIdx);
+            if (structInfo) console.log("  - Type returned:", structInfo.fields[fIdx] ? structInfo.fields[fIdx].type : "UNDEFINED");
+        }
+        if (stName === "%Program" || stName === "Program") {
+            console.log("DEBUG PROGRAM MEMBER:", me.member, "fIdx:", fIdx, "fields count:", structInfo ? structInfo.fields.length : 0);
+            if (structInfo) {
+                for (let i = 0; i < structInfo.fields.length; i++) {
+                    console.log("  - Field", i, ":", structInfo.fields[i].name, "Type:", structInfo.fields[i].type);
+                }
+            }
+        }
                 const fieldType = structInfo.fields[fIdx] ? structInfo.fields[fIdx].type : 'i32';
+if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldType, 'IDX:', fIdx);
+if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldType, 'IDX:', fIdx);
                 const fPtr = this.newTemp();
                 this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
                 this.tempTypes.set(fPtr, `rawPtr<${fieldType}>`);
