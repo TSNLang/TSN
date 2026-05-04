@@ -1,6 +1,6 @@
 import { Array } from "std:array";
 import { log } from "std:console";
-import * as str from "std:string";
+import * as string from "std:string";
 import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr } from "./ast.tsn";
 
 export class Parser {
@@ -1699,7 +1699,7 @@ export class Parser {
         if (end <= start) {
             return "";
         }
-        return str.substr(text, start, end - start);
+        return string.substr(text, start, end - start);
     }
 
     private indexOfChar(text: string, target: i32): i32 {

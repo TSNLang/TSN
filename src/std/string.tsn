@@ -1,198 +1,149 @@
 import * as memory from "std:memory";
 
-/**
- * Độ dài tính bằng byte (không bao gồm null terminator).
- */
-export @unsafe function byteLength(s: string): i32 {
-    if (s == null) return 0;
-    let p: rawPtr<void> = s;
-    let i: i32 = 0;
-    while (memory.getByte(p, i) != 0) {
-        i++;
-    }
-    return i;
-}
-
-/**
- * Độ dài tính bằng số ký tự (hỗ trợ UTF-8).
- */
-export @unsafe function length(s: string): i32 {
-    if (s == null) return 0;
-    let blen = byteLength(s);
-    let count = 0;
-    let p: rawPtr<void> = s;
-    for (let i = 0; i < blen; i++) {
-        let b = memory.getByte(p, i);
-        // UTF-8 lead byte: không phải là 10xxxxxx (0x80)
-        // Các byte nằm trong khoảng 0x80-0xBF là continuation bytes
-        if ((b & 0xc0) != 0x80) {
-            count++;
+export namespace string {
+    /**
+     * Độ dài tính bằng byte (không bao gồm null terminator).
+     */
+    export @unsafe function byteLength(s: string): i32 {
+        if (s == null) return 0;
+        let p: rawPtr<void> = s;
+        let i: i32 = 0;
+        while (memory.getByte(p, i) != 0) {
+            i++;
         }
+        return i;
     }
-    return count;
-}
 
-/**
- * Lấy mã code point của ký tự tại vị trí index.
- */
-export @unsafe function charCodeAt(s: string, index: i32): i32 {
-    if (s == null) return 0;
-    let p: rawPtr<void> = s;
-    return memory.getByte(p, index);
-}
-
-/**
- * Nối hai chuỗi.
- */
-export @unsafe function concat(a: string, b: string): string {
-    let la = byteLength(a);
-    let lb = byteLength(b);
-    let total = la + lb;
-    
-    let buf = memory.alloc(total + 1);
-    if (buf == null) return "";
-    
-    if (la > 0) memory.copy(buf, a, la);
-    if (lb > 0) memory.copy(memory.offset(buf, la), b, lb);
-    
-    memory.setByte(buf, total, 0); // Null terminator
-    
-    let res: string = buf;
-    return res;
-}
-
-/**
- * So sánh hai chuỗi. Trả về 0 nếu bằng nhau.
- */
-export @unsafe function compare(a: string, b: string): i32 {
-    let pa: rawPtr<void> = a;
-    let pb: rawPtr<void> = b;
-    let i = 0;
-    
-    while (true) {
-        let ca = memory.getByte(pa, i);
-        let cb = memory.getByte(pb, i);
-        
-        if (ca != cb) return ca - cb;
-        if (ca == 0) return 0;
-        i++;
-    }
-}
-
-/**
- * Trích xuất chuỗi con (tính theo byte).
- */
-export @unsafe function substr(s: string, start: i32, len: i32): string {
-    if (s == null) return "";
-    let buf = memory.alloc(len + 1);
-    if (buf == null) return "";
-    
-    memory.copy(buf, memory.offset(s, start), len);
-    memory.setByte(buf, len, 0);
-    
-    let res: string = buf;
-    return res;
-}
-
-/**
- * Kiểm tra chuỗi con ở vị trí bắt đầu.
- */
-export @unsafe function startsWith(s: string, search: string): bool {
-    let slen = byteLength(s);
-    let nlen = byteLength(search);
-    if (nlen > slen) return false;
-    
-    for (let i = 0; i < nlen; i++) {
-        if (memory.getByte(s, i) != memory.getByte(search, i)) return false;
-    }
-    return true;
-}
-
-/**
- * Kiểm tra chuỗi con ở vị trí kết thúc.
- */
-export @unsafe function endsWith(s: string, search: string): bool {
-    let slen = byteLength(s);
-    let nlen = byteLength(search);
-    if (nlen > slen) return false;
-    
-    let offset = slen - nlen;
-    for (let i = 0; i < nlen; i++) {
-        if (memory.getByte(s, offset + i) != memory.getByte(search, i)) return false;
-    }
-    return true;
-}
-
-/**
- * Tìm vị trí đầu tiên của chuỗi con.
- */
-export @unsafe function indexOf(s: string, search: string): i32 {
-    let slen = byteLength(s);
-    let nlen = byteLength(search);
-    if (nlen == 0) return 0;
-    if (nlen > slen) return -1;
-    
-    for (let i = 0; i <= slen - nlen; i++) {
-        let match = true;
-        for (let j = 0; j < nlen; j++) {
-            if (memory.getByte(s, i + j) != memory.getByte(search, j)) {
-                match = false;
-                break;
+    /**
+     * Độ dài tính bằng số ký tự (hỗ trợ UTF-8).
+     */
+    export @unsafe function length(s: string): i32 {
+        if (s == null) return 0;
+        let blen = byteLength(s);
+        let count = 0;
+        let p: rawPtr<void> = s;
+        for (let i = 0; i < blen; i++) {
+            let b = memory.getByte(p, i);
+            if ((b & 0xc0) != 0x80) {
+                count++;
             }
         }
-        if (match) return i;
+        return count;
     }
-    return -1;
-}
 
+    /**
+     * Lấy mã code point của ký tự tại vị trí index.
+     */
+    export @unsafe function charCodeAt(s: string, index: i32): i32 {
+        if (s == null) return 0;
+        let p: rawPtr<void> = s;
+        return memory.getByte(p, index);
+    }
 
-/**
- * Kiểm tra chuỗi có chứa chuỗi con không.
- */
-export @unsafe function includes(s: string, search: string): bool {
-    return indexOf(s, search) != -1;
-}
+    /**
+     * Nối hai chuỗi.
+     */
+    export @unsafe function concat(a: string, b: string): string {
+        let la = byteLength(a);
+        let lb = byteLength(b);
+        let total = la + lb;
+        
+        let buf = memory.alloc(total + 1);
+        if (buf == null) return "";
+        
+        if (la > 0) memory.copy(buf, a, la);
+        if (lb > 0) memory.copy(memory.offset(buf, la), b, lb);
+        
+        memory.setByte(buf, total, 0); // Null terminator
+        
+        let res: string = buf;
+        return res;
+    }
 
-/**
- * Chuyển đổi số i64 sang chuỗi.
- */
-export @unsafe function fromInt(n: i64): string {
-    if (n == 0) return "0";
-    
-    let isNegative = false;
-    let val = n;
-    if (val < 0) {
-        isNegative = true;
-        val = -val;
+    /**
+     * So sánh hai chuỗi. Trả về 0 nếu bằng nhau.
+     */
+    export @unsafe function compare(a: string, b: string): i32 {
+        let pa: rawPtr<void> = a;
+        let pb: rawPtr<void> = b;
+        let i = 0;
+        
+        while (true) {
+            let ca = memory.getByte(pa, i);
+            let cb = memory.getByte(pb, i);
+            
+            if (ca != cb) return ca - cb;
+            if (ca == 0) return 0;
+            i++;
+        }
     }
-    
-    let buf = memory.alloc(32);
-    let i = 0;
-    while (val > 0) {
-        let digit = (val % 10) as i32;
-        memory.setByte(buf, i, (digit + 48) as i8);
-        val = val / 10;
-        i++;
+
+    export @unsafe function equals(a: string, b: string): bool {
+        return compare(a, b) == 0;
     }
-    
-    if (isNegative) {
-        memory.setByte(buf, i, 45 as i8);
-        i++;
+
+    /**
+     * Trích xuất chuỗi con (tính theo byte).
+     */
+    export @unsafe function substr(s: string, start: i32, len: i32): string {
+        if (s == null) return "";
+        let buf = memory.alloc(len + 1);
+        if (buf == null) return "";
+        
+        memory.copy(buf, memory.offset(s, start), len);
+        memory.setByte(buf, len, 0);
+        
+        let res: string = buf;
+        return res;
     }
-    
-    memory.setByte(buf, i, 0);
-    
-    let res: string = (buf as string);
-    // Đảo ngược chuỗi
-    let left = 0;
-    let right = i - 1;
-    while (left < right) {
-        let temp = memory.getByte(buf, left);
-        memory.setByte(buf, left, memory.getByte(buf, right));
-        memory.setByte(buf, right, temp);
-        left++;
-        right--;
+
+    /**
+     * Kiểm tra chuỗi con ở vị trí bắt đầu.
+     */
+    export @unsafe function startsWith(s: string, search: string): bool {
+        let slen = byteLength(s);
+        let sslen = byteLength(search);
+        if (sslen > slen) return false;
+        
+        for (let i = 0; i < sslen; i++) {
+            if (charCodeAt(s, i) != charCodeAt(search, i)) return false;
+        }
+        return true;
     }
-    
-    return res;
+
+    export @unsafe function includes(s: string, search: string): bool {
+        let slen = byteLength(s);
+        let sslen = byteLength(search);
+        if (sslen > slen) return false;
+        
+        for (let i = 0; i <= slen - sslen; i++) {
+            let match = true;
+            for (let j = 0; j < sslen; j++) {
+                if (charCodeAt(s, i + j) != charCodeAt(search, j)) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
+        }
+        return false;
+    }
+
+    export @unsafe function indexOf(s: string, search: string): i32 {
+        let slen = byteLength(s);
+        let sslen = byteLength(search);
+        if (sslen > slen) return -1;
+        
+        for (let i = 0; i <= slen - sslen; i++) {
+            let match = true;
+            for (let j = 0; j < sslen; j++) {
+                if (charCodeAt(s, i + j) != charCodeAt(search, j)) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return i;
+        }
+        return -1;
+    }
 }

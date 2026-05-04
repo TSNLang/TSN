@@ -3,6 +3,7 @@
 *.obj
 *.ll
 *.meta
+*.o
 
 # Node.js
 node_modules/

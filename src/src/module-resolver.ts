@@ -217,7 +217,7 @@ export class ModuleResolver {
                     // For local files, we also need to maintain consistency if the host uses file-based mangling
                     // but since the host doesn't seem to do that, we leave it empty.
                 }
-                const mangledName = (codegen as any).mangleName(f.name, f.params, !!f.ffiLib || f.isDeclare);
+                const mangledName = (codegen as any).mangleName(f.name, f.params, !!f.ffiLib || f.isDeclare, f.returnType);
                 (codegen as any).scopeStack = oldScopeStack;
                 
                 // If it's a namespaced function, use the namespaced name in metadata

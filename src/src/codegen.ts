@@ -342,7 +342,9 @@ export class CodeGenerator {
       this.buildInterfaceVTable(i);
     }
     else if (decl.kind === ASTKind.NamespaceDecl) {
-      const ns = decl as NamespaceDecl; this.scopeStack.push(ns.name);
+      const ns = decl as NamespaceDecl; 
+      console.log(`--- preScan: entering namespace ${ns.name}, current scopeStack=[${this.scopeStack.join(',')}]`);
+      this.scopeStack.push(ns.name);
       for (const sub of ns.body) this.preScanDeclaration(sub);
       this.scopeStack.pop();
     } else if (decl.kind === ASTKind.ClassDecl) {
@@ -368,7 +370,7 @@ export class CodeGenerator {
           this.genericMethods.set(key, { classDecl: c, method: m });
           continue;
         }
-        const mName = this.mangleName(m.name, m.params);
+        const mName = this.mangleName(m.name, m.params, false, m.returnType);
         const rt = this.getFunctionReturnRuntimeType(m.returnType);
         const pts = ['ptr', ...m.params.map(p => this.getFunctionParamStorageType(p))];
         this.functions.set(mName, { name: mName, returnType: rt, paramTypes: pts });
@@ -389,7 +391,7 @@ export class CodeGenerator {
         this.genericFunctions.set(fn.name, fn);
         return;
       }
-      const mName = this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare);
+      const mName = this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare, fn.returnType);
       const rt = this.getFunctionReturnRuntimeType(fn.returnType);
       const restParamIndex = fn.params.findIndex(p => !!p.isRest);
       const pts = fn.params.map(p => this.getFunctionParamStorageType(p));
@@ -455,7 +457,7 @@ export class CodeGenerator {
         if (decl.kind === ASTKind.FunctionDecl) {
             const f = decl as FunctionDecl;
             if (!this.isTargetOSMatch(f.targetOS)) return;
-            const mName = this.mangleName(f.name, f.params, !!f.ffiLib || f.isDeclare);
+            const mName = this.mangleName(f.name, f.params, !!f.ffiLib || f.isDeclare, f.returnType);
             const rt = this.getLLVMType(f.returnType);
             this.ensureExternalDeclaration(mName, {
                 name: f.name,
@@ -621,9 +623,9 @@ export class CodeGenerator {
         this.importedModules.set(decl.namespace, exports);
     }
 
-    // Register ALL classes/interfaces/enums from the module so we know their types
+    // Register ALL classes/interfaces/enums/functions from the module so we know their types
     for (const sym of exports.symbols) {
-        if ((sym.kind === 'class' || sym.kind === 'interface' || sym.kind === 'enum') && sym.ast) {
+        if ((sym.kind === 'class' || sym.kind === 'interface' || sym.kind === 'enum' || sym.kind === 'function') && sym.ast) {
             const name = sym.name;
             if (sym.kind === 'class') {
                 const cls = sym.ast as ClassDecl;
@@ -657,7 +659,7 @@ export class CodeGenerator {
                         const methodName = `${name}.${m.name}`;
                         if (!this.functions.has(methodName)) {
                             this.scopeStack.push(cls.name);
-                            const mName = this.mangleName(m.name, m.params);
+                            const mName = this.mangleName(m.name, m.params, false, m.returnType);
                             this.scopeStack.pop();
                             
                             const rt = this.getFunctionReturnRuntimeType(m.returnType);
@@ -689,6 +691,24 @@ export class CodeGenerator {
                 if (!this.enums.has(name)) {
                     this.processEnum(sym.ast as EnumDecl);
                 }
+            } else if (sym.kind === 'function') {
+                const fn = sym.ast as FunctionDecl;
+                // If it's in a namespace, we need to respect the mangled name from metadata
+                const mName = sym.realName || this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare, fn.returnType);
+                const rt = this.getFunctionReturnRuntimeType(fn.returnType);
+                const pts = fn.params.map(p => this.getFunctionParamStorageType(p));
+                const fInfo = { name: mName, returnType: rt, paramTypes: pts, isExternal: true };
+                
+                this.functions.set(name, fInfo as any);
+                this.functions.set(mName, fInfo as any);
+                this.importedSymbols.set(name, sym);
+                
+                this.ensureExternalDeclaration(mName, {
+                    name: fn.name,
+                    kind: 'function',
+                    llvmType: this.toLLVMType(rt),
+                    paramTypes: pts,
+                } as any);
             }
         }
     }
@@ -698,6 +718,16 @@ export class CodeGenerator {
     // First pass: Register all imported classes/interfaces/enums into classDecls/interfaceDecls
     for (const [name, sym] of imported) {
         this.importedSymbols.set(name, sym);
+        
+        // If it's a namespace, auto-register its members from the module exports
+        if (sym.kind === 'namespace' || !sym.kind) { // Some namespaces might not have kind set
+            for (const s of exports.symbols) {
+                if (s.name.startsWith(name + '.')) {
+                    this.importedSymbols.set(s.name, s);
+                }
+            }
+        }
+
         if (sym.kind === 'class' && sym.ast) {
             const cls = sym.ast as ClassDecl;
             if (cls.typeParameters && cls.typeParameters.length > 0) {
@@ -738,7 +768,7 @@ export class CodeGenerator {
             if (!cls.typeParameters || cls.typeParameters.length === 0) {
                 for (const m of cls.methods) {
                     this.scopeStack.push(cls.name);
-                    const mName = this.mangleName(m.name, m.params);
+                    const mName = this.mangleName(m.name, m.params, false, m.returnType);
                     this.scopeStack.pop();
                     
                     const rt = this.getFunctionReturnRuntimeType(m.returnType);
@@ -788,7 +818,7 @@ export class CodeGenerator {
             if (fn.typeParameters && fn.typeParameters.length > 0) {
                 this.genericFunctions.set(name, fn);
             } else {
-                const mName = sym.realName || this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare);
+                const mName = sym.realName || this.mangleName(fn.name, fn.params, !!fn.ffiLib || fn.isDeclare, fn.returnType);
                 const rt = this.getLLVMType(fn.returnType);
                 const restParamIndex = fn.params.findIndex(p => !!p.isRest);
                 const pts = fn.params.map(p => this.getFunctionParamStorageType(p));
@@ -813,49 +843,45 @@ export class CodeGenerator {
     this.enums.set(decl.name, m);
   }
 
-  private mangleName(name: string, params: Parameter[], isExternal: boolean = false): string {
+  private mangleName(name: string, params: Parameter[], isExternal: boolean = false, returnType?: TypeAnnotation): string {
     if (isExternal) return name;
+    if (name === "main") return "main";
     
-    // Check if it's a known imported function (possibly namespaced)
-    // We check both the short name and namespaced name
-    const sym = this.importedSymbols.get(name);
-    if (sym && sym.kind === 'function') {
-        return (sym as any).realName || sym.name;
-    }
-
-    if (name === 'alloc' || name === 'offset') {
-        const memorySym = this.importedSymbols.get(`memory.${name}`);
-        if (memorySym && memorySym.kind === 'function') return (memorySym as any).realName || memorySym.name;
-        
-        // Final fallback for std:memory functions which often get imported without namespace in nested contexts
-        for (const [k, v] of this.importedSymbols.entries()) {
-            if (k.endsWith(`.${name}`) && v.kind === 'function') return (v as any).realName || v.name;
-        }
-    }
-
-    if (this.scopeStack.length === 0 && params.length === 0 && name === 'main') return 'main';
+    let scope = this.scopeStack.join(".");
+    let fullName = scope ? `${scope}.${name}` : name;
     
-    // Check if it's a known global function (e.g. from imports) that should not be mangled
-    if (this.scopeStack.length === 0) {
-        const fullPath = name;
-        const sym = this.importedSymbols.get(fullPath);
-        if (sym && sym.kind === 'function') {
-            return sym.realName || sym.name; // Use the real mangled name from metadata
-        }
-    }
-
-    let res = '_T';
-    for (const s of this.scopeStack) res += `${s.length}${s}`;
-    res += `${name.length}${name}E`;
+    // New Mangling: _T.[Path]$P.[Params]
+    let mangledName = `_T.${fullName}`;
     if (params.length > 0) {
-      res += '_';
-      for (const p of params) {
-        let rt = this.getFunctionParamRuntimeType(p);
-        if (rt === 'string') rt = 'ptr';
-        res += rt.replace(/ptr/g, 'p').replace(/\[|\]|<|>|%| /g, '');
+        mangledName += "$P." + params.map(p => this.getTypeMangledName(p.type)).join(".");
+    } else {
+        mangledName += "$P";
     }
+
+    if (returnType && returnType.isTuple) {
+        mangledName += "$M";
     }
-    return res;
+    
+    return mangledName;
+  }
+
+  private getTypeMangledName(t: TypeAnnotation): string {
+    let name = t.name;
+    if (name === 'string') return 'ptr';
+    if (t.genericArgs && t.genericArgs.length > 0) {
+      name += "_" + t.genericArgs.map(arg => this.getTypeMangledName(arg)).join("_");
+    }
+    if (t.isPointer || t.isRawPointer) {
+      return "ptr_" + name;
+    }
+    if (t.isArray) {
+      return "array_" + name;
+    }
+    return name;
+  }
+
+  private getTypeAnnotationKey(t: TypeAnnotation): string {
+    return this.getTypeMangledName(t);
   }
 
   private resolveMangledName(name: string): string {
@@ -913,13 +939,15 @@ export class CodeGenerator {
 
       // Final check: scan the entire output for the definition to be sure
       const allOutput = this.output.join('\n') + '\n' + this.globalBuffer.join('\n');
-      const definePattern = new RegExp(`define\\s+[^@]+@${mangled.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`);
-      if (definePattern.test(allOutput)) {
-          console.log(`--- ensureExternalDeclaration: skipping ${mangled} because it is found in joined output via regex`);
-          return;
-      }
-
-      // If we have a declaration with same name but different signature, remove it first
+        const escapedMangled = mangled.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const definePattern = new RegExp(`define\\s+[^@]+@${escapedMangled}\\s*\\(`);
+        if (definePattern.test(allOutput)) {
+            console.log(`--- ensureExternalDeclaration: skipping ${mangled} because it is found in joined output via regex`);
+            return;
+        } else {
+        }
+  
+        // If we have a declaration with same name but different signature, remove it first
       const namePattern = `@${mangled}(`;
       this.externalDecls = this.externalDecls.filter(d => !d.includes(namePattern));
       
@@ -1976,11 +2004,11 @@ export class CodeGenerator {
     const op = opMap[e.operator] || 'add';
 
     if (e.operator === '+' && (leftType === 'string' || rightType === 'string' || (this.toLLVMType(leftType) === 'ptr' && this.toLLVMType(rightType) === 'ptr'))) {
-      this.ensureExternalDeclaration('string_concat', { name: 'string_concat', kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'ptr'] } as any);
+      this.ensureExternalDeclaration('_T.string.concat$P.ptr.ptr', { name: '_T.string.concat$P.ptr.ptr', kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'ptr'] } as any);
       const coercedLeft = this.coerceToType(l, leftType, 'ptr');
       const coercedRight = this.coerceToType(r, rightType, 'ptr');
       const result = this.newTemp();
-      this.emit(`${result} = call ptr @string_concat(ptr ${coercedLeft}, ptr ${coercedRight})`);
+      this.emit(`${result} = call ptr @_T.string.concat$P.ptr.ptr(ptr ${coercedLeft}, ptr ${coercedRight})`);
       this.tempTypes.set(result, 'string');
       return result;
     }
@@ -1990,11 +2018,11 @@ export class CodeGenerator {
       const isRString = rightType === 'string' || this.toLLVMType(rightType) === 'ptr';
       
       if (isLString && isRString) {
-        this.ensureExternalDeclaration('string_equals', { name: 'string_equals', kind: 'function', llvmType: 'i1', paramTypes: ['ptr', 'ptr'] } as any);
+        this.ensureExternalDeclaration('_T.string.equals$P.ptr.ptr', { name: '_T.string.equals$P.ptr.ptr', kind: 'function', llvmType: 'i1', paramTypes: ['ptr', 'ptr'] } as any);
         const coercedLeft = this.coerceToType(l, leftType, 'ptr');
         const coercedRight = this.coerceToType(r, rightType, 'ptr');
         const equalsResult = this.newTemp();
-        this.emit(`${equalsResult} = call i1 @string_equals(ptr ${coercedLeft}, ptr ${coercedRight})`);
+        this.emit(`${equalsResult} = call i1 @_T.string.equals$P.ptr.ptr(ptr ${coercedLeft}, ptr ${coercedRight})`);
         if (e.operator === '!=') {
           const notResult = this.newTemp();
           this.emit(`${notResult} = xor i1 ${equalsResult}, true`);
@@ -2008,9 +2036,9 @@ export class CodeGenerator {
     }
 
     if ((e.operator === '<' || e.operator === '<=' || e.operator === '>' || e.operator === '>=') && leftType === 'string' && rightType === 'string') {
-      this.ensureExternalDeclaration('string_compare', { name: 'string_compare', kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr'] } as any);
+      this.ensureExternalDeclaration('_T.string.compare$P.ptr.ptr', { name: '_T.string.compare$P.ptr.ptr', kind: 'function', llvmType: 'i32', paramTypes: ['ptr', 'ptr'] } as any);
       const compareResult = this.newTemp();
-      this.emit(`${compareResult} = call i32 @string_compare(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
+      this.emit(`${compareResult} = call i32 @_T.string.compare$P.ptr.ptr(ptr ${this.coerceToType(l, leftType, 'ptr')}, ptr ${this.coerceToType(r, rightType, 'ptr')})`);
       const comparison = this.newTemp();
       const cmpMap: Record<string, string> = { '<': 'slt', '<=': 'sle', '>': 'sgt', '>=': 'sge' };
       this.emit(`${comparison} = icmp ${cmpMap[e.operator]} i32 ${compareResult}, 0`);
@@ -2285,7 +2313,6 @@ export class CodeGenerator {
     if (m.object.kind === ASTKind.Identifier) {
         const ns = (m.object as Identifier).name;
         const fullName = `${ns}.${m.member}`;
-        console.log(`--- generateMemberCallExpr: fullName=${fullName}, ns=${ns}`);
         
         // Check if 'ns' is an imported namespace or module
         const isImportedNS = this.importedModules.has(ns);
@@ -2383,15 +2410,15 @@ export class CodeGenerator {
     // Built-in string methods
     if (objType === 'string' || (objType === 'ptr' && (m.member === 'slice' || m.member === 'includes' || m.member === 'indexOf' || m.member === 'startsWith' || m.member === 'endsWith' || m.member === 'charCodeAt'))) {
         const stringMethods: Record<string, { func: string, rt: string, pts: string[] }> = {
-            'includes':   { func: 'string_includes',   rt: 'i1',  pts: ['ptr', 'ptr'] },
-            'indexOf':    { func: 'string_indexOf',    rt: 'i32', pts: ['ptr', 'ptr'] },
-            'startsWith': { func: 'string_startsWith', rt: 'i1',  pts: ['ptr', 'ptr'] },
-            'endsWith':   { func: 'string_endsWith',   rt: 'i1',  pts: ['ptr', 'ptr'] },
-            'charCodeAt': { func: 'string_charCodeAt', rt: 'i32', pts: ['ptr', 'i32'] },
+            'includes':   { func: '_T.string.includes$P.ptr.ptr',   rt: 'i1',  pts: ['ptr', 'ptr'] },
+            'indexOf':    { func: '_T.string.indexOf$P.ptr.ptr',    rt: 'i32', pts: ['ptr', 'ptr'] },
+            'startsWith': { func: '_T.string.startsWith$P.ptr.ptr', rt: 'i1',  pts: ['ptr', 'ptr'] },
+            'endsWith':   { func: '_T.string.endsWith$P.ptr.ptr',   rt: 'i1',  pts: ['ptr', 'ptr'] },
+            'charCodeAt': { func: '_T.string.charCodeAt$P.ptr.i32', rt: 'i32', pts: ['ptr', 'i32'] },
         };
 
         if (m.member === 'slice') {
-            this.ensureExternalDeclaration('string_substr', { name: 'string_substr', kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'i32', 'i32'] } as any);
+            this.ensureExternalDeclaration('_T.string.substr$P.ptr.i32.i32', { name: '_T.string.substr$P.ptr.i32.i32', kind: 'function', llvmType: 'ptr', paramTypes: ['ptr', 'i32', 'i32'] } as any);
             const start = this.generateExpression(args[0]);
             const startType = this.getValueType(start);
             const end = args.length > 1 ? this.generateExpression(args[1]) : null;
@@ -2403,13 +2430,13 @@ export class CodeGenerator {
                 this.emit(`${len} = sub i32 ${endI32}, ${startI32}`);
             } else {
                 const totalLen = this.newTemp();
-                this.ensureExternalDeclaration('_T6lengthE_p', { name: '_T6lengthE_p', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
-                this.emit(`${totalLen} = call i32 @_T6lengthE_p(ptr ${obj})`);
+                this.ensureExternalDeclaration('_T.string.length$P.ptr', { name: '_T.string.length$P.ptr', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+                this.emit(`${totalLen} = call i32 @_T.string.length$P.ptr(ptr ${obj})`);
                 this.emit(`${len} = sub i32 ${totalLen}, ${startI32}`);
                 this.tempTypes.set(totalLen, 'i32');
             }
             const t = this.newTemp();
-            this.emit(`${t} = call ptr @string_substr(ptr ${obj}, i32 ${startI32}, i32 ${len})`);
+            this.emit(`${t} = call ptr @_T.string.substr$P.ptr.i32.i32(ptr ${obj}, i32 ${startI32}, i32 ${len})`);
             this.tempTypes.set(len, 'i32');
             this.tempTypes.set(t, 'string');
             return t;
@@ -2790,16 +2817,16 @@ export class CodeGenerator {
     // Built-in string properties
     if (objType === 'string') {
         if (e.member === 'length') {
-            this.ensureExternalDeclaration('_T6lengthE_p', { name: '_T6lengthE_p', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+            this.ensureExternalDeclaration('_T.string.length$P.ptr', { name: '_T.string.length$P.ptr', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
             const t = this.newTemp();
-            this.emit(`${t} = call i32 @_T6lengthE_p(ptr ${obj})`);
+            this.emit(`${t} = call i32 @_T.string.length$P.ptr(ptr ${obj})`);
             this.tempTypes.set(t, 'i32');
             return t;
         }
         if (e.member === 'byteLength') {
-            this.ensureExternalDeclaration('_T10byteLengthE_p', { name: '_T10byteLengthE_p', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
+            this.ensureExternalDeclaration('_T.string.byteLength$P.ptr', { name: '_T.string.byteLength$P.ptr', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
             const t = this.newTemp();
-            this.emit(`${t} = call i32 @_T10byteLengthE_p(ptr ${obj})`);
+            this.emit(`${t} = call i32 @_T.string.byteLength$P.ptr(ptr ${obj})`);
             this.tempTypes.set(t, 'i32');
             return t;
         }
@@ -3708,7 +3735,7 @@ if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldT
 
     const scopeParts = fnName.includes('.') ? fnName.split('.').slice(0, -1) : [];
     const baseName = fnName.includes('.') ? fnName.split('.').slice(-1)[0] : fnName;
-    const instantiatedBaseName = baseName + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
+    const instantiatedBaseName = baseName + "." + args.map(a => this.getTypeAnnotationKey(a)).join(".");
     const mangledName = scopeParts.length > 0 ? `${scopeParts.join('.')}.${instantiatedBaseName}` : instantiatedBaseName;
     if (this.instantiatedNames.has(mangledName)) return mangledName;
 
@@ -3896,7 +3923,7 @@ if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldT
     if (args.some(arg => !this.isConcreteTypeAnnotation(arg))) return methodName;
 
     const key = `${className}.${methodName}`;
-    const mangledName = key + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
+    const mangledName = key + "." + args.map(a => this.getTypeAnnotationKey(a)).join(".");
     if (this.instantiatedNames.has(mangledName)) return mangledName;
 
     const genericMethodInfo = this.genericMethods.get(key);
@@ -3908,7 +3935,7 @@ if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldT
     genericMethodInfo.method.typeParameters?.forEach((p, i) => typeMap.set(p, args[i]));
 
     const instantiatedMethod: ClassMethod = this.cloneAndReplace(genericMethodInfo.method, typeMap) as ClassMethod;
-    instantiatedMethod.name = methodName + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
+    instantiatedMethod.name = methodName + "." + args.map(a => this.getTypeAnnotationKey(a)).join(".");
     instantiatedMethod.typeParameters = [];
     if (instantiatedMethod.returnType?.genericArgs?.some((arg: TypeAnnotation) => !this.isConcreteTypeAnnotation(arg))) {
       return methodName;
@@ -3956,7 +3983,7 @@ if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldT
   private instantiateInterface(ifName: string, args: TypeAnnotation[]): string {
     if (args.some(arg => !this.isConcreteTypeAnnotation(arg))) return ifName;
 
-    const mangledName = ifName + "_" + args.map(a => this.getTypeAnnotationKey(a)).join("_");
+    const mangledName = ifName + "." + args.map(a => this.getTypeAnnotationKey(a)).join(".");
     if (this.instantiatedNames.has(mangledName)) return mangledName;
 
     const baseDecl = this.genericInterfaces.get(ifName);

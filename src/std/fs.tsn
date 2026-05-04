@@ -42,7 +42,17 @@ declare function GetFileSize(handle: ptr<void>, sizeHigh: ptr<i32>): i32;
 @ffi.lib("kernel32")
 declare function GetLastError(): i32;
 
-const INVALID_HANDLE_VALUE: i32 = -1;
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function GetProcessHeap(): ptr<void>;
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function HeapAlloc(heap: ptr<void>, flags: i32, bytes: i64): ptr<void>;
+
+@target_os("windows")
+@ffi.lib("kernel32")
+declare function HeapFree(heap: ptr<void>, flags: i32, ptr: ptr<void>): i32;
 
 @target_os("linux")
 @ffi.lib("c")
@@ -62,34 +72,11 @@ declare function close(fd: i32): i32;
 
 @target_os("linux")
 @ffi.lib("c")
-declare function access(path: string, mode: i32): i32;
-
-@target_os("windows")
-@ffi.lib("kernel32")
-declare function GetProcessHeap(): ptr<void>;
-
-@target_os("windows")
-@ffi.lib("kernel32")
-declare function HeapAlloc(heap: ptr<void>, flags: i32, bytes: i64): ptr<void>;
-
-@target_os("windows")
-@ffi.lib("kernel32")
-declare function HeapFree(heap: ptr<void>, flags: i32, ptr: ptr<void>): i32;
-
-@target_os("linux")
-@ffi.lib("c")
 declare function malloc(size: i32): ptr<void>;
 
 @target_os("linux")
 @ffi.lib("c")
 declare function free(ptr: ptr<void>): void;
-
-const WIN_FILE_READ_DATA: i32 = 1;
-const WIN_FILE_WRITE_DATA: i32 = 2;
-const WIN_FILE_SHARE_READ: i32 = 1;
-const WIN_OPEN_EXISTING: i32 = 3;
-const WIN_CREATE_ALWAYS: i32 = 2;
-const WIN_FILE_ATTRIBUTE_NORMAL: i32 = 128;
 
 export const FS_OK: i32 = 0;
 export const FS_NOT_FOUND: i32 = 1;
@@ -170,18 +157,24 @@ export class ExistsResult {
 @target_os("windows")
 @unsafe
 export function readText(path: string): ReadTextResult {
-    let handle = CreateFileA(path, WIN_FILE_READ_DATA, WIN_FILE_SHARE_READ, 0, WIN_OPEN_EXISTING, WIN_FILE_ATTRIBUTE_NORMAL, 0);
+    // GENERIC_READ = 0x80000000
+    let handle = CreateFileA(path, -2147483648, 1, null, 3, 128, null);
+
+    if (handle == (0 - 1) as ptr<void> || handle == null) {
+        let empty: string;
+        return new ReadTextResult(false, empty, FS_NOT_FOUND);
+    }
 
     let high: i32 = 0;
     let size = GetFileSize(handle, addressof(high));
     if (size < 0) {
         CloseHandle(handle);
         let empty: string;
-        return new ReadTextResult(false, empty, FS_NOT_FOUND);
+        return new ReadTextResult(false, empty, FS_IO_ERROR);
     }
 
     let heap = GetProcessHeap();
-    let buffer: ptr<void> = HeapAlloc(heap, 8, size + 1);
+    let buffer: ptr<void> = HeapAlloc(heap, 8, (size as i64) + 1);
     if (buffer == null) {
         CloseHandle(handle);
         let empty: string;
@@ -210,7 +203,7 @@ export function readText(path: string): ReadTextResult {
         return new ReadTextResult(false, empty, FS_NOT_FOUND);
     }
 
-    let capacity: i32 = 65536;
+    let capacity: i32 = 1024 * 1024; // 1MB
     let buffer: ptr<void> = malloc(capacity + 1);
     if (buffer == null) {
         close(fd);
@@ -231,27 +224,35 @@ export function readText(path: string): ReadTextResult {
 }
 
 @target_os("windows")
+@unsafe
 export function writeText(path: string, data: string): WriteTextResult {
-    let handle = CreateFileA(path, WIN_FILE_WRITE_DATA, 0, 0, WIN_CREATE_ALWAYS, WIN_FILE_ATTRIBUTE_NORMAL, 0);
+    // GENERIC_WRITE = 0x40000000, CREATE_ALWAYS = 2
+    let handle = CreateFileA(path, 1073741824, 0, null, 2, 128, null);
+    if (handle == (0 - 1) as ptr<void> || handle == null) {
+        return new WriteTextResult(false, 0, FS_IO_ERROR);
+    }
 
     let written: i32 = 0;
     let ok = WriteFile(handle, data, data.byteLength, addressof(written), 0);
     CloseHandle(handle);
+
     if (ok == 0) {
-        return new WriteTextResult(false, 0, FS_IO_ERROR);
+        return new WriteTextResult(false, written, FS_IO_ERROR);
     }
     return new WriteTextResult(true, written, FS_OK);
 }
 
 @target_os("linux")
+@unsafe
 export function writeText(path: string, data: string): WriteTextResult {
-    let fd = open(path, 577, 438);
+    let fd = open(path, 577, 420); // 0644
     if (fd < 0) {
         return new WriteTextResult(false, 0, FS_IO_ERROR);
     }
 
     let written = write(fd, data, data.byteLength);
     close(fd);
+
     if (written < 0) {
         return new WriteTextResult(false, 0, FS_IO_ERROR);
     }
@@ -259,18 +260,26 @@ export function writeText(path: string, data: string): WriteTextResult {
 }
 
 @target_os("windows")
+@unsafe
 export function exists(path: string): ExistsResult {
-    let handle = CreateFileA(path, WIN_FILE_READ_DATA, WIN_FILE_SHARE_READ, 0, WIN_OPEN_EXISTING, WIN_FILE_ATTRIBUTE_NORMAL, 0);
-    let err = GetLastError();
-    if (err != 0) {
-        return new ExistsResult(true, false, FS_OK);
+    let handle = CreateFileA(path, 0, 1, null, 3, 128, null);
+    if (handle == (0 - 1) as ptr<void> || handle == null) {
+        let err = GetLastError();
+        if (err == 2) { // ERROR_FILE_NOT_FOUND
+            return new ExistsResult(true, false, FS_OK);
+        }
+        return new ExistsResult(false, false, FS_IO_ERROR);
     }
     CloseHandle(handle);
     return new ExistsResult(true, true, FS_OK);
 }
 
 @target_os("linux")
+@unsafe
 export function exists(path: string): ExistsResult {
-    let rc = access(path, 0);
-    return new ExistsResult(true, rc == 0, FS_OK);
+    let res = access(path, 0); // F_OK
+    if (res == 0) {
+        return new ExistsResult(true, true, FS_OK);
+    }
+    return new ExistsResult(true, false, FS_OK);
 }
