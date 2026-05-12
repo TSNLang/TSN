@@ -171,8 +171,7 @@ export function readText(path: string): ReadTextResult {
     if (handle == (0 - 1) as ptr<void> || handle == null) {
         log("DEBUG: tsn_CreateFileA FAILED. Error code:");
         print_i32(tsn_GetLastError());
-        let empty: string;
-        return new ReadTextResult(false, empty, FS_NOT_FOUND);
+        return new ReadTextResult(false, "", FS_NOT_FOUND);
     }
 
     let high: i32 = 0;
@@ -181,8 +180,7 @@ export function readText(path: string): ReadTextResult {
     print_i32(size);
     if (size < 0) {
         tsn_CloseHandle(handle);
-        let empty: string;
-        return new ReadTextResult(false, empty, FS_IO_ERROR);
+        return new ReadTextResult(false, "", FS_IO_ERROR);
     }
 
     let heap = tsn_GetProcessHeap();
@@ -191,8 +189,7 @@ export function readText(path: string): ReadTextResult {
     log("DEBUG: tsn_HeapAlloc returned");
     if (buffer == null) {
         tsn_CloseHandle(handle);
-        let empty: string;
-        return new ReadTextResult(false, empty, FS_IO_ERROR);
+        return new ReadTextResult(false, "", FS_IO_ERROR);
     }
 
     let bytesRead: i32 = 0;
