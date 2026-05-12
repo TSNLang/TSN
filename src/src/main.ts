@@ -14,7 +14,7 @@ const RUNTIME_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', 'tsn_ru
 // Compile a single .tsn file, returning the LLVM IR string and exported symbols.
 function compileFile(inputFile: string, outputFile: string, baseDir: string): boolean {
   try {
-    console.log(`📖 Reading ${inputFile}...`);
+    // console.log(`📖 Reading ${inputFile}...`);
     const source = readFileSync(inputFile, 'utf8');
     const reporter = new Reporter(source, inputFile);
 

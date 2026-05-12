@@ -16,7 +16,7 @@ declare function WriteFile(
 @ffi.lib("c")
 declare function write(fd: i32, buffer: ptr<void>, count: i32): i32;
 
-export namespace console {
+
     @target_os("windows")
     export function log(message: string): void {
         let handle: ptr<void> = GetStdHandle(-11);
@@ -44,7 +44,7 @@ export namespace console {
         write(1, message, message.byteLength);
         write(1, "\n", 1);
     }
-}
+
 
 @target_os("windows")
 export function error(message: string): void {
@@ -52,10 +52,10 @@ export function error(message: string): void {
     let written: i32 = 0;
     WriteFile(handle, message, message.byteLength, addressof(written), 0);
     WriteFile(handle, "\n", 1, addressof(written), 0);
-}
+
 
 @target_os("linux")
 export function error(message: string): void {
     write(2, message, message.byteLength);
     write(2, "\n", 1);
-}
+

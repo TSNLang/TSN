@@ -41,10 +41,10 @@ function parseFile(path: string): i32 {
 
 function main(): i32 {
     log("=== TSN SELF-HOSTING COMPILER (PARSER PHASE) ===");
-    if (parseFile("self-hosting/parser.tsn") != 0) return 1;
-    if (parseFile("self-hosting/lexer.tsn") != 0) return 1;
-    if (parseFile("self-hosting/ast.tsn") != 0) return 1;
-    if (parseFile("self-hosting/main.tsn") != 0) return 1;
+    if (parseFile("d:\\project\\TSN\\self-hosting\\parser.tsn") != 0) return 1;
+    if (parseFile("d:\\project\\TSN\\self-hosting\\lexer.tsn") != 0) return 1;
+    if (parseFile("d:\\project\\TSN\\self-hosting\\ast.tsn") != 0) return 1;
+    if (parseFile("d:\\project\\TSN\\self-hosting\\main.tsn") != 0) return 1;
     
     log("=== ALL FILES PARSED SUCCESSFULLY BY SELF-HOSTED COMPILER ===");
     return 0;

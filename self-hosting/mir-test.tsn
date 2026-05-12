@@ -2,6 +2,7 @@
 
 import { log } from "std:console";
 import { buildSimpleMIR } from "./mir-builder.tsn";
+import { MIRModule, MIRFunction } from "./mir.tsn";
 
 export function main(): i32 {
     log("Building simple MIR...");

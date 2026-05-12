@@ -1,6 +1,10 @@
+import { log } from "std:console";
+
+declare function print_i32(n: i32): void;
+
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function CreateFileA(
+declare function tsn_CreateFileA(
     fileName: string,
     desiredAccess: i32,
     shareMode: i32,
@@ -12,7 +16,7 @@ declare function CreateFileA(
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function ReadFile(
+declare function tsn_ReadFile(
     handle: ptr<void>,
     buffer: ptr<void>,
     bytesToRead: i32,
@@ -22,7 +26,7 @@ declare function ReadFile(
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function WriteFile(
+declare function tsn_WriteFile(
     handle: ptr<void>,
     buffer: ptr<void>,
     bytesToWrite: i32,
@@ -32,27 +36,27 @@ declare function WriteFile(
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function CloseHandle(handle: ptr<void>): i32;
+declare function tsn_CloseHandle(handle: ptr<void>): i32;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function GetFileSize(handle: ptr<void>, sizeHigh: ptr<i32>): i32;
+declare function tsn_GetFileSize(handle: ptr<void>, sizeHigh: ptr<i32>): i32;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function GetLastError(): i32;
+declare function tsn_GetLastError(): i32;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function GetProcessHeap(): ptr<void>;
+declare function tsn_GetProcessHeap(): ptr<void>;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function HeapAlloc(heap: ptr<void>, flags: i32, bytes: i64): ptr<void>;
+declare function tsn_HeapAlloc(heap: ptr<void>, flags: i32, bytes: i64): ptr<void>;
 
 @target_os("windows")
 @ffi.lib("kernel32")
-declare function HeapFree(heap: ptr<void>, flags: i32, ptr: ptr<void>): i32;
+declare function tsn_HeapFree(heap: ptr<void>, flags: i32, ptr: ptr<void>): i32;
 
 @target_os("linux")
 @ffi.lib("c")
@@ -157,38 +161,51 @@ export class ExistsResult {
 @target_os("windows")
 @unsafe
 export function readText(path: string): ReadTextResult {
-    // GENERIC_READ = 0x80000000
-    let handle = CreateFileA(path, -2147483648, 1, null, 3, 128, null);
+    log("DEBUG: readText called with path:");
+    log(path);
+    // GENERIC_READ = 0x80000000, FILE_SHARE_READ = 1, OPEN_EXISTING = 3
+    let handle = tsn_CreateFileA(path, -2147483648, 1, null, 3, 128, null);
+    log("DEBUG: tsn_CreateFileA returned handle:");
+    print_i32(handle as i32);
 
     if (handle == (0 - 1) as ptr<void> || handle == null) {
+        log("DEBUG: tsn_CreateFileA FAILED. Error code:");
+        print_i32(tsn_GetLastError());
         let empty: string;
         return new ReadTextResult(false, empty, FS_NOT_FOUND);
     }
 
     let high: i32 = 0;
-    let size = GetFileSize(handle, addressof(high));
+    let size = tsn_GetFileSize(handle, addressof(high));
+    log("DEBUG: tsn_GetFileSize returned");
+    print_i32(size);
     if (size < 0) {
-        CloseHandle(handle);
+        tsn_CloseHandle(handle);
         let empty: string;
         return new ReadTextResult(false, empty, FS_IO_ERROR);
     }
 
-    let heap = GetProcessHeap();
-    let buffer: ptr<void> = HeapAlloc(heap, 8, (size as i64) + 1);
+    let heap = tsn_GetProcessHeap();
+    log("DEBUG: tsn_GetProcessHeap returned");
+    let buffer: ptr<void> = tsn_HeapAlloc(heap, 8, (size as i64) + 1);
+    log("DEBUG: tsn_HeapAlloc returned");
     if (buffer == null) {
-        CloseHandle(handle);
+        tsn_CloseHandle(handle);
         let empty: string;
         return new ReadTextResult(false, empty, FS_IO_ERROR);
     }
 
     let bytesRead: i32 = 0;
-    let ok = ReadFile(handle, buffer, size, addressof(bytesRead), 0);
-    CloseHandle(handle);
+    log("DEBUG: about to call tsn_ReadFile with handle:");
+    print_i32(handle as i32);
+    let ok = tsn_ReadFile(handle, buffer, size, addressof(bytesRead), null);
+    log("DEBUG: tsn_ReadFile returned");
+    print_i32(ok);
     if (ok == 0) {
-        HeapFree(heap, 0, buffer);
-        let empty: string;
-        return new ReadTextResult(false, empty, FS_IO_ERROR);
+        log("DEBUG: tsn_ReadFile FAILED. Error code:");
+        print_i32(tsn_GetLastError());
     }
+    tsn_CloseHandle(handle);
 
     let out: string = buffer;
     return new ReadTextResult(true, out, FS_OK);
@@ -225,16 +242,17 @@ export function readText(path: string): ReadTextResult {
 
 @target_os("windows")
 @unsafe
-export function writeText(path: string, data: string): WriteTextResult {
+export function writeText(path: string, content: string): WriteTextResult {
     // GENERIC_WRITE = 0x40000000, CREATE_ALWAYS = 2
-    let handle = CreateFileA(path, 1073741824, 0, null, 2, 128, null);
+    let handle = tsn_CreateFileA(path, 1073741824, 0, null, 2, 128, null);
     if (handle == (0 - 1) as ptr<void> || handle == null) {
         return new WriteTextResult(false, 0, FS_IO_ERROR);
     }
 
     let written: i32 = 0;
-    let ok = WriteFile(handle, data, data.byteLength, addressof(written), 0);
-    CloseHandle(handle);
+    let len = content.byteLength();
+    let ok = tsn_WriteFile(handle, content, len, addressof(written), null);
+    tsn_CloseHandle(handle);
 
     if (ok == 0) {
         return new WriteTextResult(false, written, FS_IO_ERROR);
@@ -262,15 +280,15 @@ export function writeText(path: string, data: string): WriteTextResult {
 @target_os("windows")
 @unsafe
 export function exists(path: string): ExistsResult {
-    let handle = CreateFileA(path, 0, 1, null, 3, 128, null);
+    let handle = tsn_CreateFileA(path, 0, 1, null, 3, 128, null);
     if (handle == (0 - 1) as ptr<void> || handle == null) {
-        let err = GetLastError();
+        let err = tsn_GetLastError();
         if (err == 2) { // ERROR_FILE_NOT_FOUND
             return new ExistsResult(true, false, FS_OK);
         }
         return new ExistsResult(false, false, FS_IO_ERROR);
     }
-    CloseHandle(handle);
+    tsn_CloseHandle(handle);
     return new ExistsResult(true, true, FS_OK);
 }
 

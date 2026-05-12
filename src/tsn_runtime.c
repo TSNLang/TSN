@@ -6,6 +6,10 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 // ============================================================================
 // Builtins required by compiler or special operations
 // ============================================================================
@@ -33,6 +37,10 @@ void class_decref(void* p, void (*disposer)(void*)) {
     }
 }
 
+void tsn_decRef(void* p) {
+    class_decref(p, NULL);
+}
+
 void tsn_exit(int32_t code) {
     exit(code);
 }
@@ -50,6 +58,123 @@ void tsn_console_log(const char* s) __asm__("_T.console.log$P.ptr");
 void tsn_console_log(const char* s) {
     if (s) printf("%s\n", s);
     else printf("null\n");
+    fflush(stdout);
+}
+
+void tsn_log_alias(const char* s) __asm__("_T.log$P.ptr");
+void tsn_log_alias(const char* s) {
+    tsn_console_log(s);
+}
+
+// Memory bridge for old mangled names
+void* tsn_offset_alias(void* p, int64_t bytes) __asm__("_T.offset$P.ptr_void.i64");
+void* tsn_offset_alias(void* p, int64_t bytes) {
+    printf("DEBUG: offset %p + %lld\n", p, bytes);
+    fflush(stdout);
+    return (char*)p + bytes;
+}
+
+// Memory bridge - removed to avoid conflict with memory.tsn
+/*
+void tsn_free_alias(void* p) __asm__("_T.free$P.void");
+void tsn_free_alias(void* p) {
+    free(p);
+}
+...
+*/
+
+#ifdef _WIN32
+extern int32_t __tsn_argc;
+extern char** __tsn_argv;
+
+int32_t os_get_argc() {
+    return __tsn_argc;
+}
+
+char** os_get_argv() {
+    return __tsn_argv;
+}
+
+void* tsn_CreateFileA_bridge(const char* name, int32_t access, int32_t share, void* sec, int32_t disp, int32_t flags, void* temp) __asm__("tsn_CreateFileA");
+void* tsn_CreateFileA_bridge(const char* name, int32_t access, int32_t share, void* sec, int32_t disp, int32_t flags, void* temp) {
+    if (name) {
+        printf("DEBUG: CreateFileA called for '%s' (len %zu)\n", name, strlen(name));
+        for(int i=0; i<10 && name[i]; i++) printf("%02x ", (unsigned char)name[i]);
+        printf("\n");
+    } else {
+        printf("DEBUG: CreateFileA called with NULL name\n");
+    }
+    fflush(stdout);
+    return CreateFileA(name, (DWORD)access, (DWORD)share, (LPSECURITY_ATTRIBUTES)sec, (DWORD)disp, (DWORD)flags, (HANDLE)temp);
+}
+
+void* tsn_GetProcessHeap_bridge() __asm__("tsn_GetProcessHeap");
+void* tsn_GetProcessHeap_bridge() {
+    return GetProcessHeap();
+}
+
+void* tsn_HeapAlloc_bridge(void* heap, int32_t flags, int64_t size) __asm__("tsn_HeapAlloc");
+void* tsn_HeapAlloc_bridge(void* heap, int32_t flags, int64_t size) {
+    return HeapAlloc((HANDLE)heap, (DWORD)flags, (SIZE_T)size);
+}
+
+int32_t tsn_GetLastError_bridge() __asm__("tsn_GetLastError");
+int32_t tsn_GetLastError_bridge() {
+    return (int32_t)GetLastError();
+}
+
+int32_t tsn_GetFileSize_bridge(void* handle, int32_t* high) __asm__("tsn_GetFileSize");
+int32_t tsn_GetFileSize_bridge(void* handle, int32_t* high) {
+    DWORD type = GetFileType((HANDLE)handle);
+    printf("DEBUG: GetFileSize called with handle %p, GetFileType=%lu\n", handle, type);
+    fflush(stdout);
+    return (int32_t)GetFileSize((HANDLE)handle, (LPDWORD)high);
+}
+
+int32_t tsn_ReadFile_bridge(void* handle, void* buffer, int32_t size, int32_t* read, void* over) __asm__("tsn_ReadFile");
+int32_t tsn_ReadFile_bridge(void* handle, void* buffer, int32_t size, int32_t* read, void* over) {
+    DWORD type = GetFileType((HANDLE)handle);
+    printf("DEBUG: ReadFile called with handle %p, GetFileType=%lu, size=%d\n", handle, type, size);
+    
+    DWORD dummyRead = 0;
+    BOOL dummyOk = ReadFile((HANDLE)handle, NULL, 0, &dummyRead, NULL);
+    if (!dummyOk) {
+        printf("DEBUG: dummy 0-byte ReadFile FAILED. Error=%lu\n", GetLastError());
+    } else {
+        printf("DEBUG: dummy 0-byte ReadFile OK\n");
+    }
+
+    fflush(stdout);
+    return (int32_t)ReadFile((HANDLE)handle, buffer, (DWORD)size, (LPDWORD)read, (LPOVERLAPPED)over);
+}
+
+int32_t tsn_WriteFile_bridge(void* handle, void* buffer, int32_t size, int32_t* written, void* over) __asm__("tsn_WriteFile");
+int32_t tsn_WriteFile_bridge(void* handle, void* buffer, int32_t size, int32_t* written, void* over) {
+    return (int32_t)WriteFile((HANDLE)handle, buffer, (DWORD)size, (LPDWORD)written, (LPOVERLAPPED)over);
+}
+
+int32_t tsn_HeapFree_bridge(void* heap, int32_t flags, void* ptr) __asm__("tsn_HeapFree");
+int32_t tsn_HeapFree_bridge(void* heap, int32_t flags, void* ptr) {
+    return (int32_t)HeapFree((HANDLE)heap, (DWORD)flags, ptr);
+}
+
+int32_t tsn_CloseHandle_bridge(void* handle) __asm__("tsn_CloseHandle");
+int32_t tsn_CloseHandle_bridge(void* handle) {
+    return (int32_t)CloseHandle((HANDLE)handle);
+}
+#endif
+
+void* tsn_malloc(int32_t size) {
+    void* p = calloc(1, size);
+    printf("DEBUG: tsn_malloc(%d) -> %p\n", size, p);
+    fflush(stdout);
+    return p;
+}
+
+void memory_free(void* p) {
+    printf("DEBUG: memory_free(%p)\n", p);
+    fflush(stdout);
+    free(p);
 }
 
 // ============================================================================

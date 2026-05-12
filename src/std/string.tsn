@@ -1,6 +1,6 @@
 import * as memory from "std:memory";
 
-export namespace string {
+
     /**
      * Độ dài tính bằng byte (không bao gồm null terminator).
      */
@@ -146,4 +146,4 @@ export namespace string {
         }
         return -1;
     }
-}
+

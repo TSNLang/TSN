@@ -94,7 +94,7 @@ export class Parser {
                 break;
               }
               const value = this.advance().text;
-              if (!supported.has(value)) this.error(`Unsupported target OS: ${value}`);
+              if (!supported.has(value)) this.error("Unsupported target OS: " + value);
               else if (!values.includes(value)) values.push(value);
             } while (this.match(TokenKind.Comma));
             if (values.length === 0) this.error("Expected at least one target_os value");
@@ -906,7 +906,7 @@ export class Parser {
 
   private isGenericCallAhead(): boolean {
     let i = this.pos;
-    if (this.tokens[i]?.kind !== TokenKind.Less) return false;
+    if (this.tokens[i].kind !== TokenKind.Less) return false;
 
     let depth = 0;
     while (i < this.tokens.length) {

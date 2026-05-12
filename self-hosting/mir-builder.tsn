@@ -136,7 +136,7 @@ export function buildSimpleMIR(): MIRModule {
     return builder.getModule();
 }
 
-export function main(): i32 {
+export function main_builder(): i32 {
     log("Building simple MIR...");
     let module = buildSimpleMIR();
     

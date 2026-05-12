@@ -39,7 +39,7 @@ export const HEAP_ZERO_MEMORY: i32 = 8;
 /**
  * Cấp phát một vùng nhớ mới (Windows).
  */
-export namespace memory {
+
     @target_os("windows")
     export @unsafe function alloc(size: i64): rawPtr<void> {
         return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
@@ -93,4 +93,4 @@ export namespace memory {
         let res: rawPtr<void> = addr;
         return res;
     }
-}
+

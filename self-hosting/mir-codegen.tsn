@@ -239,7 +239,7 @@ export class MIRCodegen {
     }
 }
 
-export function main(): i32 {
+export function main_codegen(): i32 {
     log("MIR Codegen test");
     return 0;
 }
