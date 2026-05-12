@@ -54,6 +54,7 @@ void print_f32(float f) { printf("%f\n", f); }
 void print_f64(double d) { printf("%lf\n", d); }
 
 // Debugging bridge for console.log
+/*
 void tsn_console_log(const char* s) __asm__("_T.console.log$P.ptr");
 void tsn_console_log(const char* s) {
     if (s) printf("%s\n", s);
@@ -65,6 +66,7 @@ void tsn_log_alias(const char* s) __asm__("_T.log$P.ptr");
 void tsn_log_alias(const char* s) {
     tsn_console_log(s);
 }
+*/
 
 // Memory bridge for old mangled names
 void* tsn_offset_alias(void* p, int64_t bytes) __asm__("_T.offset$P.ptr_void.i64");

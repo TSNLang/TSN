@@ -885,6 +885,7 @@ export class CodeGenerator {
   }
 
   private resolveMangledName(name: string): string {
+    if (!name) return "";
     const imported = this.importedSymbols.get(name);
     if (imported && imported.kind === 'function' && imported.realName) return imported.realName;
 
@@ -2395,7 +2396,7 @@ export class CodeGenerator {
         return this.generateImportedCall(name, name, imported, e.args);
     }
     let info = this.functions.get(mangled) || this.functions.get(name);
-    if (!info && !name.includes('.')) {
+    if (!info && name && !name.includes('.')) {
         for (const [key, value] of this.functions) {
             if (key === name || value.name === name) continue;
             if (value.name.includes(`${name.length}${name}E`)) {
@@ -3967,6 +3968,7 @@ if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldT
   }
 
   private instantiateFunction(fnName: string, args: TypeAnnotation[]): string {
+    if (!fnName) return "";
     if (args.some(arg => !this.isConcreteTypeAnnotation(arg))) return fnName;
 
     const scopeParts = fnName.includes('.') ? fnName.split('.').slice(0, -1) : [];
