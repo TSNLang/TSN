@@ -2095,8 +2095,8 @@ export class CodeGenerator {
     }
 
     if (e.operator === '==' || e.operator === '!=') {
-      const isLString = leftType === 'string' || this.toLLVMType(leftType) === 'ptr';
-      const isRString = rightType === 'string' || this.toLLVMType(rightType) === 'ptr';
+      const isLString = leftType === 'string';
+      const isRString = rightType === 'string';
       
       if (isLString && isRString) {
         this.ensureExternalDeclaration('_T.equals$P.ptr.ptr', { name: '_T.equals$P.ptr.ptr', kind: 'function', llvmType: 'i1', paramTypes: ['ptr', 'ptr'] } as any);
