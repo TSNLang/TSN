@@ -202,10 +202,14 @@ export function readText(path: string): ReadTextResult {
         log("DEBUG: tsn_ReadFile FAILED. Error code:");
         print_i32(tsn_GetLastError());
     }
+    log("DEBUG: about to call tsn_CloseHandle");
     tsn_CloseHandle(handle);
 
+    log("DEBUG: about to create ReadTextResult");
     let out: string = buffer;
-    return new ReadTextResult(true, out, FS_OK);
+    let res = new ReadTextResult(true, out, FS_OK);
+    log("DEBUG: ReadTextResult created");
+    return res;
 }
 
 @target_os("linux")

@@ -22,8 +22,12 @@ function parseFile(path: string): i32 {
     }
 
     let source = fsResult.value();
+    log("DEBUG: source length");
+    log(source.length);
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
+    log("DEBUG: token count");
+    log(tokens.length);
     let parser = new Parser(tokens);
     let program = parser.parse();
 

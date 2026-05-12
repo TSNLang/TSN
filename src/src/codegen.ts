@@ -1560,6 +1560,15 @@ export class CodeGenerator {
                      (objLLVMType.startsWith('%') ? objLLVMType.substring(1) : ((this.classDecls.has(objLLVMType) || this.interfaceDecls.has(objLLVMType)) ? objLLVMType : this.guessStructTypeByVal(obj)));
       
       if (!stName) return;
+
+      // Ensure we are working with the object pointer, not the address of the local variable
+      const actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
+          const t = this.newTemp();
+          const ot = this.localVarTypes.get(obj.substring(1)) || 'ptr';
+          this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${obj}, align 8`);
+          return t;
+      })() : obj;
+
       const fIdx = this.getFieldIndex(stName, m.member);
       const structInfo = this.structs.get(stName);
       if (!structInfo) return;
@@ -1568,10 +1577,21 @@ export class CodeGenerator {
       const lType = this.toLLVMType(fieldType);
       if (lType === 'void') return;
       const coercedVal = this.coerceToType(val, vt, fieldType);
+
+      const isManaged = this.isClassType(fieldType) || fieldType === 'string' || fieldType.startsWith('ptr<');
       
       const fPtr = this.newTemp();
-      this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
-      this.emit(`store ${lType} ${coercedVal}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
+      this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${actualObj}, i32 0, i32 ${fIdx}`);
+
+      if (isManaged) {
+          const oldVal = this.newTemp();
+          this.emit(`${oldVal} = load ptr, ptr ${fPtr}, align 8`);
+          this.emit(`call void @class_incref(ptr ${coercedVal})`);
+          this.emit(`store ${lType} ${coercedVal}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
+          this.emit(`call void @class_decref(ptr ${oldVal})`);
+      } else {
+          this.emit(`store ${lType} ${coercedVal}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
+      }
       return;
     }
     
@@ -1641,8 +1661,21 @@ export class CodeGenerator {
 
     if (finalVal) {
       const rt = this.toLLVMType(this.currentFunctionReturnType);
-      const coercedVal = this.coerceToType(finalVal, this.getValueType(finalVal), this.currentFunctionReturnType);
-      this.emit(`ret ${rt} ${coercedVal}`);
+      const valType = this.getValueType(finalVal);
+      const coercedVal = this.coerceToType(finalVal, valType, this.currentFunctionReturnType);
+      
+      let actualRetVal = coercedVal;
+      // If finalVal is a pointer to a local variable (e.g. %res), we need to load it if we're returning the value.
+      // But generateExpression usually returns the loaded value already.
+      // However, if we marked it as returnSourceLocal, finalVal might be the name of the local.
+      if (finalVal.startsWith('%') && this.hoistedVars.has(finalVal.substring(1))) {
+          const t = this.newTemp();
+          const ltype = this.localVarTypes.get(finalVal.substring(1)) || 'ptr';
+          this.emit(`${t} = load ${this.toLLVMType(ltype)}, ptr ${finalVal}, align 8`);
+          actualRetVal = t;
+      }
+
+      this.emit(`ret ${rt} ${actualRetVal}`);
     } else {
       if (this.isCurrentMain) this.emit('ret i32 0');
       else {
@@ -2037,16 +2070,19 @@ export class CodeGenerator {
     if (lt) {
       if (lt.startsWith('[')) return `%${e.name}`;
       
-      // For structs (not classes), we return the pointer to the struct on stack
-      if (this.isStructType(lt)) {
+      const isClass = this.isClassType(lt);
+      const isString = lt === 'string';
+      const isManaged = lt.startsWith('ptr<');
+      const isRaw = lt.startsWith('rawPtr<');
+
+      // For actual value structs (not classes/managed pointers), we return the pointer to the struct on stack.
+      // In TSN, classes are managed by pointers, so isClassType(lt) will be true and we should load the pointer.
+      if (this.isStructType(lt) && !isClass && !isString && !isManaged && !isRaw) {
           this.tempTypes.set(`%${e.name}`, lt);
           return `%${e.name}`;
       }
       
-      const isString = lt === 'string';
-      const isManaged = lt.startsWith('ptr<');
-      const isRaw = lt.startsWith('rawPtr<');
-      const loadType = (this.isClassType(lt) || isString || isManaged || isRaw) ? 'ptr' : lt;
+      const loadType = (isClass || isString || isManaged || isRaw) ? 'ptr' : lt;
       const t = this.newTemp(); 
       this.emit(`${t} = load ${this.toLLVMType(loadType)}, ptr %${e.name}, align ${this.getAlignment(loadType)}`);
       // Use class-specific type in tempTypes if available (for struct resolution in member access)
@@ -2714,11 +2750,18 @@ export class CodeGenerator {
                     this.ensureExternalDeclaration(mangled, sym);
                 }
 
-                // 1. Get VTable pointer from object
-                const vptrAddr = this.newTemp();
-                this.emit(`${vptrAddr} = getelementptr inbounds { i32, ptr }, ptr ${obj}, i32 0, i32 1`);
-                const vtablePtr = this.newTemp();
-                this.emit(`${vtablePtr} = load ptr, ptr ${vptrAddr}, align 8`);
+    // 1. Get VTable pointer from object
+    const actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
+        const t = this.newTemp();
+        const ot = this.localVarTypes.get(obj.substring(1)) || 'ptr';
+        this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${obj}, align 8`);
+        return t;
+    })() : obj;
+
+    const vptrAddr = this.newTemp();
+    this.emit(`${vptrAddr} = getelementptr inbounds { i32, ptr }, ptr ${actualObj}, i32 0, i32 1`);
+    const vtablePtr = this.newTemp();
+    this.emit(`${vtablePtr} = load ptr, ptr ${vptrAddr}, align 8`);
                 
                 // 2. Get function pointer from VTable
                 const fnPtrAddr = this.newTemp();
@@ -2734,7 +2777,7 @@ export class CodeGenerator {
                     const coercedV = this.coerceToType(v, actualT, expectedT);
                     return `${this.toLLVMType(expectedT)} ${coercedV}`;
                 }).join(', ');
-                const aStr = [`ptr ${obj}`, ...mappedArgs.length ? [mappedArgs] : []].join(', ');
+                const aStr = [`ptr ${actualObj}`, ...mappedArgs.length ? [mappedArgs] : []].join(', ');
                 const llvmRt = this.toLLVMType(rt);
                 
                 // 4. Call function pointer
@@ -3172,10 +3215,18 @@ if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldT
     }
     const fieldType = structInfo.fields[fIdx] ? structInfo.fields[fIdx].type : 'ptr';
     
+    // Ensure we are working with the object pointer, not the address of the local variable
+    const actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
+        const t = this.newTemp();
+        const ot = this.localVarTypes.get(obj.substring(1)) || 'ptr';
+        this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${obj}, align 8`);
+        return t;
+    })() : obj;
+
     const fPtr = this.newTemp();
     const t = this.newTemp();
     
-    this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
+    this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${actualObj}, i32 0, i32 ${fIdx}`);
     this.emit(`${t} = load ${this.toLLVMType(fieldType)}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
     
     // Try to get the semantic type (e.g., '%Array_ImportDeclInfo') for better type tracking
