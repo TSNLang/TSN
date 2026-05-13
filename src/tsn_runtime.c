@@ -71,8 +71,6 @@ void print_f64(double d) { printf("%lf\n", d); }
 // Memory bridge for old mangled names
 void* tsn_offset_alias(void* p, int64_t bytes) __asm__("_T.offset$P.ptr_void.i64");
 void* tsn_offset_alias(void* p, int64_t bytes) {
-    printf("DEBUG: offset %p + %lld\n", p, bytes);
-    fflush(stdout);
     return (char*)p + bytes;
 }
 

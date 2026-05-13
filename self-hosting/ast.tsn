@@ -68,13 +68,6 @@ export class Token {
         this.lexeme = lexeme;
         this.line = line;
         this.column = column;
-        
-        log("DEBUG: Token instance created at:");
-        print_ptr(this as ptr<void>);
-        log("DEBUG: kind value:");
-        print_i32(this.kind);
-        log("DEBUG: lexeme value:");
-        log(this.lexeme);
     }
 }
 

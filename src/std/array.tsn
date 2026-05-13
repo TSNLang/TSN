@@ -12,7 +12,7 @@ export class Array<T> {
 
     @unsafe constructor() {
         this.length = 0;
-        this.capacity = 4; // Dung lượng khởi tạo mặc định
+        this.capacity = 16; // Tăng một chút
         this.data = memory.alloc((this.capacity as i64) * sizeof(T));
     }
 
@@ -25,11 +25,9 @@ export class Array<T> {
             this.grow();
         }
         
-        // Tính toán vị trí con trỏ: data + (length * sizeof(T))
         let p: rawPtr<T> = memory.offset(this.data, (this.length as i64) * sizeof(T));
         p.set(item);
         this.length = this.length + 1;
-        print_i32(this.length);
     }
 
     /**
