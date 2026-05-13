@@ -29,7 +29,7 @@ export class MIRCodegen {
 
     private emitGlobals(): void {
         let i = 0;
-        while (i < this.module.globals.length()) {
+        while (i < this.module.globals.length) {
             let global = this.module.globals.get(i);
             this.emitGlobal(global);
             i = i + 1;
@@ -46,7 +46,7 @@ export class MIRCodegen {
 
     private emitFunctions(): void {
         let i = 0;
-        while (i < this.module.functions.length()) {
+        while (i < this.module.functions.length) {
             let func = this.module.functions.get(i);
             this.emitFunction(func);
             i = i + 1;
@@ -70,7 +70,7 @@ export class MIRCodegen {
 
     private emitParams(func: MIRFunction): void {
         let i = 0;
-        while (i < func.params.length()) {
+        while (i < func.params.length) {
             if (i > 0) {
                 this.output.push(", ");
             }
@@ -84,7 +84,7 @@ export class MIRCodegen {
 
     private emitBlocks(func: MIRFunction): void {
         let i = 0;
-        while (i < func.blocks.length()) {
+        while (i < func.blocks.length) {
             let block = func.blocks.get(i);
             this.emitBlock(block);
             i = i + 1;
@@ -96,7 +96,7 @@ export class MIRCodegen {
         this.output.push(":");
         
         let i = 0;
-        while (i < block.instructions.length()) {
+        while (i < block.instructions.length) {
             let inst = block.instructions.get(i);
             this.output.push("  ");
             this.emitInstruction(inst);
@@ -231,7 +231,7 @@ export class MIRCodegen {
     private joinOutput(): string {
         let result = "";
         let i = 0;
-        while (i < this.output.length()) {
+        while (i < this.output.length) {
             result = result + this.output.get(i);
             i = i + 1;
         }

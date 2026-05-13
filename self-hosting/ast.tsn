@@ -1,3 +1,5 @@
+import { log } from "std:console";
+
 export enum TokenKind {
     EOF,
     Unknown,
@@ -61,10 +63,12 @@ export class Token {
     public column: i32;
 
     constructor(kind: i32, lexeme: string, line: i32, column: i32) {
+        log("DEBUG: Token constructor started");
         this.kind = kind;
         this.lexeme = lexeme;
         this.line = line;
         this.column = column;
+        log("DEBUG: Token constructor finished");
     }
 }
 

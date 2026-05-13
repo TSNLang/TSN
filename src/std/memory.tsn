@@ -10,17 +10,17 @@ function GetProcessHeap(): rawPtr<void>;
 @target_os("windows")
 @ffi.lib("kernel32")
 declare
-function HeapAlloc(hHeap: rawPtr<void>, dwFlags: i32, dwBytes: i64): rawPtr<void>;
+function tsn_HeapAlloc(hHeap: rawPtr<void>, dwFlags: i32, dwBytes: i64): rawPtr<void>;
 
 @target_os("windows")
 @ffi.lib("kernel32")
 declare
-function HeapFree(hHeap: rawPtr<void>, dwFlags: i32, lpMem: rawPtr<void>): i32;
+function tsn_HeapFree(hHeap: rawPtr<void>, dwFlags: i32, lpMem: rawPtr<void>): i32;
 
 @target_os("windows")
 @ffi.lib("kernel32")
 declare
-function HeapReAlloc(hHeap: rawPtr<void>, dwFlags: i32, lpMem: rawPtr<void>, dwBytes: i64): rawPtr<void>;
+function tsn_HeapReAlloc(hHeap: rawPtr<void>, dwFlags: i32, lpMem: rawPtr<void>, dwBytes: i64): rawPtr<void>;
 
 @target_os("windows")
 @ffi.lib("kernel32")
@@ -42,19 +42,19 @@ export const HEAP_ZERO_MEMORY: i32 = 8;
 
     @target_os("windows")
     export @unsafe function alloc(size: i64): rawPtr<void> {
-        return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
+        return tsn_HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
     }
 
     @target_os("windows")
     export @unsafe function free(p: rawPtr<void>): void {
         if (p == null) return;
-        HeapFree(GetProcessHeap(), 0, p);
+        tsn_HeapFree(GetProcessHeap(), 0, p);
     }
 
     @target_os("windows")
     export @unsafe function realloc(p: rawPtr<void>, newSize: i64): rawPtr<void> {
         if (p == null) return alloc(newSize);
-        return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, p, newSize);
+        return tsn_HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, p, newSize);
     }
 
     @target_os("windows")

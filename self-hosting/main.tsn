@@ -3,6 +3,9 @@ import { readText } from "std:fs";
 import { Lexer } from "./lexer.tsn";
 import { Parser } from "./parser.tsn";
 import { Program } from "./ast.tsn";
+import { MIRBuilder } from "./mir-builder.tsn";
+import { MIRCodegen } from "./mir-codegen.tsn";
+import { MIRType } from "./mir.tsn";
 
 function logBool(label: string, value: bool): void {
     log(label);
@@ -22,8 +25,8 @@ function parseFile(path: string): i32 {
     }
 
     let source = fsResult.value();
-    log("DEBUG: source length");
-    log(source.length);
+    log("DEBUG: source length (bytes)");
+    log(source.byteLength);
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
     log("DEBUG: token count");
@@ -51,5 +54,19 @@ function main(): i32 {
     if (parseFile("d:\\project\\TSN\\self-hosting\\main.tsn") != 0) return 1;
     
     log("=== ALL FILES PARSED SUCCESSFULLY BY SELF-HOSTED COMPILER ===");
+
+    log("=== RUNNING SELF-HOSTED CODEGEN SMOKE TEST ===");
+    let builder = new MIRBuilder("smoke_test");
+    builder.createFunction("test_func", new MIRType("i32", false, 4));
+    let entryBlock = builder.createBasicBlock("smoke_entry");
+    builder.setInsertPoint(entryBlock);
+    let c1 = builder.createConstant("42", new MIRType("i32", false, 4));
+    builder.createReturn(c1);
+
+    let codegen = new MIRCodegen(builder.getModule());
+    let ir = codegen.generate();
+    log("Generated LLVM IR:");
+    log(ir);
+
     return 0;
 }

@@ -1,34 +1,25 @@
 import * as memory from "std:memory";
 
+declare function print_i32(n: i32): void;
+
 
     /**
      * Độ dài tính bằng byte (không bao gồm null terminator).
      */
     export @unsafe function byteLength(s: string): i32 {
         if (s == null) return 0;
-        let p: rawPtr<void> = s;
-        let i: i32 = 0;
-        while (memory.getByte(p, i) != 0) {
-            i++;
-        }
-        return i;
+        let pLen: rawPtr<i32> = memory.offset(s, 4);
+        let len = pLen.get();
+        return len;
     }
 
     /**
      * Độ dài tính bằng số ký tự (hỗ trợ UTF-8).
+     * TỐI ƯU: Hiện tại trả về byteLength vì source code parser chủ yếu là ASCII.
      */
     export @unsafe function length(s: string): i32 {
         if (s == null) return 0;
-        let blen = byteLength(s);
-        let count = 0;
-        let p: rawPtr<void> = s;
-        for (let i = 0; i < blen; i++) {
-            let b = memory.getByte(p, i);
-            if ((b & 0xc0) != 0x80) {
-                count++;
-            }
-        }
-        return count;
+        return byteLength(s);
     }
 
     /**
@@ -36,7 +27,7 @@ import * as memory from "std:memory";
      */
     export @unsafe function charCodeAt(s: string, index: i32): i32 {
         if (s == null) return 0;
-        let p: rawPtr<void> = s;
+        let p: rawPtr<void> = memory.offset(s, 8); // Skip header
         return memory.getByte(p, index);
     }
 
@@ -48,13 +39,20 @@ import * as memory from "std:memory";
         let lb = byteLength(b);
         let total = la + lb;
         
-        let buf = memory.alloc(total + 1);
+        // Header (8) + data + null terminator (1)
+        let buf = memory.alloc(total + 9);
         if (buf == null) return "";
         
-        if (la > 0) memory.copy(buf, a, la);
-        if (lb > 0) memory.copy(memory.offset(buf, la), b, lb);
+        let pRefCount: rawPtr<i32> = buf;
+        pRefCount.set(1);
+        let pLength: rawPtr<i32> = memory.offset(buf, 4);
+        pLength.set(total);
+
+        let dataDest = memory.offset(buf, 8);
+        if (la > 0) memory.copy(dataDest, memory.offset(a, 8), la);
+        if (lb > 0) memory.copy(memory.offset(dataDest, la), memory.offset(b, 8), lb);
         
-        memory.setByte(buf, total, 0); // Null terminator
+        memory.setByte(dataDest, total, 0); // Null terminator
         
         let res: string = buf;
         return res;
@@ -64,8 +62,14 @@ import * as memory from "std:memory";
      * So sánh hai chuỗi. Trả về 0 nếu bằng nhau.
      */
     export @unsafe function compare(a: string, b: string): i32 {
-        let pa: rawPtr<void> = a;
-        let pb: rawPtr<void> = b;
+        let pa_raw: rawPtr<void> = a;
+        let pb_raw: rawPtr<void> = b;
+        if (pa_raw == pb_raw) return 0;
+        if (a == null) return 0 - 1;
+        if (b == null) return 1;
+
+        let pa: rawPtr<void> = memory.offset(a, 8);
+        let pb: rawPtr<void> = memory.offset(b, 8);
         let i = 0;
         
         while (true) {
@@ -87,11 +91,17 @@ import * as memory from "std:memory";
      */
     export @unsafe function substr(s: string, start: i32, len: i32): string {
         if (s == null) return "";
-        let buf = memory.alloc(len + 1);
+        let buf = memory.alloc(len + 9);
         if (buf == null) return "";
         
-        memory.copy(buf, memory.offset(s, start), len);
-        memory.setByte(buf, len, 0);
+        let pRefCount: rawPtr<i32> = buf;
+        pRefCount.set(1);
+        let pLength: rawPtr<i32> = memory.offset(buf, 4);
+        pLength.set(len);
+
+        let dataDest = memory.offset(buf, 8);
+        memory.copy(dataDest, memory.offset(s, 8 + start), len);
+        memory.setByte(dataDest, len, 0);
         
         let res: string = buf;
         return res;

@@ -1,3 +1,5 @@
+import * as memory from "std:memory";
+
 @target_os("windows")
 @ffi.lib("kernel32")
 declare function GetStdHandle(nStdHandle: i32): ptr<void>;
@@ -18,44 +20,35 @@ declare function write(fd: i32, buffer: ptr<void>, count: i32): i32;
 
 
     @target_os("windows")
-    export function log(message: string): void {
+    export @unsafe function log(message: string): void {
         let handle: ptr<void> = GetStdHandle(-11);
         let written: i32 = 0;
-        WriteFile(handle, message, message.byteLength, addressof(written), 0);
-        WriteFile(handle, "\n", 1, addressof(written), 0);
-    }
-
-    @target_os("linux")
-    export function log(message: string): void {
-        write(1, message, message.byteLength);
-        write(1, "\n", 1);
+        let pData = memory.offset(message, 8);
+        WriteFile(handle, pData, message.byteLength, addressof(written), 0);
+        let newline = "\n";
+        WriteFile(handle, memory.offset(newline, 8), 1, addressof(written), 0);
     }
 
     @target_os("windows")
-    export function warn(message: string): void {
+    export @unsafe function warn(message: string): void {
         let handle: ptr<void> = GetStdHandle(-11);
         let written: i32 = 0;
-        WriteFile(handle, message, message.byteLength, addressof(written), 0);
-        WriteFile(handle, "\n", 1, addressof(written), 0);
+        let pData = memory.offset(message, 8);
+        WriteFile(handle, pData, message.byteLength, addressof(written), 0);
+        let newline = "\n";
+        WriteFile(handle, memory.offset(newline, 8), 1, addressof(written), 0);
     }
-
-    @target_os("linux")
-    export function warn(message: string): void {
-        write(1, message, message.byteLength);
-        write(1, "\n", 1);
-    }
-
 
 @target_os("windows")
-export function error(message: string): void {
+export @unsafe function error(message: string): void {
     let handle: ptr<void> = GetStdHandle(-12);
     let written: i32 = 0;
-    WriteFile(handle, message, message.byteLength, addressof(written), 0);
-    WriteFile(handle, "\n", 1, addressof(written), 0);
+    let pData = memory.offset(message, 8);
+    WriteFile(handle, pData, message.byteLength, addressof(written), 0);
+    let newline = "\n";
+    WriteFile(handle, memory.offset(newline, 8), 1, addressof(written), 0);
+}
 
-
-@target_os("linux")
-export function error(message: string): void {
-    write(2, message, message.byteLength);
-    write(2, "\n", 1);
+export declare function print_i32(val: i32): void;
+export declare function print_ptr(val: i64): void;
 

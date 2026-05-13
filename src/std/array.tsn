@@ -127,6 +127,7 @@ export class Array<T> {
      */
     @unsafe private grow(): void {
         let newCapacity = this.capacity * 2;
+        // print_i32(newCapacity);
         this.data = memory.realloc(this.data, (newCapacity as i64) * sizeof(T));
         this.capacity = newCapacity;
     }

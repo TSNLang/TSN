@@ -1,4 +1,5 @@
 import { log } from "std:console";
+import * as memory from "std:memory";
 
 declare function print_i32(n: i32): void;
 
@@ -185,17 +186,30 @@ export function readText(path: string): ReadTextResult {
 
     let heap = tsn_GetProcessHeap();
     log("DEBUG: tsn_GetProcessHeap returned");
-    let buffer: ptr<void> = tsn_HeapAlloc(heap, 8, (size as i64) + 1);
+    // String header: 4 byte refcount, 4 byte length, then data + null terminator
+    let totalSize = (size as i64) + 9; 
+    let buffer: ptr<void> = tsn_HeapAlloc(heap, 8, totalSize);
     log("DEBUG: tsn_HeapAlloc returned");
     if (buffer == null) {
         tsn_CloseHandle(handle);
         return new ReadTextResult(false, "", FS_IO_ERROR);
     }
 
+    // Set refcount = 1, length = size
+    let pRefCount: rawPtr<i32> = buffer;
+    pRefCount.set(1);
+    let pLength: rawPtr<i32> = memory.offset(buffer, 4);
+    log("DEBUG: setting string length to");
+    print_i32(size);
+    pLength.set(size);
+    log("DEBUG: length set. Verification:");
+    print_i32(pLength.get());
+
+    let dataPtr = memory.offset(buffer, 8);
     let bytesRead: i32 = 0;
     log("DEBUG: about to call tsn_ReadFile with handle:");
     print_i32(handle as i32);
-    let ok = tsn_ReadFile(handle, buffer, size, addressof(bytesRead), null);
+    let ok = tsn_ReadFile(handle, dataPtr, size, addressof(bytesRead), null);
     log("DEBUG: tsn_ReadFile returned");
     print_i32(ok);
     if (ok == 0) {

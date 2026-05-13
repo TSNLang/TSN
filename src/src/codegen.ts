@@ -194,8 +194,16 @@ export class CodeGenerator {
     this.externalDecls = []; this.externalDeclarations.clear(); this.exportedSymbols = [];
     this.emittedVTables.clear();
     this.globalBuffer = []; this.currentOutput = null; this.instantiationTargetOutput = null;
-    this.globalBuffer.push('@__tsn_argc = global i32 0, align 4');
-    this.globalBuffer.push('@__tsn_argv = global ptr null, align 8');
+
+    // Standard runtime builtins
+    this.ensureExternalDeclaration('class_alloc', { name: 'class_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] } as any);
+    this.ensureExternalDeclaration('class_incref', { name: 'class_incref', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+    this.ensureExternalDeclaration('class_decref', { name: 'class_decref', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+    this.ensureExternalDeclaration('class_freeing', { name: 'class_freeing', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+    
+    this.globalBuffer.push('@__tsn_argc = external global i32');
+    this.globalBuffer.push('@__tsn_argv = external global ptr');
+    
     this.importedSymbols.clear(); this.importedModules.clear(); this.includedModulePaths.clear();
     this.classDecls.clear(); this.interfaceDecls.clear(); this.structDecls.clear();
     this.functions.clear(); this.genericClasses.clear(); this.genericFunctions.clear();
@@ -266,12 +274,15 @@ export class CodeGenerator {
     const strLines: string[] = ['; String literals'];
     for (const [globalName, value] of this.stringLiterals) {
       const escaped = this.escapeString(value);
-      const byteLen = new TextEncoder().encode(value).length + 1;
-      strLines.push(`${globalName} = private unnamed_addr constant [${byteLen} x i8] c"${escaped}\\00", align 1`);
+      const byteLen = new TextEncoder().encode(value).length;
+      // Define a struct type for each string to keep it contiguous: { i32 refcount, i32 length, [N x i8] data }
+      // Literal refcount is -1 to avoid incref/decref on read-only memory
+      strLines.push(`${globalName} = private unnamed_addr constant { i32, i32, [${byteLen + 1} x i8] } { i32 -1, i32 ${byteLen}, [${byteLen + 1} x i8] c"${escaped}\\00" }, align 8`);
     }
     if (this.hostOS === 'windows' && !this.stringLiterals.has('@.str.console_newline')) {
-      this.stringLiterals.set('@.str.console_newline', '\r\n');
-      strLines.push(`@.str.console_newline = private unnamed_addr constant [3 x i8] c"\\0D\\0A\\00", align 1`);
+      const escaped = '\\0D\\0A';
+      const byteLen = 2;
+      strLines.push(`@.str.console_newline = private unnamed_addr constant { i32, i32, [3 x i8] } { i32 -1, i32 ${byteLen}, [3 x i8] c"${escaped}\\00" }, align 8`);
     }
     this.output.splice(stringLiteralMarkerIdx, 2, ...strLines, '');
 
@@ -2048,11 +2059,10 @@ export class CodeGenerator {
   }
 
   private generateStringLiteral(e: StringLiteral): string {
-    const name = `@.str.${this.stringCounter++}`; this.stringLiterals.set(name, e.value);
-    const t = this.newTemp();
-    const byteLen = new TextEncoder().encode(e.value).length + 1;
-    this.emit(`${t} = getelementptr inbounds [${byteLen} x i8], ptr ${name}, i32 0, i32 0`);
-    this.tempTypes.set(t, 'string'); return t;
+    const name = `@.str.${this.stringCounter++}`; 
+    this.stringLiterals.set(name, e.value);
+    this.tempTypes.set(name, 'string'); 
+    return name;
   }
 
   private generateIdentifier(e: Identifier): string {
@@ -3586,6 +3596,7 @@ if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldT
 
   private getValueType(v: string): string { 
     if (v.startsWith('@')) {
+       if (v.startsWith('@.str.')) return 'string';
        const gName = v.substring(1);
        const g = this.globals.get(gName);
        if (g) return g.type;

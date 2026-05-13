@@ -4,12 +4,14 @@ import { Token, TokenKind } from "./ast.tsn";
 
 export class Lexer {
     private source: string;
+    private sourceLength: i32;
     private pos: i32;
     private line: i32;
     private column: i32;
 
     constructor(source: string) {
         this.source = source;
+        this.sourceLength = source.length;
         this.pos = 0;
         this.line = 1;
         this.column = 1;
@@ -19,13 +21,15 @@ export class Lexer {
         log("DEBUG: Lexer.tokenize started");
         let tokens = new Array<Token>();
 
-        while (this.pos < this.source.length) {
+        while (this.pos < this.sourceLength) {
             this.skipWhitespaceAndComments();
-            if (this.pos >= this.source.length) {
+            if (this.pos >= this.sourceLength) {
                 break;
             }
 
+            log("DEBUG: Lexer.tokenize calling nextToken");
             let token = this.nextToken();
+            log("DEBUG: Lexer.tokenize token received: " + token.lexeme);
             tokens.push(token);
         }
 
@@ -46,190 +50,189 @@ export class Lexer {
             return this.readIdentifierOrKeyword(line, column);
         }
 
-        if (ch == '"' || ch == "'") {
+        if (ch == 34 || ch == 39) { // '"' || "'"
             return this.readString(ch, line, column);
         }
 
-        if (ch == '@') {
+        if (ch == 64) { // '@'
             this.advance();
             return new Token(TokenKind.At, "@", line, column);
         }
-        if (ch == '(') {
+        if (ch == 40) { // '('
             this.advance();
             return new Token(TokenKind.LParen, "(", line, column);
         }
-        if (ch == ')') {
+        if (ch == 41) { // ')'
             this.advance();
             return new Token(TokenKind.RParen, ")", line, column);
         }
-        if (ch == '{') {
+        if (ch == 123) { // '{'
             this.advance();
             return new Token(TokenKind.LBrace, "{", line, column);
         }
-        if (ch == '}') {
+        if (ch == 125) { // '}'
             this.advance();
             return new Token(TokenKind.RBrace, "}", line, column);
         }
-        if (ch == '[') {
+        if (ch == 91) { // '['
             this.advance();
             return new Token(TokenKind.LBracket, "[", line, column);
         }
-        if (ch == ']') {
+        if (ch == 93) { // ']'
             this.advance();
             return new Token(TokenKind.RBracket, "]", line, column);
         }
-        if (ch == ':') {
+        if (ch == 58) { // ':'
             this.advance();
             return new Token(TokenKind.Colon, ":", line, column);
         }
-        if (ch == ';') {
+        if (ch == 59) { // ';'
             this.advance();
             return new Token(TokenKind.Semicolon, ";", line, column);
         }
-        if (ch == ',') {
+        if (ch == 44) { // ','
             this.advance();
             return new Token(TokenKind.Comma, ",", line, column);
         }
-        if (ch == '.') {
+        if (ch == 46) { // '.'
             this.advance();
             return new Token(TokenKind.Dot, ".", line, column);
         }
-        if (ch == '=') {
+        if (ch == 61) { // '='
             this.advance();
-            if (this.current() == '=') {
+            if (this.current() == 61) { // '=='
                 this.advance();
                 return new Token(TokenKind.EqualEqual, "==", line, column);
             }
             return new Token(TokenKind.Equal, "=", line, column);
         }
-        if (ch == '!') {
+        if (ch == 33) { // '!'
             this.advance();
-            if (this.current() == '=') {
+            if (this.current() == 61) { // '!='
                 this.advance();
                 return new Token(TokenKind.BangEqual, "!=", line, column);
             }
             return new Token(TokenKind.Bang, "!", line, column);
         }
-        if (ch == '<') {
+        if (ch == 60) { // '<'
             this.advance();
-            if (this.current() == '=') {
+            if (this.current() == 61) { // '<='
                 this.advance();
                 return new Token(TokenKind.LessEqual, "<=", line, column);
             }
             return new Token(TokenKind.Less, "<", line, column);
         }
-        if (ch == '>') {
+        if (ch == 62) { // '>'
             this.advance();
-            if (this.current() == '=') {
+            if (this.current() == 61) { // '>='
                 this.advance();
                 return new Token(TokenKind.GreaterEqual, ">=", line, column);
             }
             return new Token(TokenKind.Greater, ">", line, column);
         }
-        if (ch == '+') {
+        if (ch == 43) { // '+'
             this.advance();
             return new Token(TokenKind.Plus, "+", line, column);
         }
-        if (ch == '-') {
+        if (ch == 45) { // '-'
             this.advance();
             return new Token(TokenKind.Minus, "-", line, column);
         }
-        if (ch == '*') {
+        if (ch == 42) { // '*'
             this.advance();
             return new Token(TokenKind.Star, "*", line, column);
         }
-        if (ch == '/') {
+        if (ch == 47) { // '/'
             this.advance();
             return new Token(TokenKind.Slash, "/", line, column);
         }
-        if (ch == '%') {
+        if (ch == 37) { // '%'
             this.advance();
             return new Token(TokenKind.Percent, "%", line, column);
         }
-        if (ch == '&') {
+        if (ch == 38) { // '&'
             this.advance();
             return new Token(TokenKind.Amp, "&", line, column);
         }
-        if (ch == '|') {
+        if (ch == 124) { // '|'
             this.advance();
             return new Token(TokenKind.Pipe, "|", line, column);
         }
-        if (ch == '^') {
+        if (ch == 94) { // '^'
             this.advance();
             return new Token(TokenKind.Caret, "^", line, column);
         }
-        if (ch == '~') {
+        if (ch == 126) { // '~'
             this.advance();
             return new Token(TokenKind.Tilde, "~", line, column);
         }
-        if (ch == '?') {
+        if (ch == 63) { // '?'
             this.advance();
             return new Token(TokenKind.Question, "?", line, column);
         }
 
+
         this.advance();
-        return new Token(TokenKind.Unknown, ch, line, column);
+        return new Token(TokenKind.Unknown, "?", line, column);
     }
 
     private readNumber(line: i32, column: i32): Token {
-        let text = "";
+        let start = this.pos;
 
-        while (this.pos < this.source.length && this.isDigit(this.current())) {
-            text = text + this.current();
+        while (this.pos < this.sourceLength && this.isDigit(this.current())) {
             this.advance();
         }
 
-        if (this.pos < this.source.length && this.current() == '.' && this.isDigit(this.peek())) {
-            text = text + ".";
+        if (this.pos < this.sourceLength && this.current() == 46 && this.isDigit(this.peek())) { // '.'
             this.advance();
-            while (this.pos < this.source.length && this.isDigit(this.current())) {
-                text = text + this.current();
+            while (this.pos < this.sourceLength && this.isDigit(this.current())) {
                 this.advance();
             }
         }
 
+        let text = this.source.slice(start, this.pos);
         return new Token(TokenKind.Number, text, line, column);
     }
 
     private readIdentifierOrKeyword(line: i32, column: i32): Token {
-        let text = "";
+        let start = this.pos;
 
-        while (this.pos < this.source.length && (this.isAlpha(this.current()) || this.isDigit(this.current()))) {
-            text = text + this.current();
+        while (this.pos < this.sourceLength && (this.isAlpha(this.current()) || this.isDigit(this.current()))) {
             this.advance();
         }
 
+        let text = this.source.slice(start, this.pos);
         return new Token(this.getKeywordKind(text), text, line, column);
     }
 
-    private readString(quote: string, line: i32, column: i32): Token {
+    private readString(quote: i32, line: i32, column: i32): Token {
         let text = "";
         this.advance();
 
-        while (this.pos < this.source.length && this.current() != quote) {
-            if (this.current() == "\\") {
+        while (this.pos < this.sourceLength && this.current() != quote) {
+            if (this.current() == 92) { // '\\'
                 this.advance();
-                if (this.pos >= this.source.length) {
+                if (this.pos >= this.sourceLength) {
                     break;
                 }
 
                 let escaped = this.current();
-                if (escaped == 'n') {
+                if (escaped == 110) { // 'n'
                     text = text + "\n";
-                } else if (escaped == 't') {
+                } else if (escaped == 116) { // 't'
                     text = text + "\t";
-                } else if (escaped == '"') {
+                } else if (escaped == 34) { // '"'
                     text = text + '"';
-                } else if (escaped == "'") {
+                } else if (escaped == 39) { // "'"
                     text = text + "'";
-                } else if (escaped == "\\") {
+                } else if (escaped == 92) { // '\\'
                     text = text + "\\";
                 } else {
-                    text = text + escaped;
+                    text = text + this.source.slice(this.pos, this.pos + 1);
                 }
                 this.advance();
             } else {
-                text = text + this.current();
+                text = text + this.source.slice(this.pos, this.pos + 1);
                 this.advance();
             }
         }
@@ -265,38 +268,38 @@ export class Lexer {
     }
 
     private skipWhitespaceAndComments(): void {
-        while (this.pos < this.source.length) {
+        while (this.pos < this.sourceLength) {
             let ch = this.current();
 
-            if (ch == ' ' || ch == '\t') {
+            if (ch == 32 || ch == 9) { // ' ' or '\t'
                 this.advance();
                 continue;
             }
 
-            if (ch == '\n') {
+            if (ch == 10) { // '\n'
                 this.pos = this.pos + 1;
                 this.line = this.line + 1;
                 this.column = 1;
                 continue;
             }
 
-            if (ch == '/' && this.peek() == '/') {
-                while (this.pos < this.source.length && this.current() != '\n') {
+            if (ch == 47 && this.peek() == 47) { // '//'
+                while (this.pos < this.sourceLength && this.current() != 10) {
                     this.advance();
                 }
                 continue;
             }
 
-            if (ch == '/' && this.peek() == '*') {
+            if (ch == 47 && this.peek() == 42) { // '/*'
                 this.advance();
                 this.advance();
-                while (this.pos < this.source.length) {
-                    if (this.current() == '*' && this.peek() == '/') {
+                while (this.pos < this.sourceLength) {
+                    if (this.current() == 42 && this.peek() == 47) { // '*/'
                         this.advance();
                         this.advance();
                         break;
                     }
-                    if (this.current() == '\n') {
+                    if (this.current() == 10) {
                         this.pos = this.pos + 1;
                         this.line = this.line + 1;
                         this.column = 1;
@@ -311,32 +314,28 @@ export class Lexer {
         }
     }
 
-    private current(): string {
-        return this.sliceChar(this.pos);
+    private current(): i32 {
+        if (this.pos >= this.sourceLength) return -1;
+        return this.source.charCodeAt(this.pos);
     }
 
-    private peek(): string {
-        return this.sliceChar(this.pos + 1);
-    }
-
-    private sliceChar(index: i32): string {
-        return this.source.slice(index, index + 1);
+    private peek(): i32 {
+        if (this.pos + 1 >= this.sourceLength) return -1;
+        return this.source.charCodeAt(this.pos + 1);
     }
 
     private advance(): void {
-        if (this.pos < this.source.length) {
+        if (this.pos < this.sourceLength) {
             this.pos = this.pos + 1;
             this.column = this.column + 1;
         }
     }
 
-    private isDigit(ch: string): bool {
-        return ch >= "0" && ch <= "9";
+    private isDigit(ch: i32): bool {
+        return ch >= 48 && ch <= 57; // '0'-'9'
     }
 
-    private isAlpha(ch: string): bool {
-        return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch == "_";
+    private isAlpha(ch: i32): bool {
+        return (ch >= 97 && ch <= 122) || (ch >= 65 && ch <= 90) || ch == 95; // 'a'-'z', 'A'-'Z', '_'
     }
 }
-
-
