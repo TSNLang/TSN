@@ -205,10 +205,18 @@ function main() {
       outputFile = 'output.exe';
     }
 
-    console.log('');
-    console.log(`🔧 Linking: clang ${llFiles.join(' ')} ${RUNTIME_FILE} -o ${outputFile}`);
+    const stdFiles = [
+      'memory.ll', 'fs.ll', 'string.ll', 'console.ll', 'array.ll', 
+      'option.ll', 'os.ll', 'process.ll', 'time.ll', 'hash.ll', 'iterator.ll'
+    ].map(f => join(Deno.cwd(), 'src', 'std', f));
 
-    const result = spawnSync('clang', [...llFiles, RUNTIME_FILE, '-o', outputFile], {
+    // Filter out std files that might already be in llFiles
+    const uniqueLLFiles = [...new Set([...llFiles, ...stdFiles])];
+
+    console.log('');
+    console.log(`🔧 Linking: clang ${llFiles.length} files + stdlib + ${RUNTIME_FILE} -o ${outputFile}`);
+
+    const result = spawnSync('clang', [...uniqueLLFiles, RUNTIME_FILE, '-o', outputFile, '-Wno-override-module'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });

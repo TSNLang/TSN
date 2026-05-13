@@ -1,4 +1,3 @@
-declare function print_i32(n: i32): void;
 import { log } from "std:console";
 import { Array } from "std:array";
 import { Token, TokenKind } from "./ast.tsn";
@@ -19,7 +18,6 @@ export class Lexer {
     }
 
     tokenize(): Array<Token> {
-        log("DEBUG: Lexer.tokenize started");
         let tokens = new Array<Token>();
 
         while (this.pos < this.sourceLength) {
@@ -28,12 +26,8 @@ export class Lexer {
                 break;
             }
 
-            log("DEBUG: Lexer.tokenize calling nextToken");
-            print_i32(1111);
             let token = this.nextToken();
-            print_i32(2222);
             tokens.push(token);
-            print_i32(3333);
         }
 
         tokens.push(new Token(TokenKind.EOF, "", this.line, this.column));
@@ -209,36 +203,21 @@ export class Lexer {
     }
 
     private readString(quote: i32, line: i32, column: i32): Token {
-        let text = "";
+        let start = this.pos;
         this.advance();
 
         while (this.pos < this.sourceLength && this.current() != quote) {
             if (this.current() == 92) { // '\\'
                 this.advance();
-                if (this.pos >= this.sourceLength) {
-                    break;
+                if (this.pos < this.sourceLength) {
+                    this.advance();
                 }
-
-                let escaped = this.current();
-                if (escaped == 110) { // 'n'
-                    text = text + "\n";
-                } else if (escaped == 116) { // 't'
-                    text = text + "\t";
-                } else if (escaped == 34) { // '"'
-                    text = text + '"';
-                } else if (escaped == 39) { // "'"
-                    text = text + "'";
-                } else if (escaped == 92) { // '\\'
-                    text = text + "\\";
-                } else {
-                    text = text + this.source.slice(this.pos, this.pos + 1);
-                }
-                this.advance();
             } else {
-                text = text + this.source.slice(this.pos, this.pos + 1);
                 this.advance();
             }
         }
+
+        let text = this.source.slice(start + 1, this.pos);
 
         if (this.current() == quote) {
             this.advance();
@@ -320,8 +299,6 @@ export class Lexer {
     private current(): i32 {
         if (this.pos >= this.sourceLength) return -1;
         let ch = this.source.charCodeAt(this.pos);
-        // log("DEBUG: Lexer.current returns: ");
-        // print_i32(ch);
         return ch;
     }
 

@@ -64,12 +64,17 @@ export class Token {
     public column: i32;
 
     constructor(kind: i32, lexeme: string, line: i32, column: i32) {
-        log("DEBUG: Token constructor started");
         this.kind = kind;
         this.lexeme = lexeme;
         this.line = line;
         this.column = column;
-        log("DEBUG: Token constructor finished");
+        
+        log("DEBUG: Token instance created at:");
+        print_ptr(this as ptr<void>);
+        log("DEBUG: kind value:");
+        print_i32(this.kind);
+        log("DEBUG: lexeme value:");
+        log(this.lexeme);
     }
 }
 

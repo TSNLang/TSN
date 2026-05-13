@@ -1,4 +1,3 @@
-declare function print_i32(n: i32): void;
 import { Array } from "std:array";
 import { log } from "std:console";
 import * as string from "std:string";
@@ -78,6 +77,12 @@ export class Parser {
                 declarations.push(importResult.declaration);
                 importDecls.push(importResult.info);
                 importCount = importCount + 1;
+                continue;
+            }
+
+            if (this.peek().lexeme == "declare") {
+                this.advance();
+                // Just skip 'declare' for now as it's followed by 'function'
                 continue;
             }
 

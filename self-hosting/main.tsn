@@ -1,4 +1,3 @@
-declare function print_i32(n: i32): void;
 import { log } from "std:console";
 import { readText } from "std:fs";
 import { Lexer } from "./lexer.tsn";
@@ -26,14 +25,20 @@ function parseFile(path: string): i32 {
     }
 
     let source = fsResult.value();
-    log("DEBUG: source length (bytes)");
-    log(source.byteLength);
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
-    log("DEBUG: token count");
-    log(tokens.length);
+    if (tokens.length == 0) {
+        log("parse FAILED: no tokens generated");
+        return 1;
+    }
     let parser = new Parser(tokens);
     let program = parser.parse();
+
+    if (program.declarations.length == 0) {
+        log("parse FAILED: no declarations found in file");
+        log(path);
+        return 1;
+    }
 
     log("parsed file");
     log(path);

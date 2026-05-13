@@ -2963,7 +2963,7 @@ export class CodeGenerator {
         this.ensureExternalDeclaration(numericPrinter.name, {
           name: numericPrinter.name,
           kind: 'function',
-          llvmType: numericPrinter.llvmType,
+          llvmType: 'void',
           paramTypes: numericPrinter.paramTypes,
         } as any);
         const coercedVal = this.coerceToType(value, valueType, valueType);
@@ -3588,12 +3588,26 @@ if (stName === 'Program') console.log('STRUCT FIELD:', e.member, 'TYPE:', fieldT
         const st = this.structs.get(name);
         if (st) {
             let size = 0;
+            const isClass = this.classDecls.has(name) || this.instantiatedNames.has(name) || this.importedSymbols.has(name);
+            
+            if (isClass) {
+                // Class header: i32 refcount (4) + padding (4) + ptr vtable (8) = 16 bytes
+                size = 16;
+            }
+
+            if (name === 'Token') console.log(`--- Layout for ${name} (isClass=${isClass}):`);
             for (const f of st.fields) {
                 const fs = this.getTypeSize(f.type);
-                if (size % fs !== 0) size += (fs - (size % fs));
+                const align = this.getAlignment(f.type);
+                const oldSize = size;
+                if (size % align !== 0) size += (align - (size % align));
+                if (size !== oldSize && name === 'Token') console.log(`  Padding: ${size - oldSize} bytes before ${f.name}`);
+                if (name === 'Token') console.log(`  Field ${f.name} (${f.type}): size ${fs}, align ${align}, offset ${size}`);
                 size += fs;
             }
-            if (size % 8 !== 0) size += (8 - (size % 8));
+            let maxAlign = 8;
+            if (size % maxAlign !== 0) size += (maxAlign - (size % maxAlign));
+            if (name === 'Token') console.log(`  Final Size: ${size}`);
             return size;
         }
     }

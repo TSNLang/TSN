@@ -18,8 +18,8 @@ void* class_alloc(int32_t size) {
     void* p = calloc(1, size);
     if (p) {
         *((int32_t*)p) = 1; // Initial refCount = 1
-        printf("DEBUG: class_alloc(%d) -> %p (refcount=1)\n", size, p);
-        fflush(stdout);
+        // printf("DEBUG: class_alloc(%d) -> %p (refcount=1)\n", size, p);
+        // fflush(stdout);
     }
     return p;
 }
