@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 import { Array } from "std/array.tsn";
 import { string } from "std/string.tsn";
 import * as memory from "std/memory.tsn";
@@ -137,3 +138,4 @@ export class Semantics {
         }
     }
 }
+

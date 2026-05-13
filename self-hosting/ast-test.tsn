@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 import { Array } from "std:array";
 import { log } from "std:console";
 import { IdentifierExpr, NumberLiteral, BinaryExpr, Expr } from "./ast.tsn";
@@ -15,3 +16,4 @@ function testAST(): i32 {
 function main(): i32 {
     return testAST();
 }
+

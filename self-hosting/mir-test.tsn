@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 // Test MIR builder
 
 import { log } from "std:console";
@@ -36,3 +37,4 @@ export function main(): i32 {
     log("MIR test completed!");
     return 0;
 }
+

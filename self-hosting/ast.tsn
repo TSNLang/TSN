@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 import { log } from "std:console";
 
 export enum TokenKind {
@@ -813,3 +814,4 @@ export class ASTProgram {
         this.declarations = declarations;
     }
 }
+

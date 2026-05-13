@@ -1,5 +1,0 @@
-import { console } from "std:console";
-
-function main(): void { 
-    console.log("Hello from self-hosted TSN!"); 
-}

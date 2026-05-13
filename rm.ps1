@@ -14,6 +14,9 @@ $filteredFiles = $filesToDelete | Where-Object {
     # Điều kiện 2: Không xóa file .ts trong src/src
     $isSourceTs = $_.Extension -eq ".ts" -and $_.FullName -like "*\src\src\*"
 
+    # Điều kiện 2.1: Không xóa file .c quan trọng
+    $isSourceC = $_.Extension -eq ".c" -and $_.Name -eq "tsn_runtime.c"
+
     # Điều kiện 3: Không xóa file .tsn trong self-hosting hoặc src/std
     $isSourceTsn = $_.Extension -eq ".tsn" -and ($_.FullName -like "*\self-hosting\*" -or $_.FullName -like "*\src\std\*")
 
@@ -21,7 +24,7 @@ $filteredFiles = $filesToDelete | Where-Object {
     $isTsnInExamples = $_.Extension -eq ".tsn" -and $_.FullName -like "*\examples\*"
 
     # Chỉ giữ lại những file KHÔNG vi phạm các điều kiện trên
-    return (-not $isGitFile) -and (-not $isSourceTs) -and (-not $isSourceTsn) -and (-not $isTsnInExamples)
+    return (-not $isGitFile) -and (-not $isSourceTs) -and (-not $isSourceC) -and (-not $isSourceTsn) -and (-not $isTsnInExamples)
 }
 
 # 3. Thực hiện xóa

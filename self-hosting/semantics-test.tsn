@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 import { Semantics, Symbol, Type, TypeKind } from "self-hosting/semantics.tsn";
 import * as console from "std/console.tsn";
 import { string } from "std/string.tsn";
@@ -39,3 +40,4 @@ function testSemantics(): void {
 function main(): void {
     testSemantics();
 }
+

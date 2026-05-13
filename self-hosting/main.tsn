@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 import { log } from "std:console";
 import { readText } from "std:fs";
 import { Lexer } from "./lexer.tsn";
@@ -70,3 +71,4 @@ function main(): i32 {
 
     return 0;
 }
+

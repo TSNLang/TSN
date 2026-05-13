@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 import { log } from "std:console";
 import { Array } from "std:array";
 import { Token, TokenKind } from "./ast.tsn";
@@ -28,9 +29,11 @@ export class Lexer {
             }
 
             log("DEBUG: Lexer.tokenize calling nextToken");
+            print_i32(1111);
             let token = this.nextToken();
-            log("DEBUG: Lexer.tokenize token received: " + token.lexeme);
+            print_i32(2222);
             tokens.push(token);
+            print_i32(3333);
         }
 
         tokens.push(new Token(TokenKind.EOF, "", this.line, this.column));
@@ -316,7 +319,10 @@ export class Lexer {
 
     private current(): i32 {
         if (this.pos >= this.sourceLength) return -1;
-        return this.source.charCodeAt(this.pos);
+        let ch = this.source.charCodeAt(this.pos);
+        // log("DEBUG: Lexer.current returns: ");
+        // print_i32(ch);
+        return ch;
     }
 
     private peek(): i32 {

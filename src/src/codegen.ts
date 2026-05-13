@@ -1358,6 +1358,12 @@ export class CodeGenerator {
               }
 
               let objType = this.inferExprType(m.object);
+              if (objType === 'string') {
+                  if (m.member === 'charCodeAt' || m.member === 'indexOf' || m.member === 'lastIndexOf') return 'i32';
+                  if (m.member === 'includes' || m.member === 'startsWith' || m.member === 'endsWith') return 'i1';
+                  if (m.member === 'slice' || m.member === 'substring' || m.member === 'concat' || m.member === 'trim') return 'string';
+              }
+
               if (objType && this.isClassType(objType)) {
                   const className = objType.startsWith('%') ? objType.substring(1) : objType;
                   const dotName = `${className}.${m.member}`;
@@ -2573,7 +2579,7 @@ export class CodeGenerator {
     let objType = this.tempTypes.get(obj) || this.inferExprType(m.object) || 'ptr';
     
     // String methods check - ensure they don't get mangled with class names
-    if (objType === 'string' || this.toLLVMType(objType) === 'ptr' && m.member === 'byteLength') {
+    if ((objType === 'string' || this.toLLVMType(objType) === 'ptr') && m.member === 'byteLength') {
         const t = this.newTemp();
         this.ensureExternalDeclaration('_T.byteLength$P.ptr', { name: '_T.byteLength$P.ptr', kind: 'function', llvmType: 'i32', paramTypes: ['ptr'] } as any);
         this.emit(`${t} = call i32 @_T.byteLength$P.ptr(ptr ${obj})`);

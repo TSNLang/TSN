@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 // LLVM IR Codegen from MIR
 
 import { Array } from "std:array";
@@ -243,3 +244,4 @@ export function main_codegen(): i32 {
     log("MIR Codegen test");
     return 0;
 }
+

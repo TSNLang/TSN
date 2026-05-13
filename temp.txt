@@ -1,7 +1,0 @@
-﻿
-  // Like getLLVMType but returns '%ClassName' for class/interface types (preserving type identity)
-  private getLLVMTypeWithClass(t: TypeAnnotation): string {
-    if (!t) return 'i32';
-    // For generic types like Array<X>, Optional<X> â€” return the mangled class name as %Foo_Bar
-    if (t.genericArgs && t.genericArgs.length > 0) {
-        const baseName = this.resolveTypeName(t);

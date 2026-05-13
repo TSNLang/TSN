@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 import { Array } from "std:array";
 import { Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr, ParameterInfo, ImportSpecifierInfo, ClassMemberDecl } from "./ast.tsn";
 
@@ -513,3 +514,4 @@ export class ASTParser {
         return this.tokens.get(this.pos - 1);
     }
 }
+

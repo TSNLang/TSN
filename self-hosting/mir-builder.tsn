@@ -1,3 +1,4 @@
+declare function print_i32(n: i32): void;
 // MIR Builder - converts simplified expressions to MIR
 
 import { Array } from "std:array";
@@ -21,7 +22,8 @@ export class MIRBuilder {
 
     public createFunction(name: string, returnType: MIRType): void {
         let func = new MIRFunction(name, returnType);
-        this.module.functions.push(func);
+        this.currentFunction = func;
+        this.module.functions.push(this.currentFunction);
     }
 
     public createBasicBlock(label: string): i32 {
@@ -146,3 +148,4 @@ export function main_builder(): i32 {
     log("MIR builder test completed!");
     return 0;
 }
+
