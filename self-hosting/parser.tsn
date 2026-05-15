@@ -4,10 +4,10 @@ import * as string from "std:string";
 import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr } from "./ast.tsn";
 
 export class Parser {
-    private tokens: Array<Token>;
+    private tokens: Array<ptr<Token>>;
     private pos: i32;
 
-    constructor(tokens: Array<Token>) {
+    constructor(tokens: Array<ptr<Token>>) {
         this.tokens = tokens;
         this.pos = 0;
     }
@@ -2332,7 +2332,7 @@ export class Parser {
         return this.peek().kind == kind;
     }
 
-    private advance(): Token {
+    private advance(): ptr<Token> {
         if (!this.isAtEnd()) {
             this.pos = this.pos + 1;
         }
@@ -2346,11 +2346,11 @@ export class Parser {
         return this.peek().kind == TokenKind.EOF;
     }
 
-    private peek(): Token {
+    private peek(): ptr<Token> {
         return this.tokens.get(this.pos);
     }
 
-    private previous(): Token {
+    private previous(): ptr<Token> {
         return this.tokens.get(this.pos - 1);
     }
 

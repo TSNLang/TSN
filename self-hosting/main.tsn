@@ -25,14 +25,21 @@ function parseFile(path: string): i32 {
     }
 
     let source = fsResult.value();
+    log("source length:");
+    print_i32(source.length);
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
+    log("token count:");
+    print_i32(tokens.length);
     if (tokens.length == 0) {
         log("parse FAILED: no tokens generated");
         return 1;
     }
     let parser = new Parser(tokens);
     let program = parser.parse();
+
+    log("declaration count:");
+    print_i32(program.declarations.length);
 
     if (program.declarations.length == 0) {
         log("parse FAILED: no declarations found in file");

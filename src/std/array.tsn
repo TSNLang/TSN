@@ -121,6 +121,13 @@ export class Array<T> {
         return None<T>();
     }
 
+    @unsafe dispose(): void {
+        if (this.data != null) {
+            memory.free(this.data);
+            this.data = null;
+        }
+    }
+
     /**
      * Tăng gấp đôi dung lượng bộ nhớ.
      */

@@ -40,6 +40,7 @@ export class CodeGenerator {
   private readonly hostOS: string;
   private cleanupStack: Set<string>[] = [new Set()];
   private structs: Map<string, StructInfo & { base?: string }> = new Map();
+  private generatedFunctions: Set<string> = new Set();
   private classDecls: Map<string, ClassDecl> = new Map();
   private structDecls: Map<string, StructDecl> = new Map();
   private interfaceDecls: Map<string, InterfaceDecl> = new Map();
@@ -151,21 +152,40 @@ export class CodeGenerator {
     this.emit(`br i1 ${hasValue}, label %${cleanupLabel}, label %${cleanupDoneLabel}`);
     this.emit(`\n${cleanupLabel}:`);
     this.indent++;
-    if (this.isClassType(type)) {
-      const className = type.startsWith('%') ? type.substring(1) : type;
+
+    const isClass = this.isClassType(type);
+    const isPtr = type.startsWith('ptr<') && !type.startsWith('ptr<void>');
+    const isRaw = type.startsWith('rawPtr<');
+
+    if (isRaw) {
+      this.emit(`br label %${cleanupDoneLabel}`);
+      this.indent--;
+      this.emit(`\n${cleanupDoneLabel}:`);
+      return;
+    }
+
+    if (isClass || isPtr) {
+      const className = type.startsWith('%') ? type.substring(1) : (isPtr ? type.substring(4, type.length - 1) : type);
       const disposeName = `${className}.dispose`;
       const disposeInfo = this.functions.get(disposeName) || this.functions.get(this.resolveMangledName(disposeName));
       if (disposeInfo) {
         this.emit(`call void @${disposeInfo.name}(ptr ${ptr})`);
       }
     }
-    this.ensureExternalDeclaration('tsn_decRef', { name: 'tsn_decRef', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
-    this.emit(`call void @tsn_decRef(ptr ${ptr})`);
+
+    if (isPtr) {
+      // Owned pointer RAII: gọi free trực tiếp
+      this.ensureExternalDeclaration('free', { name: 'free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+      this.emit(`call void @free(ptr ${ptr})`);
+    } else {
+      // Refcounted class: gọi decRef
+      this.ensureExternalDeclaration('tsn_decRef', { name: 'tsn_decRef', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+      this.emit(`call void @tsn_decRef(ptr ${ptr})`);
+    }
+
     this.emit(`br label %${cleanupDoneLabel}`);
     this.indent--;
     this.emit(`\n${cleanupDoneLabel}:`);
-    this.indent++;
-    this.indent--;
   }
 
   private emitCleanup(): void {
@@ -189,7 +209,7 @@ export class CodeGenerator {
     if (this.localDecls.size === 0) {
         this.localDecls = new Set(program.declarations);
     }
-    Deno.writeTextFileSync("codegen_debug.txt", `--- generate start: program declarations=${program.declarations.length}\n`, { append: true });
+    // Deno.writeTextFileSync("codegen_debug.txt", `--- generate start: program declarations=${program.declarations.length}\n`, { append: true });
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
     this.externalDecls = []; this.externalDeclarations.clear(); this.exportedSymbols = [];
     this.emittedVTables.clear();
@@ -1041,28 +1061,31 @@ export class CodeGenerator {
       const size = decl.type.arraySize || 0, et = this.getLLVMType({ name: decl.type.name, isPointer: false, isArray: false });
       this.globals.set(decl.name, { name: mName, type: `[${size} x ${et}]`, isConst: decl.isConst });
       const isLocal = this.localDecls.has(decl);
-      if (!isLocal) this.globalBuffer.push(`$${mName} = comdat any`);
-      const linkagePrefix = isLocal ? '' : 'linkonce_odr ';
-      const comdat = isLocal ? '' : `, comdat($${mName})`;
-      this.emit(`@${mName} = ${linkagePrefix}${decl.isConst ? 'constant' : 'global'} [${size} x ${et}] zeroinitializer${comdat}, align 4`);
+      if (isLocal) {
+          this.emit(`@${mName} = internal ${decl.isConst ? 'constant' : 'global'} [${size} x ${et}] zeroinitializer, align 4`);
+      } else {
+          this.globalBuffer.push(`$${mName} = comdat any`);
+          this.emit(`@${mName} = linkonce_odr ${decl.isConst ? 'constant' : 'global'} [${size} x ${et}] zeroinitializer, comdat($${mName}), align 4`);
+      }
     } else if (isPointerLike && (!decl.init || (decl.init.kind === ASTKind.NumberLiteral && (decl.init as NumberLiteral).value === 0))) {
       this.globals.set(decl.name, { name: mName, type: t, isConst: decl.isConst });
       const isLocal = this.localDecls.has(decl);
-      if (!isLocal) this.globalBuffer.push(`$${mName} = comdat any`);
-      const linkagePrefix = isLocal ? '' : 'linkonce_odr ';
-      const comdat = isLocal ? '' : `, comdat($${mName})`;
-      this.emit(`@${mName} = ${linkagePrefix}${decl.isConst ? 'constant' : 'global'} ${this.toLLVMType(t)} null${comdat}, align 8`);
+      if (isLocal) {
+          this.emit(`@${mName} = internal ${decl.isConst ? 'constant' : 'global'} ${this.toLLVMType(t)} null, align 8`);
+      } else {
+          this.globalBuffer.push(`$${mName} = comdat any`);
+          this.emit(`@${mName} = linkonce_odr ${decl.isConst ? 'constant' : 'global'} ${this.toLLVMType(t)} null, comdat($${mName}), align 8`);
+      }
     } else {
       const val = (decl.init?.kind === ASTKind.NumberLiteral) ? (decl.init as NumberLiteral).value : 0;
       this.globals.set(decl.name, { name: mName, type: t, isConst: decl.isConst });
       const isLocal = this.localDecls.has(decl);
-      if (!isLocal) {
+      if (isLocal) {
+          this.emit(`@${mName} = internal ${decl.isConst ? 'constant' : 'global'} ${this.toLLVMType(t)} ${val}, align 4`);
+      } else {
           this.globalBuffer.push(`$${mName} = comdat any`);
+          this.emit(`@${mName} = linkonce_odr ${decl.isConst ? 'constant' : 'global'} ${this.toLLVMType(t)} ${val}, comdat($${mName}), align 4`);
       }
-      const linkagePrefix = isLocal ? '' : 'linkonce_odr ';
-      const comdat = isLocal ? '' : `, comdat($${mName})`;
-      const linkage = decl.isConst ? linkagePrefix + 'constant' : linkagePrefix + 'global';
-      this.emit(`@${mName} = ${linkage} ${this.toLLVMType(t)} ${val}${comdat}, align 4`);
     }
   }
 
@@ -1077,6 +1100,13 @@ export class CodeGenerator {
     if (!this.isTargetOSMatch(decl.targetOS)) return;
 
     const mName = this.mangleName(decl.name, decl.params, !!decl.ffiLib || decl.isDeclare);
+    
+    // Skip if already generated in this module
+    if (this.generatedFunctions.has(mName) && !decl.isDeclare && !decl.ffiLib) {
+        return;
+    }
+    this.generatedFunctions.add(mName);
+    
     const rt = this.getLLVMType(decl.returnType);
     let paramsStr = decl.params.map(p => `${this.toLLVMType(this.getFunctionParamStorageType(p))} %${p.name}`).join(', ');
     if (isMethod) paramsStr = `ptr %this${paramsStr ? ', ' + paramsStr : ''}`;
@@ -1094,9 +1124,10 @@ export class CodeGenerator {
     const isLocal = this.localDecls.has(decl) || isLocalMethod;
     const isMain = decl.name === 'main' && this.scopeStack.length === 0;
 
-    if (!isLocal && !isMain) {
-        this.globalBuffer.push(`$${mName} = comdat any`);
-    }
+    // Remove explicit comdat any declaration to avoid redefinition errors across files
+    // if (!isLocal && !isMain) {
+    //     this.globalBuffer.push(`$${mName} = comdat any`);
+    // }
 
     const oldRet = this.currentFunctionReturnType, oldParams = this.currentFunctionParams, oldParamTypes = this.currentFunctionParamTypes;
     const oldHoisted = this.hoistedVars, oldLocalVarTypes = this.localVarTypes, oldMovedLocals = this.movedLocals;
@@ -1134,9 +1165,22 @@ export class CodeGenerator {
 
     const llvmRt = this.isCurrentMain ? 'i32' : this.toLLVMType(rt);
     const finalParamsStr = this.isCurrentMain ? 'i32 %argc, ptr %argv' : paramsStr;
-    const linkage = (isLocal || this.isCurrentMain) ? 'define' : 'define linkonce_odr';
-    const comdat = (isLocal || this.isCurrentMain) ? '' : ` comdat($${mName})`;
-    this.emit(`${linkage} ${llvmRt} @${mName}(${finalParamsStr})${comdat} {`);
+    const isGenericInstantiation = mName.includes('$') || mName.includes('<') || (this.currentClassName && this.currentClassName.includes('_'));
+    
+    let linkage = 'define';
+    let comdatSuffix = '';
+    
+    if (this.isCurrentMain) {
+        linkage = 'define';
+    } else if (isGenericInstantiation) {
+        linkage = 'define linkonce_odr';
+        this.globalBuffer.push(`$${mName} = comdat any`);
+        comdatSuffix = ` comdat($${mName})`;
+    } else if (isLocal) {
+        linkage = 'define internal';
+    }
+
+    this.emit(`${linkage} ${llvmRt} @${mName}(${finalParamsStr})${comdatSuffix} {`);
     this.emit('entry:'); this.indent++;
 
     if (this.isCurrentMain) {
@@ -2948,7 +2992,6 @@ export class CodeGenerator {
         this.emit(`call void @${numericPrinter.name}(${this.toLLVMType(valueType)} ${coercedVal})`);
         return '0';
       }
-    }
 
     const actualMangled = (sym as any).realName || sym.name || mangled;
     // For stdlib or namespaced calls, we usually want the mangled name from metadata

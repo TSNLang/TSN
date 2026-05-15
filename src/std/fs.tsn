@@ -162,34 +162,24 @@ export class ExistsResult {
 @target_os("windows")
 @unsafe
 export function readText(path: string): ReadTextResult {
-    log("DEBUG: readText called with path:");
-    log(path);
     // GENERIC_READ = 0x80000000, FILE_SHARE_READ = 1, OPEN_EXISTING = 3
     let handle = tsn_CreateFileA(path, -2147483648, 1, null, 3, 128, null);
-    log("DEBUG: tsn_CreateFileA returned handle:");
-    print_i32(handle as i32);
 
     if (handle == (0 - 1) as ptr<void> || handle == null) {
-        log("DEBUG: tsn_CreateFileA FAILED. Error code:");
-        print_i32(tsn_GetLastError());
         return new ReadTextResult(false, "", FS_NOT_FOUND);
     }
 
     let high: i32 = 0;
     let size = tsn_GetFileSize(handle, addressof(high));
-    log("DEBUG: tsn_GetFileSize returned");
-    print_i32(size);
     if (size < 0) {
         tsn_CloseHandle(handle);
         return new ReadTextResult(false, "", FS_IO_ERROR);
     }
 
     let heap = tsn_GetProcessHeap();
-    log("DEBUG: tsn_GetProcessHeap returned");
     // String header: 4 byte refcount, 4 byte length, then data + null terminator
     let totalSize = (size as i64) + 9; 
     let buffer: ptr<void> = tsn_HeapAlloc(heap, 8, totalSize);
-    log("DEBUG: tsn_HeapAlloc returned");
     if (buffer == null) {
         tsn_CloseHandle(handle);
         return new ReadTextResult(false, "", FS_IO_ERROR);
@@ -199,30 +189,16 @@ export function readText(path: string): ReadTextResult {
     let pRefCount: rawPtr<i32> = buffer;
     pRefCount.set(1);
     let pLength: rawPtr<i32> = memory.offset(buffer, 4);
-    log("DEBUG: setting string length to");
-    print_i32(size);
     pLength.set(size);
-    log("DEBUG: length set. Verification:");
-    print_i32(pLength.get());
 
     let dataPtr = memory.offset(buffer, 8);
     let bytesRead: i32 = 0;
-    log("DEBUG: about to call tsn_ReadFile with handle:");
-    print_i32(handle as i32);
     let ok = tsn_ReadFile(handle, dataPtr, size, addressof(bytesRead), null);
-    log("DEBUG: tsn_ReadFile returned");
-    print_i32(ok);
-    if (ok == 0) {
-        log("DEBUG: tsn_ReadFile FAILED. Error code:");
-        print_i32(tsn_GetLastError());
-    }
-    log("DEBUG: about to call tsn_CloseHandle");
+    
     tsn_CloseHandle(handle);
 
-    log("DEBUG: about to create ReadTextResult");
     let out: string = buffer;
     let res = new ReadTextResult(true, out, FS_OK);
-    log("DEBUG: ReadTextResult created");
     return res;
 }
 

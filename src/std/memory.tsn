@@ -45,6 +45,15 @@ export const HEAP_ZERO_MEMORY: i32 = 8;
         return tsn_HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
     }
 
+    /**
+     * Cấp phát vùng nhớ thuộc quyền sở hữu (RAII).
+     * Sẽ tự động free khi ra khỏi scope.
+     */
+    @target_os("windows")
+    export @unsafe function allocOwned<T>(size: i64): ptr<T> {
+        return tsn_HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size) as ptr<T>;
+    }
+
     @target_os("windows")
     export @unsafe function free(p: rawPtr<void>): void {
         if (p == null) return;
