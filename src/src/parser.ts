@@ -379,6 +379,10 @@ export class Parser {
     let seenRest = false;
     if (!this.check(TokenKind.RParen)) {
       do {
+        let isConst = false;
+        if (this.match(TokenKind.Const)) isConst = true;
+        else if (this.match(TokenKind.Let)) isConst = false;
+
         const isRest = this.match(TokenKind.Ellipsis);
         if (seenRest) {
           this.error('Rest parameter must be the last parameter');
@@ -392,7 +396,7 @@ export class Parser {
             this.error('Rest parameter type must use array syntax, e.g. ...args: i32[]');
           }
         }
-        params.push({ name: pName, type: pType, isRest });
+        params.push({ name: pName, type: pType, isRest, isConst });
       } while (this.match(TokenKind.Comma));
     }
     this.consume(TokenKind.RParen, "Expected ')'");
@@ -849,7 +853,7 @@ export class Parser {
     }
 
     let name = this.consume(TokenKind.Identifier, 'Expected type name').text;
-    let isPointer = false, isRawPointer = false, isArray = false, arraySize: number | undefined;
+    let isPointer = false, isRawPointer = false, isReference = false, isArray = false, arraySize: number | undefined;
     let genericArgs: TypeAnnotation[] | undefined;
 
     if (this.match(TokenKind.Less)) {
@@ -869,6 +873,11 @@ export class Parser {
       isRawPointer = true;
       name = genericArgs[0].name;
       genericArgs = undefined;
+    } else if (name === 'ref' && genericArgs && genericArgs.length === 1) {
+      isPointer = true;
+      isReference = true;
+      name = genericArgs[0].name;
+      genericArgs = undefined;
     }
     
     if (this.match(TokenKind.LBracket)) {
@@ -876,7 +885,7 @@ export class Parser {
       if (this.check(TokenKind.Number)) arraySize = parseInt(this.advance().text);
       this.consume(TokenKind.RBracket, "Expected ']' for array type");
     }
-    return { name, isPointer, isRawPointer, isArray, arraySize, genericArgs };
+    return { name, isPointer, isRawPointer, isReference, isArray, arraySize, genericArgs };
   }
 
   private parseTypeParameters(): string[] {

@@ -61,6 +61,7 @@ export class CodeGenerator {
   private currentFunctionParams: Set<string> = new Set();
   private currentFunctionParamTypes: Map<string, string> = new Map();
   private currentFunctionParamClassTypes: Map<string, string> = new Map(); // semantic class types for params
+  private currentFunctionParamIsConst: Map<string, boolean> = new Map();
   private currentFunctionReturnType: string = 'void';
   private currentClassName: string | null = null;
   private tempTypes: Map<string, string> = new Map();
@@ -1138,6 +1139,7 @@ export class CodeGenerator {
     this.currentFunctionParams = new Set();
     this.currentFunctionParamTypes = new Map();
     this.currentFunctionParamClassTypes = new Map();
+    this.currentFunctionParamIsConst = new Map();
     this.currentFunctionReturnType = rt;
     this.hoistedVars = new Set();
     this.localVarTypes = new Map();
@@ -1152,6 +1154,7 @@ export class CodeGenerator {
     }
     for (const p of decl.params) { 
       this.currentFunctionParams.add(p.name); 
+        this.currentFunctionParamIsConst.set(p.name, p.isConst);
       const pt = this.getFunctionParamRuntimeType(p);
       this.currentFunctionParamTypes.set(p.name, pt);
       // Track semantic class type for param (e.g. Array<ClassMemberDecl> → '%Array_ClassMemberDecl')
@@ -1567,10 +1570,12 @@ export class CodeGenerator {
       
       const coerced = this.coerceToType(val, vt, allocaType);
       this.emit(`store ${this.toLLVMType(allocaType)} ${coerced}, ptr %${s.name}, align ${this.getAlignment(allocaType)}`);
-      if (isOwningManaged || isClass) {
+      
+      const isOwningPtr = allocaType.startsWith('ptr<');
+      if (isOwningPtr || isClass) {
         this.movedLocals.delete(s.name);
       }
-      if ((isOwningManaged || isClass) && s.init.kind === ASTKind.Identifier) {
+      if ((isOwningPtr || isClass) && s.init.kind === ASTKind.Identifier) {
         const srcId = (s.init as Identifier).name;
         const srcType = this.localVarTypes.get(srcId);
         if (srcType && srcType === t) {
@@ -1594,7 +1599,11 @@ export class CodeGenerator {
     // might refer to the identifier (though that would be a bug in the source code if it's already moved,
     // but in case of expr = new BinaryExpr(op, left, right) where expr was moved into left, it's fine).
     if (s.target.kind === ASTKind.Identifier) {
-        this.movedLocals.delete((s.target as Identifier).name);
+        const name = (s.target as Identifier).name;
+        if (this.currentFunctionParamIsConst.get(name)) {
+            throw new Error(`Cannot assign to '${name}' because it is a constant parameter.`);
+        }
+        this.movedLocals.delete(name);
     }
 
     const val = this.generateExpression(s.value);
@@ -1603,21 +1612,47 @@ export class CodeGenerator {
     
     if (s.target.kind === ASTKind.MemberExpr) {
       const m = s.target as MemberExpr;
+
+      // Static Borrow Check: prevent assignment to fields of a const ref
+      if (m.object.kind === ASTKind.Identifier) {
+          const objName = (m.object as Identifier).name;
+          if (this.currentFunctionParamIsConst.get(objName)) {
+              const t = this.currentFunctionParamTypes.get(objName);
+              if (t && t.startsWith('ref<')) {
+                  throw new Error(`Cannot assign to member '${m.member}' because '${objName}' is a const reference.`);
+              }
+          }
+      }
+
       const obj = this.generateExpression(m.object);
       const objLLVMType = this.tempTypes.get(obj) || 'ptr';
       
-      const stName = (m.object.kind === ASTKind.ThisExpr) ? this.currentClassName! : 
-                     (objLLVMType.startsWith('%') ? objLLVMType.substring(1) : ((this.classDecls.has(objLLVMType) || this.interfaceDecls.has(objLLVMType)) ? objLLVMType : this.guessStructTypeByVal(obj)));
-      
-      if (!stName) return;
+        let stName = "";
+        if (m.object.kind === ASTKind.ThisExpr) {
+            stName = this.currentClassName!;
+        } else {
+            if (objLLVMType.startsWith('%')) {
+                stName = objLLVMType.substring(1);
+            } else if (objLLVMType.startsWith('ptr<') || objLLVMType.startsWith('rawPtr<') || objLLVMType.startsWith('ref<')) {
+                stName = this.getPointerInnerType(objLLVMType);
+                if (stName.startsWith('%')) stName = stName.substring(1);
+            } else if (this.classDecls.has(objLLVMType) || this.interfaceDecls.has(objLLVMType)) {
+                stName = objLLVMType;
+            } else {
+                stName = this.guessStructTypeByVal(obj);
+            }
+        }
+        
+        if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") stName = "";
+        if (!stName) return;
 
-      // Ensure we are working with the object pointer, not the address of the local variable
-      const actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
-          const t = this.newTemp();
-          const ot = this.localVarTypes.get(obj.substring(1)) || 'ptr';
-          this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${obj}, align 8`);
-          return t;
-      })() : obj;
+        // Ensure we are working with the object pointer, not the address of the local variable
+        const actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
+            const t = this.newTemp();
+            const ot = this.localVarTypes.get(obj.substring(1)) || 'ptr';
+            this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${obj}, align 8`);
+            return t;
+        })() : obj;
 
       const fIdx = this.getFieldIndex(stName, m.member);
       const structInfo = this.structs.get(stName);
@@ -2380,8 +2415,26 @@ export class CodeGenerator {
       mappedArgs.push(`ptr ${restArray}`);
     } else {
       mappedArgs = args.map((arg, i) => {
-        const v = this.generateExpression(arg), t = info && info.paramTypes[i] ? info.paramTypes[i] : this.getValueType(v);
-        return `${this.toLLVMType(t)} ${this.coerceToType(v, this.getValueType(v), t)}`;
+        const v = this.generateExpression(arg);
+        const actualT = this.getValueType(v);
+        const expectedT = info && info.paramTypes[i] ? info.paramTypes[i] : actualT;
+
+        // If passing a ptr<T> to a ref<T>, we do NOT move it.
+        const isSrcOwning = actualT.startsWith('ptr<');
+        const isDestRef = expectedT.startsWith('ref<');
+
+        if (isSrcOwning && isDestRef && arg.kind === ASTKind.Identifier) {
+            // Keep it alive in caller
+        } else if (isSrcOwning && !isDestRef && arg.kind === ASTKind.Identifier) {
+            const srcId = (arg as Identifier).name;
+            if (this.localVarTypes.has(srcId)) {
+                this.emit(`store ptr null, ptr %${srcId}, align 8`);
+                this.cleanupStack[this.cleanupStack.length - 1].delete(srcId);
+                this.movedLocals.add(srcId);
+            }
+        }
+
+        return `${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`;
       });
     }
 
@@ -3197,6 +3250,9 @@ export class CodeGenerator {
     } else {
         if (objType.startsWith('%')) {
             stName = objType.substring(1);
+        } else if (objType.startsWith('ptr<') || objType.startsWith('ref<')) {
+            stName = this.getPointerInnerType(objType);
+            if (stName.startsWith('%')) stName = stName.substring(1);
         } else if (this.classDecls.has(objType) || this.interfaceDecls.has(objType)) {
             stName = objType;
         } else {
@@ -3204,10 +3260,7 @@ export class CodeGenerator {
         }
     }
     
-    if (e.member === 'blocks') {
-    }
-    
-    if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") stName = "";
+if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") stName = "";
 
     if (stName === "" || !this.structs.has(stName)) {
         if (e.member === 'blocks' || e.member === 'globalScope') {
@@ -3339,8 +3392,12 @@ export class CodeGenerator {
       return `{ ${t.tupleElements.map(e => this.getLLVMType(e)).join(', ')} }`;
     }
     if (t.isPointer) {
-        const prefix = t.isRawPointer ? 'rawPtr<' : 'ptr<';
-        return `${prefix}${this.getLLVMTypeByName(t.name)}>`;
+        let prefix = 'ptr<';
+        if (t.isRawPointer) prefix = 'rawPtr<';
+        else if (t.isReference) prefix = 'ref<';
+        let inner = this.getLLVMTypeByName(t.name);
+        if (inner === 'ptr' && (this.classDecls.has(t.name) || this.interfaceDecls.has(t.name))) inner = `%${t.name}`;
+        return `${prefix}${inner}>`;
     }
     if (t.isArray) return `[${t.arraySize || 0} x ${this.getLLVMTypeByName(t.name)}]`;
     
@@ -3353,8 +3410,10 @@ export class CodeGenerator {
   private getLLVMTypeWithClass(t: TypeAnnotation): string {
     if (!t) return 'i32';
     if (t.isPointer) {
-        const prefix = t.isRawPointer ? 'rawPtr<' : 'ptr<';
-        return prefix + this.getLLVMTypeByName(t.name) + '>';
+        const prefix = t.isRawPointer ? 'rawPtr<' : (t.isReference ? 'ref<' : 'ptr<');
+        let inner = this.getLLVMTypeByName(t.name);
+        if (inner === 'ptr' && (this.classDecls.has(t.name) || this.interfaceDecls.has(t.name))) inner = `%${t.name}`;
+        return prefix + inner + '>';
     }
     // For generic types like Array<X>, Optional<X> — return the mangled class name as %Foo_Bar
     if (t.genericArgs && t.genericArgs.length > 0) {
@@ -3506,7 +3565,7 @@ export class CodeGenerator {
 
   private isPointerType(t: string): boolean {
     if (!t) return false;
-    return t === 'ptr' || t.startsWith('ptr<') || t.startsWith('rawPtr<') || t === 'string';
+    return t === 'ptr' || t.startsWith('ptr<') || t.startsWith('rawPtr<') || t.startsWith('ref<') || t === 'string';
   }
 
   private getPointerInnerType(t: string): string {
@@ -3515,6 +3574,9 @@ export class CodeGenerator {
     }
     if (t.startsWith('rawPtr<') && t.endsWith('>')) {
         return t.substring(7, t.length - 1);
+    }
+    if (t.startsWith('ref<') && t.endsWith('>')) {
+        return t.substring(4, t.length - 1);
     }
     return 'i8';
   }
@@ -3533,7 +3595,7 @@ export class CodeGenerator {
     if (t === 'f32') return 'f32';
     if (t === 'f64') return 'f64';
     if (t === 'void') return 'void';
-    if (t === 'ptr' || t === 'string' || t.startsWith('ptr<') || t.startsWith('rawPtr<')) return 'ptr';
+    if (t === 'ptr' || t === 'string' || t.startsWith('ptr<') || t.startsWith('rawPtr<') || t.startsWith('ref<')) return 'ptr';
     
     const name = t.startsWith('%') ? t.substring(1) : t;
     if (this.structDecls.has(name) && !this.classDecls.has(name)) {

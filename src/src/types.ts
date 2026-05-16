@@ -348,6 +348,7 @@ export interface Parameter {
   name: string;
   type: TypeAnnotation;
   isRest?: boolean;
+  isConst?: boolean;
 }
 
 export interface FunctionDecl extends ASTNode {
@@ -447,6 +448,7 @@ export interface TypeAnnotation {
   name: string;
   isPointer: boolean;
   isRawPointer?: boolean;
+  isReference?: boolean;
   isArray: boolean;
   arraySize?: number;
   genericArgs?: TypeAnnotation[];
