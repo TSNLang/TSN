@@ -14,6 +14,8 @@ export class Array<T> {
         this.length = 0;
         this.capacity = 16; // Tăng một chút
         this.data = memory.alloc((this.capacity as i64) * sizeof(T));
+        // Zero-initialize để tránh garbage pointer khi rawPtr.set load oldVal
+        memory.fill(this.data, 0, (this.capacity as i64) * sizeof(T));
     }
 
     /**
@@ -135,6 +137,13 @@ export class Array<T> {
         let newCapacity = this.capacity * 2;
         // print_i32(newCapacity);
         this.data = memory.realloc(this.data, (newCapacity as i64) * sizeof(T));
+        
+        let oldBytes = (this.capacity as i64) * sizeof(T);
+        let newBytes = (newCapacity as i64) * sizeof(T);
+        let addedBytes = newBytes - oldBytes;
+        let pNew = memory.offset(this.data, oldBytes);
+        memory.fill(pNew, 0, addedBytes);
+
         this.capacity = newCapacity;
     }
 }

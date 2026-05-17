@@ -388,7 +388,8 @@ export class Parser {
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Semicolon)) {
                 this.flushPendingImportSpecifier(namedSpecifiers, pendingImported, pendingLocal);
-                let declaration = new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
+                let emptyArray = new Array<ClassMemberDecl>();
+                let declaration = new Declaration("ImportDecl", clause, source, "", "", emptyArray);
                 let info = new ImportDeclInfo(clause, source, defaultImport, namespaceImport, new Array<ImportSpecifierInfo>());
                 let specifierIndex: i32 = 0;
                 while (specifierIndex < namedSpecifiers.length) {
@@ -2360,13 +2361,10 @@ export class Parser {
         let importDecls = new Array<ImportDeclInfo>();
         let functionDecls = new Array<FunctionDeclInfo>();
         let classDecls = new Array<ClassDeclInfo>();
-        let counts = new Array<i32>();
-        let i = 0;
-        while (i < 40) { counts.push(0); i = i + 1; }
-        let summaries = new Array<string>();
-        i = 0;
-        while (i < 24) { summaries.push(""); i = i + 1; }
-        return new Program(declarations, classMembers, importDecls, functionDecls, classDecls, counts, summaries);
+        let counts = new Array<i32>(40);
+        let summaries = new Array<string>(24);
+        let prog = new Program(declarations, classMembers, importDecls, functionDecls, classDecls, counts, summaries);
+        return prog;
     }
 
     // AST Construction Methods
