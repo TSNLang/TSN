@@ -1,7 +1,7 @@
 import { Array } from "std:array";
 import { log } from "std:console";
 import * as string from "std:string";
-import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr } from "./ast.tsn";
+import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, ProgramMembers, ProgramMetadata, Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr } from "./ast.tsn";
 
 export class Parser {
     private tokens: Array<ptr<Token>>;
@@ -87,175 +87,175 @@ export class Parser {
             }
 
             let topModifiers = this.consumeTopLevelModifiers();
-            exportCount = exportCount + topModifiers.counts.get(1);
-            asyncCount = asyncCount + topModifiers.counts.get(17);
+            exportCount = exportCount + topModifiers.metadata.counts.get(1);
+            asyncCount = asyncCount + topModifiers.metadata.counts.get(17);
 
             if (this.matchKind(TokenKind.Function)) {
                 let body = this.parseFunctionDecl();
-                declarations.push(new Declaration("FunctionDecl", body.summaries.get(0), body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), new Array<ClassMemberDecl>()));
-                let functionInfo = this.createFunctionDeclInfo(body.summaries.get(0), topModifiers.counts.get(1) > 0, topModifiers.counts.get(17) > 0, body.summaries.get(1), body.summaries.get(17), body.summaries.get(18), body.counts.get(9), body.counts.get(21), body.counts.get(25), body.counts.get(26), body.counts.get(27), body.counts.get(28), body.counts.get(29), body.counts.get(30));
+                declarations.push(new Declaration("FunctionDecl", body.metadata.summaries.get(0), body.metadata.summaries.get(1), body.metadata.summaries.get(17), body.metadata.summaries.get(18), new Array<ClassMemberDecl>()));
+                let functionInfo = this.createFunctionDeclInfo(body.metadata.summaries.get(0), topModifiers.metadata.counts.get(1) > 0, topModifiers.metadata.counts.get(17) > 0, body.metadata.summaries.get(1), body.metadata.summaries.get(17), body.metadata.summaries.get(18), body.metadata.counts.get(9), body.metadata.counts.get(21), body.metadata.counts.get(25), body.metadata.counts.get(26), body.metadata.counts.get(27), body.metadata.counts.get(28), body.metadata.counts.get(29), body.metadata.counts.get(30));
                 functionDecls.push(functionInfo);
                 functionInfo = null;
                 functionCount = functionCount + 1;
-                letCount = letCount + body.counts.get(4);
-                returnCount = returnCount + body.counts.get(5);
-                ifCount = ifCount + body.counts.get(6);
-                whileCount = whileCount + body.counts.get(7);
-                forCount = forCount + body.counts.get(8);
-                paramCount = paramCount + body.counts.get(9);
-                methodCount = methodCount + body.counts.get(10);
-                fieldCount = fieldCount + body.counts.get(11);
-                constructorCount = constructorCount + body.counts.get(12);
-                publicCount = publicCount + body.counts.get(13);
-                privateCount = privateCount + body.counts.get(14);
-                protectedCount = protectedCount + body.counts.get(15);
-                staticCount = staticCount + body.counts.get(16);
-                asyncCount = asyncCount + body.counts.get(17);
-                newCount = newCount + body.counts.get(18);
-                thisCount = thisCount + body.counts.get(19);
-                dotCount = dotCount + body.counts.get(20);
-                bracketCount = bracketCount + body.counts.get(21);
-                ampCount = ampCount + body.counts.get(22);
-                pipeCount = pipeCount + body.counts.get(23);
-                assignCount = assignCount + body.counts.get(24);
-                callCount = callCount + body.counts.get(37);
-                memberExprCount = memberExprCount + body.counts.get(38);
-                binaryExprCount = binaryExprCount + body.counts.get(39);
-                if (firstCallSummary == "" && body.summaries.get(19) != "") {
-                    firstCallSummary = body.summaries.get(19);
-                } else if (secondCallSummary == "" && body.summaries.get(19) != "" && body.summaries.get(19) != firstCallSummary) {
-                    secondCallSummary = body.summaries.get(19);
-                } else if (thirdCallSummary == "" && body.summaries.get(19) != "" && body.summaries.get(19) != firstCallSummary && body.summaries.get(19) != secondCallSummary) {
-                    thirdCallSummary = body.summaries.get(19);
+                letCount = letCount + body.metadata.counts.get(4);
+                returnCount = returnCount + body.metadata.counts.get(5);
+                ifCount = ifCount + body.metadata.counts.get(6);
+                whileCount = whileCount + body.metadata.counts.get(7);
+                forCount = forCount + body.metadata.counts.get(8);
+                paramCount = paramCount + body.metadata.counts.get(9);
+                methodCount = methodCount + body.metadata.counts.get(10);
+                fieldCount = fieldCount + body.metadata.counts.get(11);
+                constructorCount = constructorCount + body.metadata.counts.get(12);
+                publicCount = publicCount + body.metadata.counts.get(13);
+                privateCount = privateCount + body.metadata.counts.get(14);
+                protectedCount = protectedCount + body.metadata.counts.get(15);
+                staticCount = staticCount + body.metadata.counts.get(16);
+                asyncCount = asyncCount + body.metadata.counts.get(17);
+                newCount = newCount + body.metadata.counts.get(18);
+                thisCount = thisCount + body.metadata.counts.get(19);
+                dotCount = dotCount + body.metadata.counts.get(20);
+                bracketCount = bracketCount + body.metadata.counts.get(21);
+                ampCount = ampCount + body.metadata.counts.get(22);
+                pipeCount = pipeCount + body.metadata.counts.get(23);
+                assignCount = assignCount + body.metadata.counts.get(24);
+                callCount = callCount + body.metadata.counts.get(37);
+                memberExprCount = memberExprCount + body.metadata.counts.get(38);
+                binaryExprCount = binaryExprCount + body.metadata.counts.get(39);
+                if (firstCallSummary == "" && body.metadata.summaries.get(19) != "") {
+                    firstCallSummary = body.metadata.summaries.get(19);
+                } else if (secondCallSummary == "" && body.metadata.summaries.get(19) != "" && body.metadata.summaries.get(19) != firstCallSummary) {
+                    secondCallSummary = body.metadata.summaries.get(19);
+                } else if (thirdCallSummary == "" && body.metadata.summaries.get(19) != "" && body.metadata.summaries.get(19) != firstCallSummary && body.metadata.summaries.get(19) != secondCallSummary) {
+                    thirdCallSummary = body.metadata.summaries.get(19);
                 }
-                if (secondCallSummary == "" && body.summaries.get(22) != "" && body.summaries.get(22) != firstCallSummary) {
-                    secondCallSummary = body.summaries.get(22);
-                } else if (thirdCallSummary == "" && body.summaries.get(22) != "" && body.summaries.get(22) != firstCallSummary && body.summaries.get(22) != secondCallSummary) {
-                    thirdCallSummary = body.summaries.get(22);
+                if (secondCallSummary == "" && body.metadata.summaries.get(22) != "" && body.metadata.summaries.get(22) != firstCallSummary) {
+                    secondCallSummary = body.metadata.summaries.get(22);
+                } else if (thirdCallSummary == "" && body.metadata.summaries.get(22) != "" && body.metadata.summaries.get(22) != firstCallSummary && body.metadata.summaries.get(22) != secondCallSummary) {
+                    thirdCallSummary = body.metadata.summaries.get(22);
                 }
-                if (thirdCallSummary == "" && body.summaries.get(23) != "" && body.summaries.get(23) != firstCallSummary && body.summaries.get(23) != secondCallSummary) {
-                    thirdCallSummary = body.summaries.get(23);
+                if (thirdCallSummary == "" && body.metadata.summaries.get(23) != "" && body.metadata.summaries.get(23) != firstCallSummary && body.metadata.summaries.get(23) != secondCallSummary) {
+                    thirdCallSummary = body.metadata.summaries.get(23);
                 }
-                if (firstMemberExprSummary == "" && body.summaries.get(20) != "") {
-                    firstMemberExprSummary = body.summaries.get(20);
+                if (firstMemberExprSummary == "" && body.metadata.summaries.get(20) != "") {
+                    firstMemberExprSummary = body.metadata.summaries.get(20);
                 }
-                if (firstBinaryExprSummary == "" && body.summaries.get(21) != "") {
-                    firstBinaryExprSummary = body.summaries.get(21);
+                if (firstBinaryExprSummary == "" && body.metadata.summaries.get(21) != "") {
+                    firstBinaryExprSummary = body.metadata.summaries.get(21);
                 }
                 if (firstFunctionName == "") {
-                    firstFunctionName = body.summaries.get(0);
+                    firstFunctionName = body.metadata.summaries.get(0);
                 }
-                if (firstFunctionTypeParamSummary == "" && body.summaries.get(1) != "") {
-                    firstFunctionTypeParamSummary = body.summaries.get(1);
+                if (firstFunctionTypeParamSummary == "" && body.metadata.summaries.get(1) != "") {
+                    firstFunctionTypeParamSummary = body.metadata.summaries.get(1);
                 }
-                if (firstFunctionParamSummary == "" && body.summaries.get(17) != "") {
-                    firstFunctionParamSummary = body.summaries.get(17);
+                if (firstFunctionParamSummary == "" && body.metadata.summaries.get(17) != "") {
+                    firstFunctionParamSummary = body.metadata.summaries.get(17);
                 }
-                if (firstFunctionReturnSummary == "" && body.summaries.get(18) != "") {
-                    firstFunctionReturnSummary = body.summaries.get(18);
+                if (firstFunctionReturnSummary == "" && body.metadata.summaries.get(18) != "") {
+                    firstFunctionReturnSummary = body.metadata.summaries.get(18);
                 }
                 continue;
             }
 
             if (this.matchKind(TokenKind.Class)) {
                 let body = this.parseClassDecl();
-                declarations.push(new Declaration("ClassDecl", body.summaries.get(2), body.summaries.get(3), body.summaries.get(12), "", body.classMembers));
-                classDecls.push(this.createClassDeclInfo(body.summaries.get(2), topModifiers.counts.get(1) > 0, body.summaries.get(3), body.classMembers, body.counts.get(10), body.counts.get(11), body.counts.get(12), body.summaries.get(5), body.summaries.get(7), body.summaries.get(9)));
+                declarations.push(new Declaration("ClassDecl", body.metadata.summaries.get(2), body.metadata.summaries.get(3), body.metadata.summaries.get(12), "", body.members.classMembers));
+                classDecls.push(this.createClassDeclInfo(body.metadata.summaries.get(2), topModifiers.metadata.counts.get(1) > 0, body.metadata.summaries.get(3), body.members.classMembers, body.metadata.counts.get(10), body.metadata.counts.get(11), body.metadata.counts.get(12), body.metadata.summaries.get(5), body.metadata.summaries.get(7), body.metadata.summaries.get(9)));
                 let memberIndex: i32 = 0;
-                while (memberIndex < body.classMembers.length) {
-                    classMembers.push(body.classMembers.get(memberIndex));
+                while (memberIndex < body.members.classMembers.length) {
+                    classMembers.push(body.members.classMembers.get(memberIndex));
                     memberIndex = memberIndex + 1;
                 }
                 classCount = classCount + 1;
-                letCount = letCount + body.counts.get(4);
-                returnCount = returnCount + body.counts.get(5);
-                ifCount = ifCount + body.counts.get(6);
-                whileCount = whileCount + body.counts.get(7);
-                forCount = forCount + body.counts.get(8);
-                paramCount = paramCount + body.counts.get(9);
-                methodCount = methodCount + body.counts.get(10);
-                fieldCount = fieldCount + body.counts.get(11);
-                constructorCount = constructorCount + body.counts.get(12);
-                publicCount = publicCount + body.counts.get(13);
-                privateCount = privateCount + body.counts.get(14);
-                protectedCount = protectedCount + body.counts.get(15);
-                staticCount = staticCount + body.counts.get(16);
-                asyncCount = asyncCount + body.counts.get(17);
-                newCount = newCount + body.counts.get(18);
-                thisCount = thisCount + body.counts.get(19);
-                dotCount = dotCount + body.counts.get(20);
-                bracketCount = bracketCount + body.counts.get(21);
-                ampCount = ampCount + body.counts.get(22);
-                pipeCount = pipeCount + body.counts.get(23);
-                assignCount = assignCount + body.counts.get(24);
-                callCount = callCount + body.counts.get(37);
-                memberExprCount = memberExprCount + body.counts.get(38);
-                binaryExprCount = binaryExprCount + body.counts.get(39);
-                if (firstCallSummary == "" && body.summaries.get(19) != "") {
-                    firstCallSummary = body.summaries.get(19);
-                } else if (secondCallSummary == "" && body.summaries.get(19) != "" && body.summaries.get(19) != firstCallSummary) {
-                    secondCallSummary = body.summaries.get(19);
-                } else if (thirdCallSummary == "" && body.summaries.get(19) != "" && body.summaries.get(19) != firstCallSummary && body.summaries.get(19) != secondCallSummary) {
-                    thirdCallSummary = body.summaries.get(19);
+                letCount = letCount + body.metadata.counts.get(4);
+                returnCount = returnCount + body.metadata.counts.get(5);
+                ifCount = ifCount + body.metadata.counts.get(6);
+                whileCount = whileCount + body.metadata.counts.get(7);
+                forCount = forCount + body.metadata.counts.get(8);
+                paramCount = paramCount + body.metadata.counts.get(9);
+                methodCount = methodCount + body.metadata.counts.get(10);
+                fieldCount = fieldCount + body.metadata.counts.get(11);
+                constructorCount = constructorCount + body.metadata.counts.get(12);
+                publicCount = publicCount + body.metadata.counts.get(13);
+                privateCount = privateCount + body.metadata.counts.get(14);
+                protectedCount = protectedCount + body.metadata.counts.get(15);
+                staticCount = staticCount + body.metadata.counts.get(16);
+                asyncCount = asyncCount + body.metadata.counts.get(17);
+                newCount = newCount + body.metadata.counts.get(18);
+                thisCount = thisCount + body.metadata.counts.get(19);
+                dotCount = dotCount + body.metadata.counts.get(20);
+                bracketCount = bracketCount + body.metadata.counts.get(21);
+                ampCount = ampCount + body.metadata.counts.get(22);
+                pipeCount = pipeCount + body.metadata.counts.get(23);
+                assignCount = assignCount + body.metadata.counts.get(24);
+                callCount = callCount + body.metadata.counts.get(37);
+                memberExprCount = memberExprCount + body.metadata.counts.get(38);
+                binaryExprCount = binaryExprCount + body.metadata.counts.get(39);
+                if (firstCallSummary == "" && body.metadata.summaries.get(19) != "") {
+                    firstCallSummary = body.metadata.summaries.get(19);
+                } else if (secondCallSummary == "" && body.metadata.summaries.get(19) != "" && body.metadata.summaries.get(19) != firstCallSummary) {
+                    secondCallSummary = body.metadata.summaries.get(19);
+                } else if (thirdCallSummary == "" && body.metadata.summaries.get(19) != "" && body.metadata.summaries.get(19) != firstCallSummary && body.metadata.summaries.get(19) != secondCallSummary) {
+                    thirdCallSummary = body.metadata.summaries.get(19);
                 }
-                if (secondCallSummary == "" && body.summaries.get(22) != "" && body.summaries.get(22) != firstCallSummary) {
-                    secondCallSummary = body.summaries.get(22);
-                } else if (thirdCallSummary == "" && body.summaries.get(22) != "" && body.summaries.get(22) != firstCallSummary && body.summaries.get(22) != secondCallSummary) {
-                    thirdCallSummary = body.summaries.get(22);
+                if (secondCallSummary == "" && body.metadata.summaries.get(22) != "" && body.metadata.summaries.get(22) != firstCallSummary) {
+                    secondCallSummary = body.metadata.summaries.get(22);
+                } else if (thirdCallSummary == "" && body.metadata.summaries.get(22) != "" && body.metadata.summaries.get(22) != firstCallSummary && body.metadata.summaries.get(22) != secondCallSummary) {
+                    thirdCallSummary = body.metadata.summaries.get(22);
                 }
-                if (thirdCallSummary == "" && body.summaries.get(23) != "" && body.summaries.get(23) != firstCallSummary && body.summaries.get(23) != secondCallSummary) {
-                    thirdCallSummary = body.summaries.get(23);
+                if (thirdCallSummary == "" && body.metadata.summaries.get(23) != "" && body.metadata.summaries.get(23) != firstCallSummary && body.metadata.summaries.get(23) != secondCallSummary) {
+                    thirdCallSummary = body.metadata.summaries.get(23);
                 }
-                if (firstMemberExprSummary == "" && body.summaries.get(20) != "") {
-                    firstMemberExprSummary = body.summaries.get(20);
+                if (firstMemberExprSummary == "" && body.metadata.summaries.get(20) != "") {
+                    firstMemberExprSummary = body.metadata.summaries.get(20);
                 }
-                if (firstBinaryExprSummary == "" && body.summaries.get(21) != "") {
-                    firstBinaryExprSummary = body.summaries.get(21);
+                if (firstBinaryExprSummary == "" && body.metadata.summaries.get(21) != "") {
+                    firstBinaryExprSummary = body.metadata.summaries.get(21);
                 }
                 if (firstClassName == "") {
-                    firstClassName = body.summaries.get(2);
+                    firstClassName = body.metadata.summaries.get(2);
                 }
-                if (firstClassTypeParamSummary == "" && body.summaries.get(3) != "") {
-                    firstClassTypeParamSummary = body.summaries.get(3);
+                if (firstClassTypeParamSummary == "" && body.metadata.summaries.get(3) != "") {
+                    firstClassTypeParamSummary = body.metadata.summaries.get(3);
                 }
-                if (firstMethodTypeParamSummary == "" && body.summaries.get(4) != "") {
-                    firstMethodTypeParamSummary = body.summaries.get(4);
+                if (firstMethodTypeParamSummary == "" && body.metadata.summaries.get(4) != "") {
+                    firstMethodTypeParamSummary = body.metadata.summaries.get(4);
                 }
-                if (firstMethodName == "" && body.summaries.get(5) != "") {
-                    firstMethodName = body.summaries.get(5);
+                if (firstMethodName == "" && body.metadata.summaries.get(5) != "") {
+                    firstMethodName = body.metadata.summaries.get(5);
                 }
-                if (firstMethodModifierSummary == "" && body.summaries.get(6) != "") {
-                    firstMethodModifierSummary = body.summaries.get(6);
+                if (firstMethodModifierSummary == "" && body.metadata.summaries.get(6) != "") {
+                    firstMethodModifierSummary = body.metadata.summaries.get(6);
                 }
-                if (firstFieldName == "" && body.summaries.get(7) != "") {
-                    firstFieldName = body.summaries.get(7);
+                if (firstFieldName == "" && body.metadata.summaries.get(7) != "") {
+                    firstFieldName = body.metadata.summaries.get(7);
                 }
-                if (firstFieldModifierSummary == "" && body.summaries.get(8) != "") {
-                    firstFieldModifierSummary = body.summaries.get(8);
+                if (firstFieldModifierSummary == "" && body.metadata.summaries.get(8) != "") {
+                    firstFieldModifierSummary = body.metadata.summaries.get(8);
                 }
-                if (firstConstructorName == "" && body.summaries.get(9) != "") {
-                    firstConstructorName = body.summaries.get(9);
+                if (firstConstructorName == "" && body.metadata.summaries.get(9) != "") {
+                    firstConstructorName = body.metadata.summaries.get(9);
                 }
-                if (firstConstructorModifierSummary == "" && body.summaries.get(10) != "") {
-                    firstConstructorModifierSummary = body.summaries.get(10);
+                if (firstConstructorModifierSummary == "" && body.metadata.summaries.get(10) != "") {
+                    firstConstructorModifierSummary = body.metadata.summaries.get(10);
                 }
-                if (firstMemberModifierSummary == "" && body.summaries.get(11) != "") {
-                    firstMemberModifierSummary = body.summaries.get(11);
+                if (firstMemberModifierSummary == "" && body.metadata.summaries.get(11) != "") {
+                    firstMemberModifierSummary = body.metadata.summaries.get(11);
                 }
-                if (firstMemberSummary == "" && body.summaries.get(12) != "") {
-                    firstMemberSummary = body.summaries.get(12);
+                if (firstMemberSummary == "" && body.metadata.summaries.get(12) != "") {
+                    firstMemberSummary = body.metadata.summaries.get(12);
                 }
-                if (firstFieldTypeSummary == "" && body.summaries.get(13) != "") {
-                    firstFieldTypeSummary = body.summaries.get(13);
+                if (firstFieldTypeSummary == "" && body.metadata.summaries.get(13) != "") {
+                    firstFieldTypeSummary = body.metadata.summaries.get(13);
                 }
-                if (firstMethodReturnSummary == "" && body.summaries.get(14) != "") {
-                    firstMethodReturnSummary = body.summaries.get(14);
+                if (firstMethodReturnSummary == "" && body.metadata.summaries.get(14) != "") {
+                    firstMethodReturnSummary = body.metadata.summaries.get(14);
                 }
-                if (firstMethodParamSummary == "" && body.summaries.get(15) != "") {
-                    firstMethodParamSummary = body.summaries.get(15);
+                if (firstMethodParamSummary == "" && body.metadata.summaries.get(15) != "") {
+                    firstMethodParamSummary = body.metadata.summaries.get(15);
                 }
-                if (firstConstructorParamSummary == "" && body.summaries.get(16) != "") {
-                    firstConstructorParamSummary = body.summaries.get(16);
+                if (firstConstructorParamSummary == "" && body.metadata.summaries.get(16) != "") {
+                    firstConstructorParamSummary = body.metadata.summaries.get(16);
                 }
                 continue;
             }
@@ -296,87 +296,87 @@ export class Parser {
         }
         let classMemberIndex: i32 = 0;
         while (classMemberIndex < classMembers.length) {
-            p.classMembers.push(classMembers.get(classMemberIndex));
+            p.members.classMembers.push(classMembers.get(classMemberIndex));
             classMemberIndex = classMemberIndex + 1;
         }
         let importDeclIndex: i32 = 0;
         while (importDeclIndex < importDecls.length) {
-            p.importDecls.push(importDecls.get(importDeclIndex));
+            p.members.importDecls.push(importDecls.get(importDeclIndex));
             importDeclIndex = importDeclIndex + 1;
         }
         let functionDeclIndex: i32 = 0;
         while (functionDeclIndex < functionDecls.length) {
-            p.functionDecls.push(functionDecls.get(functionDeclIndex));
+            p.members.functionDecls.push(functionDecls.get(functionDeclIndex));
             functionDeclIndex = functionDeclIndex + 1;
         }
         let classDeclIndex: i32 = 0;
         while (classDeclIndex < classDecls.length) {
-            p.classDecls.push(classDecls.get(classDeclIndex));
+            p.members.classDecls.push(classDecls.get(classDeclIndex));
             classDeclIndex = classDeclIndex + 1;
         }
-        p.counts.set(0, importCount);
-        p.counts.set(1, exportCount);
-        p.counts.set(2, functionCount);
-        p.counts.set(3, classCount);
-        p.counts.set(4, letCount);
-        p.counts.set(5, returnCount);
-        p.counts.set(6, ifCount);
-        p.counts.set(7, whileCount);
-        p.counts.set(8, forCount);
-        p.counts.set(9, paramCount);
-        p.counts.set(10, methodCount);
-        p.counts.set(11, fieldCount);
-        p.counts.set(12, constructorCount);
-        p.counts.set(13, publicCount);
-        p.counts.set(14, privateCount);
-        p.counts.set(15, protectedCount);
-        p.counts.set(16, staticCount);
-        p.counts.set(17, asyncCount);
-        p.counts.set(18, newCount);
-        p.counts.set(19, thisCount);
-        p.counts.set(20, dotCount);
-        p.counts.set(21, bracketCount);
-        p.counts.set(22, ampCount);
-        p.counts.set(23, pipeCount);
-        p.counts.set(24, assignCount);
-        p.counts.set(37, callCount);
-        p.counts.set(38, memberExprCount);
-        p.counts.set(39, binaryExprCount);
+        p.metadata.counts.set(0, importCount);
+        p.metadata.counts.set(1, exportCount);
+        p.metadata.counts.set(2, functionCount);
+        p.metadata.counts.set(3, classCount);
+        p.metadata.counts.set(4, letCount);
+        p.metadata.counts.set(5, returnCount);
+        p.metadata.counts.set(6, ifCount);
+        p.metadata.counts.set(7, whileCount);
+        p.metadata.counts.set(8, forCount);
+        p.metadata.counts.set(9, paramCount);
+        p.metadata.counts.set(10, methodCount);
+        p.metadata.counts.set(11, fieldCount);
+        p.metadata.counts.set(12, constructorCount);
+        p.metadata.counts.set(13, publicCount);
+        p.metadata.counts.set(14, privateCount);
+        p.metadata.counts.set(15, protectedCount);
+        p.metadata.counts.set(16, staticCount);
+        p.metadata.counts.set(17, asyncCount);
+        p.metadata.counts.set(18, newCount);
+        p.metadata.counts.set(19, thisCount);
+        p.metadata.counts.set(20, dotCount);
+        p.metadata.counts.set(21, bracketCount);
+        p.metadata.counts.set(22, ampCount);
+        p.metadata.counts.set(23, pipeCount);
+        p.metadata.counts.set(24, assignCount);
+        p.metadata.counts.set(37, callCount);
+        p.metadata.counts.set(38, memberExprCount);
+        p.metadata.counts.set(39, binaryExprCount);
 
-        p.summaries.set(0, firstFunctionName);
-        p.summaries.set(1, firstFunctionTypeParamSummary);
-        p.summaries.set(2, firstClassName);
-        p.summaries.set(3, firstClassTypeParamSummary);
-        p.summaries.set(4, firstMethodTypeParamSummary);
-        p.summaries.set(5, firstMethodName);
-        p.summaries.set(6, firstMethodModifierSummary);
-        p.summaries.set(7, firstFieldName);
-        p.summaries.set(8, firstFieldModifierSummary);
-        p.summaries.set(9, firstConstructorName);
-        p.summaries.set(10, firstConstructorModifierSummary);
-        p.summaries.set(11, firstMemberModifierSummary);
-        p.summaries.set(12, firstMemberSummary);
-        p.summaries.set(13, firstFieldTypeSummary);
-        p.summaries.set(14, firstMethodReturnSummary);
-        p.summaries.set(15, firstMethodParamSummary);
-        p.summaries.set(16, firstConstructorParamSummary);
-        p.summaries.set(17, firstFunctionParamSummary);
-        p.summaries.set(18, firstFunctionReturnSummary);
-        p.summaries.set(19, firstCallSummary);
-        p.summaries.set(20, firstMemberExprSummary);
-        p.summaries.set(21, firstBinaryExprSummary);
-        p.summaries.set(22, secondCallSummary);
-        p.summaries.set(23, thirdCallSummary);
+        p.metadata.summaries.set(0, firstFunctionName);
+        p.metadata.summaries.set(1, firstFunctionTypeParamSummary);
+        p.metadata.summaries.set(2, firstClassName);
+        p.metadata.summaries.set(3, firstClassTypeParamSummary);
+        p.metadata.summaries.set(4, firstMethodTypeParamSummary);
+        p.metadata.summaries.set(5, firstMethodName);
+        p.metadata.summaries.set(6, firstMethodModifierSummary);
+        p.metadata.summaries.set(7, firstFieldName);
+        p.metadata.summaries.set(8, firstFieldModifierSummary);
+        p.metadata.summaries.set(9, firstConstructorName);
+        p.metadata.summaries.set(10, firstConstructorModifierSummary);
+        p.metadata.summaries.set(11, firstMemberModifierSummary);
+        p.metadata.summaries.set(12, firstMemberSummary);
+        p.metadata.summaries.set(13, firstFieldTypeSummary);
+        p.metadata.summaries.set(14, firstMethodReturnSummary);
+        p.metadata.summaries.set(15, firstMethodParamSummary);
+        p.metadata.summaries.set(16, firstConstructorParamSummary);
+        p.metadata.summaries.set(17, firstFunctionParamSummary);
+        p.metadata.summaries.set(18, firstFunctionReturnSummary);
+        p.metadata.summaries.set(19, firstCallSummary);
+        p.metadata.summaries.set(20, firstMemberExprSummary);
+        p.metadata.summaries.set(21, firstBinaryExprSummary);
+        p.metadata.summaries.set(22, secondCallSummary);
+        p.metadata.summaries.set(23, thirdCallSummary);
 
         return p;
     }
 
     private parseImportDecl(): ImportParseResult {
+    private parseImportDecl(): ImportParseResult {
         let clause = "";
         let source = "";
         let defaultImport = "";
         let namespaceImport = "";
-        let namedSpecifiers = new Array<ImportSpecifierInfo>();
         let inSource = false;
         let inNamedSpecifiers = false;
         let seenClauseToken = false;
@@ -384,12 +384,12 @@ export class Parser {
         let pendingLocal = "";
         let awaitingAliasLocal = false;
         let namespacePending = false;
+        let namedSpecifiers = new Array<ImportSpecifierInfo>();
 
         while (!this.isAtEnd()) {
             if (this.matchKind(TokenKind.Semicolon)) {
                 this.flushPendingImportSpecifier(namedSpecifiers, pendingImported, pendingLocal);
-                let emptyArray = new Array<ClassMemberDecl>();
-                let declaration = new Declaration("ImportDecl", clause, source, "", "", emptyArray);
+                let declaration = this.createImportDeclaration(clause, source);
                 let info = new ImportDeclInfo(clause, source, defaultImport, namespaceImport, new Array<ImportSpecifierInfo>());
                 let specifierIndex: i32 = 0;
                 while (specifierIndex < namedSpecifiers.length) {
@@ -506,8 +506,8 @@ export class Parser {
         }
 
         let p = this.createEmptyProgram();
-        p.counts.set(1, exportCount);
-        p.counts.set(17, asyncCount);
+        p.metadata.counts.set(1, exportCount);
+        p.metadata.counts.set(17, asyncCount);
         return p;
     }
 
@@ -560,61 +560,61 @@ export class Parser {
 
         if (this.matchKind(TokenKind.LBrace)) {
             let body = this.scanBlockCounts();
-            letCount = body.counts.get(4);
-            returnCount = body.counts.get(5);
-            ifCount = body.counts.get(6);
-            whileCount = body.counts.get(7);
-            forCount = body.counts.get(8);
-            newCount = body.counts.get(18);
-            thisCount = body.counts.get(19);
-            dotCount = body.counts.get(20);
-            bracketCount = bracketCount + body.counts.get(21);
-            ampCount = body.counts.get(22);
-            pipeCount = body.counts.get(23);
-            assignCount = body.counts.get(24);
-            callCount = body.counts.get(37);
-            memberExprCount = body.counts.get(38);
-            binaryExprCount = body.counts.get(39);
-            firstCallSummary = body.summaries.get(19);
-            secondCallSummary = body.summaries.get(22);
-            thirdCallSummary = body.summaries.get(23);
-            firstMemberExprSummary = body.summaries.get(20);
-            firstBinaryExprSummary = body.summaries.get(21);
+            letCount = body.metadata.counts.get(4);
+            returnCount = body.metadata.counts.get(5);
+            ifCount = body.metadata.counts.get(6);
+            whileCount = body.metadata.counts.get(7);
+            forCount = body.metadata.counts.get(8);
+            newCount = body.metadata.counts.get(18);
+            thisCount = body.metadata.counts.get(19);
+            dotCount = body.metadata.counts.get(20);
+            bracketCount = bracketCount + body.metadata.counts.get(21);
+            ampCount = body.metadata.counts.get(22);
+            pipeCount = body.metadata.counts.get(23);
+            assignCount = body.metadata.counts.get(24);
+            callCount = body.metadata.counts.get(37);
+            memberExprCount = body.metadata.counts.get(38);
+            binaryExprCount = body.metadata.counts.get(39);
+            firstCallSummary = body.metadata.summaries.get(19);
+            secondCallSummary = body.metadata.summaries.get(22);
+            thirdCallSummary = body.metadata.summaries.get(23);
+            firstMemberExprSummary = body.metadata.summaries.get(20);
+            firstBinaryExprSummary = body.metadata.summaries.get(21);
         }
 
         let p = this.createEmptyProgram();
-        p.counts.set(4, letCount);
-        p.counts.set(5, returnCount);
-        p.counts.set(6, ifCount);
-        p.counts.set(7, whileCount);
-        p.counts.set(8, forCount);
-        p.counts.set(9, paramCount);
-        p.counts.set(18, newCount);
-        p.counts.set(19, thisCount);
-        p.counts.set(20, dotCount);
-        p.counts.set(21, bracketCount);
-        p.counts.set(22, ampCount);
-        p.counts.set(23, pipeCount);
-        p.counts.set(24, assignCount);
-        p.counts.set(37, callCount);
-        p.counts.set(38, memberExprCount);
-        p.counts.set(39, binaryExprCount);
+        p.metadata.counts.set(4, letCount);
+        p.metadata.counts.set(5, returnCount);
+        p.metadata.counts.set(6, ifCount);
+        p.metadata.counts.set(7, whileCount);
+        p.metadata.counts.set(8, forCount);
+        p.metadata.counts.set(9, paramCount);
+        p.metadata.counts.set(18, newCount);
+        p.metadata.counts.set(19, thisCount);
+        p.metadata.counts.set(20, dotCount);
+        p.metadata.counts.set(21, bracketCount);
+        p.metadata.counts.set(22, ampCount);
+        p.metadata.counts.set(23, pipeCount);
+        p.metadata.counts.set(24, assignCount);
+        p.metadata.counts.set(37, callCount);
+        p.metadata.counts.set(38, memberExprCount);
+        p.metadata.counts.set(39, binaryExprCount);
 
-        p.summaries.set(0, functionName);
-        p.summaries.set(1, functionTypeParamSummary);
-        p.summaries.set(17, functionParamSummary);
-        p.summaries.set(18, functionReturnSummary);
-        p.summaries.set(19, firstCallSummary);
-        p.summaries.set(20, firstMemberExprSummary);
-        p.summaries.set(21, firstBinaryExprSummary);
-        p.summaries.set(22, secondCallSummary);
-        p.summaries.set(23, thirdCallSummary);
-        p.counts.set(25, letCount);
-        p.counts.set(26, returnCount);
-        p.counts.set(27, ifCount);
-        p.counts.set(28, whileCount);
-        p.counts.set(29, forCount);
-        p.counts.set(30, assignCount);
+        p.metadata.summaries.set(0, functionName);
+        p.metadata.summaries.set(1, functionTypeParamSummary);
+        p.metadata.summaries.set(17, functionParamSummary);
+        p.metadata.summaries.set(18, functionReturnSummary);
+        p.metadata.summaries.set(19, firstCallSummary);
+        p.metadata.summaries.set(20, firstMemberExprSummary);
+        p.metadata.summaries.set(21, firstBinaryExprSummary);
+        p.metadata.summaries.set(22, secondCallSummary);
+        p.metadata.summaries.set(23, thirdCallSummary);
+        p.metadata.counts.set(25, letCount);
+        p.metadata.counts.set(26, returnCount);
+        p.metadata.counts.set(27, ifCount);
+        p.metadata.counts.set(28, whileCount);
+        p.metadata.counts.set(29, forCount);
+        p.metadata.counts.set(30, assignCount);
 
         return p;
     }
@@ -677,8 +677,8 @@ export class Parser {
 
         if (!this.matchKind(TokenKind.LBrace)) {
             let p = this.createEmptyProgram();
-            p.summaries.set(2, className);
-            p.summaries.set(3, classTypeParamSummary);
+            p.metadata.summaries.set(2, className);
+            p.metadata.summaries.set(3, classTypeParamSummary);
             return p;
         }
 
@@ -700,89 +700,89 @@ export class Parser {
 
             if (depth == 1) {
                 let modifierState = this.consumeClassModifiers();
-                publicCount = publicCount + modifierState.counts.get(13);
-                privateCount = privateCount + modifierState.counts.get(14);
-                protectedCount = protectedCount + modifierState.counts.get(15);
-                staticCount = staticCount + modifierState.counts.get(16);
-                asyncCount = asyncCount + modifierState.counts.get(17);
+                publicCount = publicCount + modifierState.metadata.counts.get(13);
+                privateCount = privateCount + modifierState.metadata.counts.get(14);
+                protectedCount = protectedCount + modifierState.metadata.counts.get(15);
+                staticCount = staticCount + modifierState.metadata.counts.get(16);
+                asyncCount = asyncCount + modifierState.metadata.counts.get(17);
 
                 kind = this.peek().kind;
                 if (kind == TokenKind.Identifier || kind == TokenKind.Constructor) {
-                    let member = this.parseClassMember(modifierState.summaries.get(11));
-                    let memberFlags = this.parseModifierFlags(member.summaries.get(11));
-                    let memberStmtCount: i32 = member.counts.get(31);
-                    memberStmtCount = memberStmtCount + member.counts.get(32);
-                    memberStmtCount = memberStmtCount + member.counts.get(33);
-                    memberStmtCount = memberStmtCount + member.counts.get(34);
-                    memberStmtCount = memberStmtCount + member.counts.get(35);
-                    memberStmtCount = memberStmtCount + member.counts.get(36);
+                    let member = this.parseClassMember(modifierState.metadata.summaries.get(11));
+                    let memberFlags = this.parseModifierFlags(member.metadata.summaries.get(11));
+                    let memberStmtCount: i32 = member.metadata.counts.get(31);
+                    memberStmtCount = memberStmtCount + member.metadata.counts.get(32);
+                    memberStmtCount = memberStmtCount + member.metadata.counts.get(33);
+                    memberStmtCount = memberStmtCount + member.metadata.counts.get(34);
+                    memberStmtCount = memberStmtCount + member.metadata.counts.get(35);
+                    memberStmtCount = memberStmtCount + member.metadata.counts.get(36);
                     let memberDecl = new ClassMemberDecl(
-                        member.summaries.get(12),
-                        member.summaries.get(5),
-                        member.summaries.get(11),
-                        memberFlags.counts.get(13) > 0,
-                        memberFlags.counts.get(14) > 0,
-                        memberFlags.counts.get(15) > 0,
-                        memberFlags.counts.get(16) > 0,
-                        memberFlags.counts.get(17) > 0,
+                        member.metadata.summaries.get(12),
+                        member.metadata.summaries.get(5),
+                        member.metadata.summaries.get(11),
+                        memberFlags.metadata.counts.get(13) > 0,
+                        memberFlags.metadata.counts.get(14) > 0,
+                        memberFlags.metadata.counts.get(15) > 0,
+                        memberFlags.metadata.counts.get(16) > 0,
+                        memberFlags.metadata.counts.get(17) > 0,
                         false,
-                        member.summaries.get(4),
-                        this.buildTypeParameterList(member.summaries.get(4)),
-                        member.summaries.get(15),
-                        this.buildParameterList(member.summaries.get(15)),
-                        member.summaries.get(14),
-                        this.extractTypeText(member.summaries.get(14)),
-                        member.summaries.get(13),
-                        this.extractTypeText(member.summaries.get(13)),
+                        member.metadata.summaries.get(4),
+                        this.buildTypeParameterList(member.metadata.summaries.get(4)),
+                        member.metadata.summaries.get(15),
+                        this.buildParameterList(member.metadata.summaries.get(15)),
+                        member.metadata.summaries.get(14),
+                        this.extractTypeText(member.metadata.summaries.get(14)),
+                        member.metadata.summaries.get(13),
+                        this.extractTypeText(member.metadata.summaries.get(13)),
                         memberStmtCount > 0,
                         memberStmtCount,
-                        member.counts.get(31),
-                        member.counts.get(32),
-                        member.counts.get(33),
-                        member.counts.get(34),
-                        member.counts.get(35),
-                        member.counts.get(36)
+                        member.metadata.counts.get(31),
+                        member.metadata.counts.get(32),
+                        member.metadata.counts.get(33),
+                        member.metadata.counts.get(34),
+                        member.metadata.counts.get(35),
+                        member.metadata.counts.get(36)
                     );
-                    if (member.summaries.get(9) != "") {
-                        let constructorFlags = this.parseModifierFlags(member.summaries.get(10));
+                    if (member.metadata.summaries.get(9) != "") {
+                        let constructorFlags = this.parseModifierFlags(member.metadata.summaries.get(10));
                         memberDecl = new ClassMemberDecl(
-                            member.summaries.get(12),
-                            member.summaries.get(9),
-                            member.summaries.get(10),
-                            constructorFlags.counts.get(13) > 0,
-                            constructorFlags.counts.get(14) > 0,
-                            constructorFlags.counts.get(15) > 0,
-                            constructorFlags.counts.get(16) > 0,
-                            constructorFlags.counts.get(17) > 0,
+                            member.metadata.summaries.get(12),
+                            member.metadata.summaries.get(9),
+                            member.metadata.summaries.get(10),
+                            constructorFlags.metadata.counts.get(13) > 0,
+                            constructorFlags.metadata.counts.get(14) > 0,
+                            constructorFlags.metadata.counts.get(15) > 0,
+                            constructorFlags.metadata.counts.get(16) > 0,
+                            constructorFlags.metadata.counts.get(17) > 0,
                             true,
-                            member.summaries.get(4),
-                            this.buildTypeParameterList(member.summaries.get(4)),
-                            member.summaries.get(16),
-                            this.buildParameterList(member.summaries.get(16)),
+                            member.metadata.summaries.get(4),
+                            this.buildTypeParameterList(member.metadata.summaries.get(4)),
+                            member.metadata.summaries.get(16),
+                            this.buildParameterList(member.metadata.summaries.get(16)),
                             "",
                             "",
                             "",
                             "",
                             memberStmtCount > 0,
                             memberStmtCount,
-                            member.counts.get(31),
-                            member.counts.get(32),
-                            member.counts.get(33),
-                            member.counts.get(34),
-                            member.counts.get(35),
-                            member.counts.get(36)
+                            member.metadata.counts.get(31),
+                            member.metadata.counts.get(32),
+                            member.metadata.counts.get(33),
+                            member.metadata.counts.get(34),
+                            member.metadata.counts.get(35),
+                            member.metadata.counts.get(36)
                         );
-                    } else if (member.summaries.get(7) != "") {
-                        let fieldFlags = this.parseModifierFlags(member.summaries.get(11));
+                    } else if (member.metadata.summaries.get(7) != "") {
+                        let fieldFlags = this.parseModifierFlags(member.metadata.summaries.get(11));
                         memberDecl = new ClassMemberDecl(
-                            member.summaries.get(12),
-                            member.summaries.get(7),
-                            member.summaries.get(11),
-                            fieldFlags.counts.get(13) > 0,
-                            fieldFlags.counts.get(14) > 0,
-                            fieldFlags.counts.get(15) > 0,
-                            fieldFlags.counts.get(16) > 0,
-                            fieldFlags.counts.get(17) > 0,
+                            member.metadata.summaries.get(12),
+                            member.metadata.summaries.get(7),
+                            member.metadata.summaries.get(11),
+                            fieldFlags.metadata.counts.get(13) > 0,
+                            fieldFlags.metadata.counts.get(14) > 0,
+                            fieldFlags.metadata.counts.get(15) > 0,
+                            fieldFlags.metadata.counts.get(16) > 0,
+                            fieldFlags.metadata.counts.get(17) > 0,
                             false,
                             "",
                             new Array<string>(),
@@ -790,8 +790,8 @@ export class Parser {
                             new Array<ParameterInfo>(),
                             "",
                             "",
-                            member.summaries.get(13),
-                            this.extractTypeText(member.summaries.get(13)),
+                            member.metadata.summaries.get(13),
+                            this.extractTypeText(member.metadata.summaries.get(13)),
                             false,
                             0,
                             0,
@@ -803,78 +803,78 @@ export class Parser {
                         );
                     }
                     members.push(memberDecl);
-                    letCount = letCount + member.counts.get(4);
-                    returnCount = returnCount + member.counts.get(5);
-                    ifCount = ifCount + member.counts.get(6);
-                    whileCount = whileCount + member.counts.get(7);
-                    forCount = forCount + member.counts.get(8);
-                    paramCount = paramCount + member.counts.get(9);
-                    methodCount = methodCount + member.counts.get(10);
-                    fieldCount = fieldCount + member.counts.get(11);
-                    constructorCount = constructorCount + member.counts.get(12);
-                    newCount = newCount + member.counts.get(18);
-                    thisCount = thisCount + member.counts.get(19);
-                    dotCount = dotCount + member.counts.get(20);
-                    bracketCount = bracketCount + member.counts.get(21);
-                    ampCount = ampCount + member.counts.get(22);
-                    pipeCount = pipeCount + member.counts.get(23);
-                    assignCount = assignCount + member.counts.get(24);
-                    callCount = callCount + member.counts.get(37);
-                    memberExprCount = memberExprCount + member.counts.get(38);
-                    binaryExprCount = binaryExprCount + member.counts.get(39);
-                    if (firstCallSummary == "" && member.summaries.get(19) != "") {
-                        firstCallSummary = member.summaries.get(19);
+                    letCount = letCount + member.metadata.counts.get(4);
+                    returnCount = returnCount + member.metadata.counts.get(5);
+                    ifCount = ifCount + member.metadata.counts.get(6);
+                    whileCount = whileCount + member.metadata.counts.get(7);
+                    forCount = forCount + member.metadata.counts.get(8);
+                    paramCount = paramCount + member.metadata.counts.get(9);
+                    methodCount = methodCount + member.metadata.counts.get(10);
+                    fieldCount = fieldCount + member.metadata.counts.get(11);
+                    constructorCount = constructorCount + member.metadata.counts.get(12);
+                    newCount = newCount + member.metadata.counts.get(18);
+                    thisCount = thisCount + member.metadata.counts.get(19);
+                    dotCount = dotCount + member.metadata.counts.get(20);
+                    bracketCount = bracketCount + member.metadata.counts.get(21);
+                    ampCount = ampCount + member.metadata.counts.get(22);
+                    pipeCount = pipeCount + member.metadata.counts.get(23);
+                    assignCount = assignCount + member.metadata.counts.get(24);
+                    callCount = callCount + member.metadata.counts.get(37);
+                    memberExprCount = memberExprCount + member.metadata.counts.get(38);
+                    binaryExprCount = binaryExprCount + member.metadata.counts.get(39);
+                    if (firstCallSummary == "" && member.metadata.summaries.get(19) != "") {
+                        firstCallSummary = member.metadata.summaries.get(19);
                     }
-                    if (secondCallSummary == "" && member.summaries.get(22) != "") {
-                        secondCallSummary = member.summaries.get(22);
+                    if (secondCallSummary == "" && member.metadata.summaries.get(22) != "") {
+                        secondCallSummary = member.metadata.summaries.get(22);
                     }
-                    if (thirdCallSummary == "" && member.summaries.get(23) != "") {
-                        thirdCallSummary = member.summaries.get(23);
+                    if (thirdCallSummary == "" && member.metadata.summaries.get(23) != "") {
+                        thirdCallSummary = member.metadata.summaries.get(23);
                     }
-                    if (firstMemberExprSummary == "" && member.summaries.get(20) != "") {
-                        firstMemberExprSummary = member.summaries.get(20);
+                    if (firstMemberExprSummary == "" && member.metadata.summaries.get(20) != "") {
+                        firstMemberExprSummary = member.metadata.summaries.get(20);
                     }
-                    if (firstBinaryExprSummary == "" && member.summaries.get(21) != "") {
-                        firstBinaryExprSummary = member.summaries.get(21);
+                    if (firstBinaryExprSummary == "" && member.metadata.summaries.get(21) != "") {
+                        firstBinaryExprSummary = member.metadata.summaries.get(21);
                     }
-                    if (firstMethodTypeParamSummary == "" && member.summaries.get(4) != "") {
-                        firstMethodTypeParamSummary = member.summaries.get(4);
+                    if (firstMethodTypeParamSummary == "" && member.metadata.summaries.get(4) != "") {
+                        firstMethodTypeParamSummary = member.metadata.summaries.get(4);
                     }
-                    if (firstMethodName == "" && member.summaries.get(5) != "") {
-                        firstMethodName = member.summaries.get(5);
+                    if (firstMethodName == "" && member.metadata.summaries.get(5) != "") {
+                        firstMethodName = member.metadata.summaries.get(5);
                     }
-                    if (firstMethodModifierSummary == "" && member.summaries.get(6) != "") {
-                        firstMethodModifierSummary = member.summaries.get(6);
+                    if (firstMethodModifierSummary == "" && member.metadata.summaries.get(6) != "") {
+                        firstMethodModifierSummary = member.metadata.summaries.get(6);
                     }
-                    if (firstFieldName == "" && member.summaries.get(7) != "") {
-                        firstFieldName = member.summaries.get(7);
+                    if (firstFieldName == "" && member.metadata.summaries.get(7) != "") {
+                        firstFieldName = member.metadata.summaries.get(7);
                     }
-                    if (firstFieldModifierSummary == "" && member.summaries.get(8) != "") {
-                        firstFieldModifierSummary = member.summaries.get(8);
+                    if (firstFieldModifierSummary == "" && member.metadata.summaries.get(8) != "") {
+                        firstFieldModifierSummary = member.metadata.summaries.get(8);
                     }
-                    if (firstConstructorName == "" && member.summaries.get(9) != "") {
-                        firstConstructorName = member.summaries.get(9);
+                    if (firstConstructorName == "" && member.metadata.summaries.get(9) != "") {
+                        firstConstructorName = member.metadata.summaries.get(9);
                     }
-                    if (firstConstructorModifierSummary == "" && member.summaries.get(10) != "") {
-                        firstConstructorModifierSummary = member.summaries.get(10);
+                    if (firstConstructorModifierSummary == "" && member.metadata.summaries.get(10) != "") {
+                        firstConstructorModifierSummary = member.metadata.summaries.get(10);
                     }
-                    if (firstMemberModifierSummary == "" && member.summaries.get(11) != "") {
-                        firstMemberModifierSummary = member.summaries.get(11);
+                    if (firstMemberModifierSummary == "" && member.metadata.summaries.get(11) != "") {
+                        firstMemberModifierSummary = member.metadata.summaries.get(11);
                     }
-                    if (firstMemberSummary == "" && member.summaries.get(12) != "") {
-                        firstMemberSummary = member.summaries.get(12);
+                    if (firstMemberSummary == "" && member.metadata.summaries.get(12) != "") {
+                        firstMemberSummary = member.metadata.summaries.get(12);
                     }
-                    if (firstFieldTypeSummary == "" && member.summaries.get(13) != "") {
-                        firstFieldTypeSummary = member.summaries.get(13);
+                    if (firstFieldTypeSummary == "" && member.metadata.summaries.get(13) != "") {
+                        firstFieldTypeSummary = member.metadata.summaries.get(13);
                     }
-                    if (firstMethodReturnSummary == "" && member.summaries.get(14) != "") {
-                        firstMethodReturnSummary = member.summaries.get(14);
+                    if (firstMethodReturnSummary == "" && member.metadata.summaries.get(14) != "") {
+                        firstMethodReturnSummary = member.metadata.summaries.get(14);
                     }
-                    if (firstMethodParamSummary == "" && member.summaries.get(15) != "") {
-                        firstMethodParamSummary = member.summaries.get(15);
+                    if (firstMethodParamSummary == "" && member.metadata.summaries.get(15) != "") {
+                        firstMethodParamSummary = member.metadata.summaries.get(15);
                     }
-                    if (firstConstructorParamSummary == "" && member.summaries.get(16) != "") {
-                        firstConstructorParamSummary = member.summaries.get(16);
+                    if (firstConstructorParamSummary == "" && member.metadata.summaries.get(16) != "") {
+                        firstConstructorParamSummary = member.metadata.summaries.get(16);
                     }
                     continue;
                 }
@@ -886,54 +886,54 @@ export class Parser {
         let p = this.createEmptyProgram();
         let parsedMemberIndex: i32 = 0;
         while (parsedMemberIndex < members.length) {
-            p.classMembers.push(members.get(parsedMemberIndex));
+            p.members.classMembers.push(members.get(parsedMemberIndex));
             parsedMemberIndex = parsedMemberIndex + 1;
         }
-        p.counts.set(4, letCount);
-        p.counts.set(5, returnCount);
-        p.counts.set(6, ifCount);
-        p.counts.set(7, whileCount);
-        p.counts.set(8, forCount);
-        p.counts.set(9, paramCount);
-        p.counts.set(10, methodCount);
-        p.counts.set(11, fieldCount);
-        p.counts.set(12, constructorCount);
-        p.counts.set(13, publicCount);
-        p.counts.set(14, privateCount);
-        p.counts.set(15, protectedCount);
-        p.counts.set(16, staticCount);
-        p.counts.set(17, asyncCount);
-        p.counts.set(18, newCount);
-        p.counts.set(19, thisCount);
-        p.counts.set(20, dotCount);
-        p.counts.set(21, bracketCount);
-        p.counts.set(22, ampCount);
-        p.counts.set(23, pipeCount);
-        p.counts.set(24, assignCount);
-        p.counts.set(37, callCount);
-        p.counts.set(38, memberExprCount);
-        p.counts.set(39, binaryExprCount);
+        p.metadata.counts.set(4, letCount);
+        p.metadata.counts.set(5, returnCount);
+        p.metadata.counts.set(6, ifCount);
+        p.metadata.counts.set(7, whileCount);
+        p.metadata.counts.set(8, forCount);
+        p.metadata.counts.set(9, paramCount);
+        p.metadata.counts.set(10, methodCount);
+        p.metadata.counts.set(11, fieldCount);
+        p.metadata.counts.set(12, constructorCount);
+        p.metadata.counts.set(13, publicCount);
+        p.metadata.counts.set(14, privateCount);
+        p.metadata.counts.set(15, protectedCount);
+        p.metadata.counts.set(16, staticCount);
+        p.metadata.counts.set(17, asyncCount);
+        p.metadata.counts.set(18, newCount);
+        p.metadata.counts.set(19, thisCount);
+        p.metadata.counts.set(20, dotCount);
+        p.metadata.counts.set(21, bracketCount);
+        p.metadata.counts.set(22, ampCount);
+        p.metadata.counts.set(23, pipeCount);
+        p.metadata.counts.set(24, assignCount);
+        p.metadata.counts.set(37, callCount);
+        p.metadata.counts.set(38, memberExprCount);
+        p.metadata.counts.set(39, binaryExprCount);
 
-        p.summaries.set(2, className);
-        p.summaries.set(3, classTypeParamSummary);
-        p.summaries.set(4, firstMethodTypeParamSummary);
-        p.summaries.set(5, firstMethodName);
-        p.summaries.set(6, firstMethodModifierSummary);
-        p.summaries.set(7, firstFieldName);
-        p.summaries.set(8, firstFieldModifierSummary);
-        p.summaries.set(9, firstConstructorName);
-        p.summaries.set(10, firstConstructorModifierSummary);
-        p.summaries.set(11, firstMemberModifierSummary);
-        p.summaries.set(12, firstMemberSummary);
-        p.summaries.set(13, firstFieldTypeSummary);
-        p.summaries.set(14, firstMethodReturnSummary);
-        p.summaries.set(15, firstMethodParamSummary);
-        p.summaries.set(16, firstConstructorParamSummary);
-        p.summaries.set(19, firstCallSummary);
-        p.summaries.set(20, firstMemberExprSummary);
-        p.summaries.set(21, firstBinaryExprSummary);
-        p.summaries.set(22, secondCallSummary);
-        p.summaries.set(23, thirdCallSummary);
+        p.metadata.summaries.set(2, className);
+        p.metadata.summaries.set(3, classTypeParamSummary);
+        p.metadata.summaries.set(4, firstMethodTypeParamSummary);
+        p.metadata.summaries.set(5, firstMethodName);
+        p.metadata.summaries.set(6, firstMethodModifierSummary);
+        p.metadata.summaries.set(7, firstFieldName);
+        p.metadata.summaries.set(8, firstFieldModifierSummary);
+        p.metadata.summaries.set(9, firstConstructorName);
+        p.metadata.summaries.set(10, firstConstructorModifierSummary);
+        p.metadata.summaries.set(11, firstMemberModifierSummary);
+        p.metadata.summaries.set(12, firstMemberSummary);
+        p.metadata.summaries.set(13, firstFieldTypeSummary);
+        p.metadata.summaries.set(14, firstMethodReturnSummary);
+        p.metadata.summaries.set(15, firstMethodParamSummary);
+        p.metadata.summaries.set(16, firstConstructorParamSummary);
+        p.metadata.summaries.set(19, firstCallSummary);
+        p.metadata.summaries.set(20, firstMemberExprSummary);
+        p.metadata.summaries.set(21, firstBinaryExprSummary);
+        p.metadata.summaries.set(22, secondCallSummary);
+        p.metadata.summaries.set(23, thirdCallSummary);
 
         return p;
     }
@@ -982,12 +982,12 @@ export class Parser {
         }
 
         let p = this.createEmptyProgram();
-        p.counts.set(13, publicCount);
-        p.counts.set(14, privateCount);
-        p.counts.set(15, protectedCount);
-        p.counts.set(16, staticCount);
-        p.counts.set(17, asyncCount);
-        p.summaries.set(11, summary);
+        p.metadata.counts.set(13, publicCount);
+        p.metadata.counts.set(14, privateCount);
+        p.metadata.counts.set(15, protectedCount);
+        p.metadata.counts.set(16, staticCount);
+        p.metadata.counts.set(17, asyncCount);
+        p.metadata.summaries.set(11, summary);
         return p;
     }
 
@@ -1050,26 +1050,26 @@ export class Parser {
 
             if (this.matchKind(TokenKind.LBrace)) {
                 let body = this.scanBlockCounts();
-                letCount = body.counts.get(4);
-                returnCount = body.counts.get(5);
-                ifCount = body.counts.get(6);
-                whileCount = body.counts.get(7);
-                forCount = body.counts.get(8);
-                newCount = body.counts.get(18);
-                thisCount = body.counts.get(19);
-                dotCount = body.counts.get(20);
-                bracketCount = body.counts.get(21);
-                ampCount = body.counts.get(22);
-                pipeCount = body.counts.get(23);
-                assignCount = body.counts.get(24);
-                callCount = body.counts.get(37);
-                memberExprCount = body.counts.get(38);
-                binaryExprCount = body.counts.get(39);
-                firstCallSummary = body.summaries.get(19);
-                secondCallSummary = body.summaries.get(22);
-                thirdCallSummary = body.summaries.get(23);
-                firstMemberExprSummary = body.summaries.get(20);
-                firstBinaryExprSummary = body.summaries.get(21);
+                letCount = body.metadata.counts.get(4);
+                returnCount = body.metadata.counts.get(5);
+                ifCount = body.metadata.counts.get(6);
+                whileCount = body.metadata.counts.get(7);
+                forCount = body.metadata.counts.get(8);
+                newCount = body.metadata.counts.get(18);
+                thisCount = body.metadata.counts.get(19);
+                dotCount = body.metadata.counts.get(20);
+                bracketCount = body.metadata.counts.get(21);
+                ampCount = body.metadata.counts.get(22);
+                pipeCount = body.metadata.counts.get(23);
+                assignCount = body.metadata.counts.get(24);
+                callCount = body.metadata.counts.get(37);
+                memberExprCount = body.metadata.counts.get(38);
+                binaryExprCount = body.metadata.counts.get(39);
+                firstCallSummary = body.metadata.summaries.get(19);
+                secondCallSummary = body.metadata.summaries.get(22);
+                thirdCallSummary = body.metadata.summaries.get(23);
+                firstMemberExprSummary = body.metadata.summaries.get(20);
+                firstBinaryExprSummary = body.metadata.summaries.get(21);
             }
 
             bracketCount = bracketCount + signatureBracketCount;
@@ -1092,47 +1092,47 @@ export class Parser {
             }
 
             let p = this.createEmptyProgram();
-            p.counts.set(4, letCount);
-            p.counts.set(5, returnCount);
-            p.counts.set(6, ifCount);
-            p.counts.set(7, whileCount);
-            p.counts.set(8, forCount);
-            p.counts.set(9, paramCount);
-            p.counts.set(10, methodCount);
-            p.counts.set(12, constructorCount);
-            p.counts.set(18, newCount);
-            p.counts.set(19, thisCount);
-            p.counts.set(20, dotCount);
-            p.counts.set(21, bracketCount);
-            p.counts.set(22, ampCount);
-            p.counts.set(23, pipeCount);
-            p.counts.set(24, assignCount);
-            p.counts.set(31, letCount);
-            p.counts.set(37, callCount);
-            p.counts.set(38, memberExprCount);
-            p.counts.set(39, binaryExprCount);
-            p.counts.set(31, letCount);
-            p.counts.set(32, returnCount);
-            p.counts.set(33, ifCount);
-            p.counts.set(34, whileCount);
-            p.counts.set(35, forCount);
-            p.counts.set(36, assignCount);
+            p.metadata.counts.set(4, letCount);
+            p.metadata.counts.set(5, returnCount);
+            p.metadata.counts.set(6, ifCount);
+            p.metadata.counts.set(7, whileCount);
+            p.metadata.counts.set(8, forCount);
+            p.metadata.counts.set(9, paramCount);
+            p.metadata.counts.set(10, methodCount);
+            p.metadata.counts.set(12, constructorCount);
+            p.metadata.counts.set(18, newCount);
+            p.metadata.counts.set(19, thisCount);
+            p.metadata.counts.set(20, dotCount);
+            p.metadata.counts.set(21, bracketCount);
+            p.metadata.counts.set(22, ampCount);
+            p.metadata.counts.set(23, pipeCount);
+            p.metadata.counts.set(24, assignCount);
+            p.metadata.counts.set(31, letCount);
+            p.metadata.counts.set(37, callCount);
+            p.metadata.counts.set(38, memberExprCount);
+            p.metadata.counts.set(39, binaryExprCount);
+            p.metadata.counts.set(31, letCount);
+            p.metadata.counts.set(32, returnCount);
+            p.metadata.counts.set(33, ifCount);
+            p.metadata.counts.set(34, whileCount);
+            p.metadata.counts.set(35, forCount);
+            p.metadata.counts.set(36, assignCount);
 
-            p.summaries.set(4, methodTypeParamSummary);
-            p.summaries.set(5, firstMethodName);
-            p.summaries.set(6, firstMemberModifierSummary);
-            p.summaries.set(9, firstConstructorName);
-            p.summaries.set(10, firstConstructorModifierSummary);
-            p.summaries.set(11, firstMemberModifierSummary);
-            p.summaries.set(12, memberLabel);
-            p.summaries.set(14, methodReturnSummary);
-            p.summaries.set(15, paramSummary);
-            p.summaries.set(16, firstConstructorParamSummary);
-            p.summaries.set(19, firstCallSummary);
-            p.summaries.set(20, firstMemberExprSummary);
-            p.summaries.set(21, firstBinaryExprSummary);
-            p.summaries.set(22, secondCallSummary);
-            p.summaries.set(23, thirdCallSummary);
+            p.metadata.summaries.set(4, methodTypeParamSummary);
+            p.metadata.summaries.set(5, firstMethodName);
+            p.metadata.summaries.set(6, firstMemberModifierSummary);
+            p.metadata.summaries.set(9, firstConstructorName);
+            p.metadata.summaries.set(10, firstConstructorModifierSummary);
+            p.metadata.summaries.set(11, firstMemberModifierSummary);
+            p.metadata.summaries.set(12, memberLabel);
+            p.metadata.summaries.set(14, methodReturnSummary);
+            p.metadata.summaries.set(15, paramSummary);
+            p.metadata.summaries.set(16, firstConstructorParamSummary);
+            p.metadata.summaries.set(19, firstCallSummary);
+            p.metadata.summaries.set(20, firstMemberExprSummary);
+            p.metadata.summaries.set(21, firstBinaryExprSummary);
+            p.metadata.summaries.set(22, secondCallSummary);
+            p.metadata.summaries.set(23, thirdCallSummary);
 
             return p;
         }
@@ -1146,13 +1146,13 @@ export class Parser {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
             let p = this.createEmptyProgram();
-            p.counts.set(11, 1);
-            p.counts.set(21, fieldBracketCount);
-            p.summaries.set(7, memberName);
-            p.summaries.set(8, modifierSummary);
-            p.summaries.set(11, modifierSummary);
-            p.summaries.set(12, fieldSummary);
-            p.summaries.set(13, fieldTypeSummary);
+            p.metadata.counts.set(11, 1);
+            p.metadata.counts.set(21, fieldBracketCount);
+            p.metadata.summaries.set(7, memberName);
+            p.metadata.summaries.set(8, modifierSummary);
+            p.metadata.summaries.set(11, modifierSummary);
+            p.metadata.summaries.set(12, fieldSummary);
+            p.metadata.summaries.set(13, fieldTypeSummary);
             return p;
         }
 
@@ -1163,16 +1163,16 @@ export class Parser {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
             let p = this.createEmptyProgram();
-            p.counts.set(11, 1);
-            p.summaries.set(7, memberName);
-            p.summaries.set(8, modifierSummary);
-            p.summaries.set(11, modifierSummary);
-            p.summaries.set(12, fieldSummary);
+            p.metadata.counts.set(11, 1);
+            p.metadata.summaries.set(7, memberName);
+            p.metadata.summaries.set(8, modifierSummary);
+            p.metadata.summaries.set(11, modifierSummary);
+            p.metadata.summaries.set(12, fieldSummary);
             return p;
         }
 
         let p = this.createEmptyProgram();
-        p.summaries.set(11, modifierSummary);
+        p.metadata.summaries.set(11, modifierSummary);
         return p;
     }
 
@@ -1446,7 +1446,7 @@ export class Parser {
             let clonedReturnTypeText = this.sliceText(sourceMember.returnTypeText, 0, sourceMember.returnTypeText.length);
             let clonedTypeText = this.sliceText(sourceMember.typeText, 0, sourceMember.typeText.length);
             let memberModifiers = this.parseModifierFlags(clonedModifierSummary);
-            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, memberModifiers.counts.get(13) > 0, memberModifiers.counts.get(14) > 0, memberModifiers.counts.get(15) > 0, memberModifiers.counts.get(16) > 0, memberModifiers.counts.get(17) > 0, this.hasMemberLabel(clonedKind, "constructor"), clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText, sourceMember.hasBody, sourceMember.bodyStatementCount, sourceMember.bodyLetCount, sourceMember.bodyReturnCount, sourceMember.bodyIfCount, sourceMember.bodyWhileCount, sourceMember.bodyForCount, sourceMember.bodyAssignCount));
+            info.members.push(new ClassMemberDecl(clonedKind, clonedName, clonedModifierSummary, memberModifiers.metadata.counts.get(13) > 0, memberModifiers.metadata.counts.get(14) > 0, memberModifiers.metadata.counts.get(15) > 0, memberModifiers.metadata.counts.get(16) > 0, memberModifiers.metadata.counts.get(17) > 0, this.hasMemberLabel(clonedKind, "constructor"), clonedTypeParamSummary, typeParameters, clonedParamSummary, params, clonedReturnSummary, clonedReturnTypeText, clonedTypeSummary, clonedTypeText, sourceMember.hasBody, sourceMember.bodyStatementCount, sourceMember.bodyLetCount, sourceMember.bodyReturnCount, sourceMember.bodyIfCount, sourceMember.bodyWhileCount, sourceMember.bodyForCount, sourceMember.bodyAssignCount));
             if (this.hasMemberLabel(clonedKind, "field")) {
                 info.fields.push(this.cloneClassMemberDecl(sourceMember));
             } else if (this.hasMemberLabel(clonedKind, "constructor")) {
@@ -1564,19 +1564,19 @@ export class Parser {
     private parseModifierFlags(summary: string): Program {
         let p = this.createEmptyProgram();
         if (this.hasModifier(summary, "public")) {
-            p.counts.set(13, 1);
+            p.metadata.counts.set(13, 1);
         }
         if (this.hasModifier(summary, "private")) {
-            p.counts.set(14, 1);
+            p.metadata.counts.set(14, 1);
         }
         if (this.hasModifier(summary, "protected")) {
-            p.counts.set(15, 1);
+            p.metadata.counts.set(15, 1);
         }
         if (this.hasModifier(summary, "static")) {
-            p.counts.set(16, 1);
+            p.metadata.counts.set(16, 1);
         }
         if (this.hasModifier(summary, "async")) {
-            p.counts.set(17, 1);
+            p.metadata.counts.set(17, 1);
         }
         return p;
     }
@@ -1995,26 +1995,26 @@ export class Parser {
         }
 
         let p = this.createEmptyProgram();
-        p.counts.set(4, letCount);
-        p.counts.set(5, returnCount);
-        p.counts.set(6, ifCount);
-        p.counts.set(7, whileCount);
-        p.counts.set(8, forCount);
-        p.counts.set(18, newCount);
-        p.counts.set(19, thisCount);
-        p.counts.set(20, dotCount);
-        p.counts.set(21, bracketCount);
-        p.counts.set(22, ampCount);
-        p.counts.set(23, pipeCount);
-        p.counts.set(24, assignCount);
-        p.counts.set(37, callCount);
-        p.counts.set(38, memberExprCount);
-        p.counts.set(39, binaryExprCount);
-        p.summaries.set(19, firstCallSummary);
-        p.summaries.set(20, firstMemberExprSummary);
-        p.summaries.set(21, firstBinaryExprSummary);
-        p.summaries.set(22, secondCallSummary);
-        p.summaries.set(23, thirdCallSummary);
+        p.metadata.counts.set(4, letCount);
+        p.metadata.counts.set(5, returnCount);
+        p.metadata.counts.set(6, ifCount);
+        p.metadata.counts.set(7, whileCount);
+        p.metadata.counts.set(8, forCount);
+        p.metadata.counts.set(18, newCount);
+        p.metadata.counts.set(19, thisCount);
+        p.metadata.counts.set(20, dotCount);
+        p.metadata.counts.set(21, bracketCount);
+        p.metadata.counts.set(22, ampCount);
+        p.metadata.counts.set(23, pipeCount);
+        p.metadata.counts.set(24, assignCount);
+        p.metadata.counts.set(37, callCount);
+        p.metadata.counts.set(38, memberExprCount);
+        p.metadata.counts.set(39, binaryExprCount);
+        p.metadata.summaries.set(19, firstCallSummary);
+        p.metadata.summaries.set(20, firstMemberExprSummary);
+        p.metadata.summaries.set(21, firstBinaryExprSummary);
+        p.metadata.summaries.set(22, secondCallSummary);
+        p.metadata.summaries.set(23, thirdCallSummary);
         return p;
     }
 
@@ -2357,14 +2357,22 @@ export class Parser {
 
     private createEmptyProgram(): Program {
         let declarations = new Array<Declaration>();
-        let classMembers = new Array<ClassMemberDecl>();
-        let importDecls = new Array<ImportDeclInfo>();
-        let functionDecls = new Array<FunctionDeclInfo>();
-        let classDecls = new Array<ClassDeclInfo>();
-        let counts = new Array<i32>(40);
-        let summaries = new Array<string>(24);
-        let prog = new Program(declarations, classMembers, importDecls, functionDecls, classDecls, counts, summaries);
+        let prog = new Program(declarations);
+        let i = 0;
+        while (i < 40) { prog.metadata.counts.push(0); i = i + 1; }
+        i = 0;
+        while (i < 24) { prog.metadata.summaries.push(""); i = i + 1; }
         return prog;
+    }
+
+    private createImportDeclaration(clause: string, source: string): Declaration {
+        let emptyArray = new Array<ClassMemberDecl>();
+        let kind = "ImportDecl";
+        let name = clause;
+        let detailA = source;
+        let detailB = "";
+        let detailC = "";
+        return new Declaration(kind, name, detailA, detailB, detailC, emptyArray);
     }
 
     // AST Construction Methods
@@ -2864,4 +2872,5 @@ export class Parser {
         return result;
     }
 }
+
 

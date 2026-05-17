@@ -277,23 +277,39 @@ export class ClassDeclInfo {
     }
 }
 
-export class Program {
-    public declarations: Array<Declaration>;
+export class ProgramMembers {
     public classMembers: Array<ClassMemberDecl>;
     public importDecls: Array<ImportDeclInfo>;
     public functionDecls: Array<FunctionDeclInfo>;
     public classDecls: Array<ClassDeclInfo>;
+    
+    constructor() {
+        this.classMembers = new Array<ClassMemberDecl>();
+        this.importDecls = new Array<ImportDeclInfo>();
+        this.functionDecls = new Array<FunctionDeclInfo>();
+        this.classDecls = new Array<ClassDeclInfo>();
+    }
+}
+
+export class ProgramMetadata {
     public counts: Array<i32>;
     public summaries: Array<string>;
+    
+    constructor() {
+        this.counts = new Array<i32>();
+        this.summaries = new Array<string>();
+    }
+}
 
-    constructor(declarations: Array<Declaration>, classMembers: Array<ClassMemberDecl>, importDecls: Array<ImportDeclInfo>, functionDecls: Array<FunctionDeclInfo>, classDecls: Array<ClassDeclInfo>, counts: Array<i32>, summaries: Array<string>) {
+export class Program {
+    public declarations: Array<Declaration>;
+    public members: ProgramMembers;
+    public metadata: ProgramMetadata;
+    
+    constructor(declarations: Array<Declaration>) {
         this.declarations = declarations;
-        this.classMembers = classMembers;
-        this.importDecls = importDecls;
-        this.functionDecls = functionDecls;
-        this.classDecls = classDecls;
-        this.counts = counts;
-        this.summaries = summaries;
+        this.members = new ProgramMembers();
+        this.metadata = new ProgramMetadata();
     }
 }
 
