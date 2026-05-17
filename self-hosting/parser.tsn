@@ -288,87 +288,87 @@ export class Parser {
             this.advance();
         }
 
-        let p = this.createEmptyProgram();
+        let prog: Program = this.createEmptyProgram();
         let declarationIndex: i32 = 0;
         while (declarationIndex < declarations.length) {
-            p.declarations.push(declarations.get(declarationIndex));
+            prog.declarations.push(declarations.get(declarationIndex));
             declarationIndex = declarationIndex + 1;
         }
         let classMemberIndex: i32 = 0;
         while (classMemberIndex < classMembers.length) {
-            p.members.classMembers.push(classMembers.get(classMemberIndex));
+            prog.members.classMembers.push(classMembers.get(classMemberIndex));
             classMemberIndex = classMemberIndex + 1;
         }
         let importDeclIndex: i32 = 0;
         while (importDeclIndex < importDecls.length) {
-            p.members.importDecls.push(importDecls.get(importDeclIndex));
+            prog.members.importDecls.push(importDecls.get(importDeclIndex));
             importDeclIndex = importDeclIndex + 1;
         }
         let functionDeclIndex: i32 = 0;
         while (functionDeclIndex < functionDecls.length) {
-            p.members.functionDecls.push(functionDecls.get(functionDeclIndex));
+            prog.members.functionDecls.push(functionDecls.get(functionDeclIndex));
             functionDeclIndex = functionDeclIndex + 1;
         }
         let classDeclIndex: i32 = 0;
         while (classDeclIndex < classDecls.length) {
-            p.members.classDecls.push(classDecls.get(classDeclIndex));
+            prog.members.classDecls.push(classDecls.get(classDeclIndex));
             classDeclIndex = classDeclIndex + 1;
         }
-        p.metadata.counts.set(0, importCount);
-        p.metadata.counts.set(1, exportCount);
-        p.metadata.counts.set(2, functionCount);
-        p.metadata.counts.set(3, classCount);
-        p.metadata.counts.set(4, letCount);
-        p.metadata.counts.set(5, returnCount);
-        p.metadata.counts.set(6, ifCount);
-        p.metadata.counts.set(7, whileCount);
-        p.metadata.counts.set(8, forCount);
-        p.metadata.counts.set(9, paramCount);
-        p.metadata.counts.set(10, methodCount);
-        p.metadata.counts.set(11, fieldCount);
-        p.metadata.counts.set(12, constructorCount);
-        p.metadata.counts.set(13, publicCount);
-        p.metadata.counts.set(14, privateCount);
-        p.metadata.counts.set(15, protectedCount);
-        p.metadata.counts.set(16, staticCount);
-        p.metadata.counts.set(17, asyncCount);
-        p.metadata.counts.set(18, newCount);
-        p.metadata.counts.set(19, thisCount);
-        p.metadata.counts.set(20, dotCount);
-        p.metadata.counts.set(21, bracketCount);
-        p.metadata.counts.set(22, ampCount);
-        p.metadata.counts.set(23, pipeCount);
-        p.metadata.counts.set(24, assignCount);
-        p.metadata.counts.set(37, callCount);
-        p.metadata.counts.set(38, memberExprCount);
-        p.metadata.counts.set(39, binaryExprCount);
+        prog.metadata.counts.set(0, importCount);
+        prog.metadata.counts.set(1, exportCount);
+        prog.metadata.counts.set(2, functionCount);
+        prog.metadata.counts.set(3, classCount);
+        prog.metadata.counts.set(4, letCount);
+        prog.metadata.counts.set(5, returnCount);
+        prog.metadata.counts.set(6, ifCount);
+        prog.metadata.counts.set(7, whileCount);
+        prog.metadata.counts.set(8, forCount);
+        prog.metadata.counts.set(9, paramCount);
+        prog.metadata.counts.set(10, methodCount);
+        prog.metadata.counts.set(11, fieldCount);
+        prog.metadata.counts.set(12, constructorCount);
+        prog.metadata.counts.set(13, publicCount);
+        prog.metadata.counts.set(14, privateCount);
+        prog.metadata.counts.set(15, protectedCount);
+        prog.metadata.counts.set(16, staticCount);
+        prog.metadata.counts.set(17, asyncCount);
+        prog.metadata.counts.set(18, newCount);
+        prog.metadata.counts.set(19, thisCount);
+        prog.metadata.counts.set(20, dotCount);
+        prog.metadata.counts.set(21, bracketCount);
+        prog.metadata.counts.set(22, ampCount);
+        prog.metadata.counts.set(23, pipeCount);
+        prog.metadata.counts.set(24, assignCount);
+        prog.metadata.counts.set(37, callCount);
+        prog.metadata.counts.set(38, memberExprCount);
+        prog.metadata.counts.set(39, binaryExprCount);
 
-        p.metadata.summaries.set(0, firstFunctionName);
-        p.metadata.summaries.set(1, firstFunctionTypeParamSummary);
-        p.metadata.summaries.set(2, firstClassName);
-        p.metadata.summaries.set(3, firstClassTypeParamSummary);
-        p.metadata.summaries.set(4, firstMethodTypeParamSummary);
-        p.metadata.summaries.set(5, firstMethodName);
-        p.metadata.summaries.set(6, firstMethodModifierSummary);
-        p.metadata.summaries.set(7, firstFieldName);
-        p.metadata.summaries.set(8, firstFieldModifierSummary);
-        p.metadata.summaries.set(9, firstConstructorName);
-        p.metadata.summaries.set(10, firstConstructorModifierSummary);
-        p.metadata.summaries.set(11, firstMemberModifierSummary);
-        p.metadata.summaries.set(12, firstMemberSummary);
-        p.metadata.summaries.set(13, firstFieldTypeSummary);
-        p.metadata.summaries.set(14, firstMethodReturnSummary);
-        p.metadata.summaries.set(15, firstMethodParamSummary);
-        p.metadata.summaries.set(16, firstConstructorParamSummary);
-        p.metadata.summaries.set(17, firstFunctionParamSummary);
-        p.metadata.summaries.set(18, firstFunctionReturnSummary);
-        p.metadata.summaries.set(19, firstCallSummary);
-        p.metadata.summaries.set(20, firstMemberExprSummary);
-        p.metadata.summaries.set(21, firstBinaryExprSummary);
-        p.metadata.summaries.set(22, secondCallSummary);
-        p.metadata.summaries.set(23, thirdCallSummary);
+        prog.metadata.summaries.set(0, firstFunctionName);
+        prog.metadata.summaries.set(1, firstFunctionTypeParamSummary);
+        prog.metadata.summaries.set(2, firstClassName);
+        prog.metadata.summaries.set(3, firstClassTypeParamSummary);
+        prog.metadata.summaries.set(4, firstMethodTypeParamSummary);
+        prog.metadata.summaries.set(5, firstMethodName);
+        prog.metadata.summaries.set(6, firstMethodModifierSummary);
+        prog.metadata.summaries.set(7, firstFieldName);
+        prog.metadata.summaries.set(8, firstFieldModifierSummary);
+        prog.metadata.summaries.set(9, firstConstructorName);
+        prog.metadata.summaries.set(10, firstConstructorModifierSummary);
+        prog.metadata.summaries.set(11, firstMemberModifierSummary);
+        prog.metadata.summaries.set(12, firstMemberSummary);
+        prog.metadata.summaries.set(13, firstFieldTypeSummary);
+        prog.metadata.summaries.set(14, firstMethodReturnSummary);
+        prog.metadata.summaries.set(15, firstMethodParamSummary);
+        prog.metadata.summaries.set(16, firstConstructorParamSummary);
+        prog.metadata.summaries.set(17, firstFunctionParamSummary);
+        prog.metadata.summaries.set(18, firstFunctionReturnSummary);
+        prog.metadata.summaries.set(19, firstCallSummary);
+        prog.metadata.summaries.set(20, firstMemberExprSummary);
+        prog.metadata.summaries.set(21, firstBinaryExprSummary);
+        prog.metadata.summaries.set(22, secondCallSummary);
+        prog.metadata.summaries.set(23, thirdCallSummary);
 
-        return p;
+        return prog;
     }
 
     private parseImportDecl(): ImportParseResult {
@@ -475,15 +475,15 @@ export class Parser {
         }
 
         this.flushPendingImportSpecifier(namedSpecifiers, pendingImported, pendingLocal);
-        let declaration = new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
-        let info = new ImportDeclInfo(clause, source, defaultImport, namespaceImport, new Array<ImportSpecifierInfo>());
-        let specifierIndex: i32 = 0;
-        while (specifierIndex < namedSpecifiers.length) {
-            let specifier = namedSpecifiers.get(specifierIndex);
-            info.namedSpecifiers.push(new ImportSpecifierInfo(specifier.imported, specifier.local));
-            specifierIndex = specifierIndex + 1;
+        let finalDeclaration = new Declaration("ImportDecl", clause, source, "", "", new Array<ClassMemberDecl>());
+        let finalInfo = new ImportDeclInfo(clause, source, defaultImport, namespaceImport, new Array<ImportSpecifierInfo>());
+        let finalSpecifierIndex: i32 = 0;
+        while (finalSpecifierIndex < namedSpecifiers.length) {
+            let finalSpecifier = namedSpecifiers.get(finalSpecifierIndex);
+            finalInfo.namedSpecifiers.push(new ImportSpecifierInfo(finalSpecifier.imported, finalSpecifier.local));
+            finalSpecifierIndex = finalSpecifierIndex + 1;
         }
-        return new ImportParseResult(declaration, info);
+        return new ImportParseResult(finalDeclaration, finalInfo);
     }
 
     private consumeTopLevelModifiers(): Program {
@@ -505,10 +505,10 @@ export class Parser {
             }
         }
 
-        let p = this.createEmptyProgram();
-        p.metadata.counts.set(1, exportCount);
-        p.metadata.counts.set(17, asyncCount);
-        return p;
+        let prog = this.createEmptyProgram();
+        prog.metadata.counts.set(1, exportCount);
+        prog.metadata.counts.set(17, asyncCount);
+        return prog;
     }
 
     private parseFunctionDecl(): Program {
@@ -582,41 +582,41 @@ export class Parser {
             firstBinaryExprSummary = body.metadata.summaries.get(21);
         }
 
-        let p = this.createEmptyProgram();
-        p.metadata.counts.set(4, letCount);
-        p.metadata.counts.set(5, returnCount);
-        p.metadata.counts.set(6, ifCount);
-        p.metadata.counts.set(7, whileCount);
-        p.metadata.counts.set(8, forCount);
-        p.metadata.counts.set(9, paramCount);
-        p.metadata.counts.set(18, newCount);
-        p.metadata.counts.set(19, thisCount);
-        p.metadata.counts.set(20, dotCount);
-        p.metadata.counts.set(21, bracketCount);
-        p.metadata.counts.set(22, ampCount);
-        p.metadata.counts.set(23, pipeCount);
-        p.metadata.counts.set(24, assignCount);
-        p.metadata.counts.set(37, callCount);
-        p.metadata.counts.set(38, memberExprCount);
-        p.metadata.counts.set(39, binaryExprCount);
+        let prog = this.createEmptyProgram();
+        prog.metadata.counts.set(4, letCount);
+        prog.metadata.counts.set(5, returnCount);
+        prog.metadata.counts.set(6, ifCount);
+        prog.metadata.counts.set(7, whileCount);
+        prog.metadata.counts.set(8, forCount);
+        prog.metadata.counts.set(9, paramCount);
+        prog.metadata.counts.set(18, newCount);
+        prog.metadata.counts.set(19, thisCount);
+        prog.metadata.counts.set(20, dotCount);
+        prog.metadata.counts.set(21, bracketCount);
+        prog.metadata.counts.set(22, ampCount);
+        prog.metadata.counts.set(23, pipeCount);
+        prog.metadata.counts.set(24, assignCount);
+        prog.metadata.counts.set(37, callCount);
+        prog.metadata.counts.set(38, memberExprCount);
+        prog.metadata.counts.set(39, binaryExprCount);
 
-        p.metadata.summaries.set(0, functionName);
-        p.metadata.summaries.set(1, functionTypeParamSummary);
-        p.metadata.summaries.set(17, functionParamSummary);
-        p.metadata.summaries.set(18, functionReturnSummary);
-        p.metadata.summaries.set(19, firstCallSummary);
-        p.metadata.summaries.set(20, firstMemberExprSummary);
-        p.metadata.summaries.set(21, firstBinaryExprSummary);
-        p.metadata.summaries.set(22, secondCallSummary);
-        p.metadata.summaries.set(23, thirdCallSummary);
-        p.metadata.counts.set(25, letCount);
-        p.metadata.counts.set(26, returnCount);
-        p.metadata.counts.set(27, ifCount);
-        p.metadata.counts.set(28, whileCount);
-        p.metadata.counts.set(29, forCount);
-        p.metadata.counts.set(30, assignCount);
+        prog.metadata.summaries.set(0, functionName);
+        prog.metadata.summaries.set(1, functionTypeParamSummary);
+        prog.metadata.summaries.set(17, functionParamSummary);
+        prog.metadata.summaries.set(18, functionReturnSummary);
+        prog.metadata.summaries.set(19, firstCallSummary);
+        prog.metadata.summaries.set(20, firstMemberExprSummary);
+        prog.metadata.summaries.set(21, firstBinaryExprSummary);
+        prog.metadata.summaries.set(22, secondCallSummary);
+        prog.metadata.summaries.set(23, thirdCallSummary);
+        prog.metadata.counts.set(25, letCount);
+        prog.metadata.counts.set(26, returnCount);
+        prog.metadata.counts.set(27, ifCount);
+        prog.metadata.counts.set(28, whileCount);
+        prog.metadata.counts.set(29, forCount);
+        prog.metadata.counts.set(30, assignCount);
 
-        return p;
+        return prog;
     }
 
     private parseClassDecl(): Program {
@@ -676,10 +676,10 @@ export class Parser {
         }
 
         if (!this.matchKind(TokenKind.LBrace)) {
-            let p = this.createEmptyProgram();
-            p.metadata.summaries.set(2, className);
-            p.metadata.summaries.set(3, classTypeParamSummary);
-            return p;
+            let prog = this.createEmptyProgram();
+            prog.metadata.summaries.set(2, className);
+            prog.metadata.summaries.set(3, classTypeParamSummary);
+            return prog;
         }
 
         let depth: i32 = 1;
@@ -883,59 +883,59 @@ export class Parser {
             this.advance();
         }
 
-        let p = this.createEmptyProgram();
+        let prog = this.createEmptyProgram();
         let parsedMemberIndex: i32 = 0;
         while (parsedMemberIndex < members.length) {
-            p.members.classMembers.push(members.get(parsedMemberIndex));
+            prog.members.classMembers.push(members.get(parsedMemberIndex));
             parsedMemberIndex = parsedMemberIndex + 1;
         }
-        p.metadata.counts.set(4, letCount);
-        p.metadata.counts.set(5, returnCount);
-        p.metadata.counts.set(6, ifCount);
-        p.metadata.counts.set(7, whileCount);
-        p.metadata.counts.set(8, forCount);
-        p.metadata.counts.set(9, paramCount);
-        p.metadata.counts.set(10, methodCount);
-        p.metadata.counts.set(11, fieldCount);
-        p.metadata.counts.set(12, constructorCount);
-        p.metadata.counts.set(13, publicCount);
-        p.metadata.counts.set(14, privateCount);
-        p.metadata.counts.set(15, protectedCount);
-        p.metadata.counts.set(16, staticCount);
-        p.metadata.counts.set(17, asyncCount);
-        p.metadata.counts.set(18, newCount);
-        p.metadata.counts.set(19, thisCount);
-        p.metadata.counts.set(20, dotCount);
-        p.metadata.counts.set(21, bracketCount);
-        p.metadata.counts.set(22, ampCount);
-        p.metadata.counts.set(23, pipeCount);
-        p.metadata.counts.set(24, assignCount);
-        p.metadata.counts.set(37, callCount);
-        p.metadata.counts.set(38, memberExprCount);
-        p.metadata.counts.set(39, binaryExprCount);
+        prog.metadata.counts.set(4, letCount);
+        prog.metadata.counts.set(5, returnCount);
+        prog.metadata.counts.set(6, ifCount);
+        prog.metadata.counts.set(7, whileCount);
+        prog.metadata.counts.set(8, forCount);
+        prog.metadata.counts.set(9, paramCount);
+        prog.metadata.counts.set(10, methodCount);
+        prog.metadata.counts.set(11, fieldCount);
+        prog.metadata.counts.set(12, constructorCount);
+        prog.metadata.counts.set(13, publicCount);
+        prog.metadata.counts.set(14, privateCount);
+        prog.metadata.counts.set(15, protectedCount);
+        prog.metadata.counts.set(16, staticCount);
+        prog.metadata.counts.set(17, asyncCount);
+        prog.metadata.counts.set(18, newCount);
+        prog.metadata.counts.set(19, thisCount);
+        prog.metadata.counts.set(20, dotCount);
+        prog.metadata.counts.set(21, bracketCount);
+        prog.metadata.counts.set(22, ampCount);
+        prog.metadata.counts.set(23, pipeCount);
+        prog.metadata.counts.set(24, assignCount);
+        prog.metadata.counts.set(37, callCount);
+        prog.metadata.counts.set(38, memberExprCount);
+        prog.metadata.counts.set(39, binaryExprCount);
 
-        p.metadata.summaries.set(2, className);
-        p.metadata.summaries.set(3, classTypeParamSummary);
-        p.metadata.summaries.set(4, firstMethodTypeParamSummary);
-        p.metadata.summaries.set(5, firstMethodName);
-        p.metadata.summaries.set(6, firstMethodModifierSummary);
-        p.metadata.summaries.set(7, firstFieldName);
-        p.metadata.summaries.set(8, firstFieldModifierSummary);
-        p.metadata.summaries.set(9, firstConstructorName);
-        p.metadata.summaries.set(10, firstConstructorModifierSummary);
-        p.metadata.summaries.set(11, firstMemberModifierSummary);
-        p.metadata.summaries.set(12, firstMemberSummary);
-        p.metadata.summaries.set(13, firstFieldTypeSummary);
-        p.metadata.summaries.set(14, firstMethodReturnSummary);
-        p.metadata.summaries.set(15, firstMethodParamSummary);
-        p.metadata.summaries.set(16, firstConstructorParamSummary);
-        p.metadata.summaries.set(19, firstCallSummary);
-        p.metadata.summaries.set(20, firstMemberExprSummary);
-        p.metadata.summaries.set(21, firstBinaryExprSummary);
-        p.metadata.summaries.set(22, secondCallSummary);
-        p.metadata.summaries.set(23, thirdCallSummary);
+        prog.metadata.summaries.set(2, className);
+        prog.metadata.summaries.set(3, classTypeParamSummary);
+        prog.metadata.summaries.set(4, firstMethodTypeParamSummary);
+        prog.metadata.summaries.set(5, firstMethodName);
+        prog.metadata.summaries.set(6, firstMethodModifierSummary);
+        prog.metadata.summaries.set(7, firstFieldName);
+        prog.metadata.summaries.set(8, firstFieldModifierSummary);
+        prog.metadata.summaries.set(9, firstConstructorName);
+        prog.metadata.summaries.set(10, firstConstructorModifierSummary);
+        prog.metadata.summaries.set(11, firstMemberModifierSummary);
+        prog.metadata.summaries.set(12, firstMemberSummary);
+        prog.metadata.summaries.set(13, firstFieldTypeSummary);
+        prog.metadata.summaries.set(14, firstMethodReturnSummary);
+        prog.metadata.summaries.set(15, firstMethodParamSummary);
+        prog.metadata.summaries.set(16, firstConstructorParamSummary);
+        prog.metadata.summaries.set(19, firstCallSummary);
+        prog.metadata.summaries.set(20, firstMemberExprSummary);
+        prog.metadata.summaries.set(21, firstBinaryExprSummary);
+        prog.metadata.summaries.set(22, secondCallSummary);
+        prog.metadata.summaries.set(23, thirdCallSummary);
 
-        return p;
+        return prog;
     }
 
     private consumeClassModifiers(): Program {
@@ -981,14 +981,14 @@ export class Parser {
             }
         }
 
-        let p = this.createEmptyProgram();
-        p.metadata.counts.set(13, publicCount);
-        p.metadata.counts.set(14, privateCount);
-        p.metadata.counts.set(15, protectedCount);
-        p.metadata.counts.set(16, staticCount);
-        p.metadata.counts.set(17, asyncCount);
-        p.metadata.summaries.set(11, summary);
-        return p;
+        let prog = this.createEmptyProgram();
+        prog.metadata.counts.set(13, publicCount);
+        prog.metadata.counts.set(14, privateCount);
+        prog.metadata.counts.set(15, protectedCount);
+        prog.metadata.counts.set(16, staticCount);
+        prog.metadata.counts.set(17, asyncCount);
+        prog.metadata.summaries.set(11, summary);
+        return prog;
     }
 
     private parseClassMember(modifierSummary: string): Program {
@@ -1091,50 +1091,50 @@ export class Parser {
                 firstMemberModifierSummary = modifierSummary;
             }
 
-            let p = this.createEmptyProgram();
-            p.metadata.counts.set(4, letCount);
-            p.metadata.counts.set(5, returnCount);
-            p.metadata.counts.set(6, ifCount);
-            p.metadata.counts.set(7, whileCount);
-            p.metadata.counts.set(8, forCount);
-            p.metadata.counts.set(9, paramCount);
-            p.metadata.counts.set(10, methodCount);
-            p.metadata.counts.set(12, constructorCount);
-            p.metadata.counts.set(18, newCount);
-            p.metadata.counts.set(19, thisCount);
-            p.metadata.counts.set(20, dotCount);
-            p.metadata.counts.set(21, bracketCount);
-            p.metadata.counts.set(22, ampCount);
-            p.metadata.counts.set(23, pipeCount);
-            p.metadata.counts.set(24, assignCount);
-            p.metadata.counts.set(31, letCount);
-            p.metadata.counts.set(37, callCount);
-            p.metadata.counts.set(38, memberExprCount);
-            p.metadata.counts.set(39, binaryExprCount);
-            p.metadata.counts.set(31, letCount);
-            p.metadata.counts.set(32, returnCount);
-            p.metadata.counts.set(33, ifCount);
-            p.metadata.counts.set(34, whileCount);
-            p.metadata.counts.set(35, forCount);
-            p.metadata.counts.set(36, assignCount);
+            let prog = this.createEmptyProgram();
+            prog.metadata.counts.set(4, letCount);
+            prog.metadata.counts.set(5, returnCount);
+            prog.metadata.counts.set(6, ifCount);
+            prog.metadata.counts.set(7, whileCount);
+            prog.metadata.counts.set(8, forCount);
+            prog.metadata.counts.set(9, paramCount);
+            prog.metadata.counts.set(10, methodCount);
+            prog.metadata.counts.set(12, constructorCount);
+            prog.metadata.counts.set(18, newCount);
+            prog.metadata.counts.set(19, thisCount);
+            prog.metadata.counts.set(20, dotCount);
+            prog.metadata.counts.set(21, bracketCount);
+            prog.metadata.counts.set(22, ampCount);
+            prog.metadata.counts.set(23, pipeCount);
+            prog.metadata.counts.set(24, assignCount);
+            prog.metadata.counts.set(31, letCount);
+            prog.metadata.counts.set(37, callCount);
+            prog.metadata.counts.set(38, memberExprCount);
+            prog.metadata.counts.set(39, binaryExprCount);
+            prog.metadata.counts.set(31, letCount);
+            prog.metadata.counts.set(32, returnCount);
+            prog.metadata.counts.set(33, ifCount);
+            prog.metadata.counts.set(34, whileCount);
+            prog.metadata.counts.set(35, forCount);
+            prog.metadata.counts.set(36, assignCount);
 
-            p.metadata.summaries.set(4, methodTypeParamSummary);
-            p.metadata.summaries.set(5, firstMethodName);
-            p.metadata.summaries.set(6, firstMemberModifierSummary);
-            p.metadata.summaries.set(9, firstConstructorName);
-            p.metadata.summaries.set(10, firstConstructorModifierSummary);
-            p.metadata.summaries.set(11, firstMemberModifierSummary);
-            p.metadata.summaries.set(12, memberLabel);
-            p.metadata.summaries.set(14, methodReturnSummary);
-            p.metadata.summaries.set(15, paramSummary);
-            p.metadata.summaries.set(16, firstConstructorParamSummary);
-            p.metadata.summaries.set(19, firstCallSummary);
-            p.metadata.summaries.set(20, firstMemberExprSummary);
-            p.metadata.summaries.set(21, firstBinaryExprSummary);
-            p.metadata.summaries.set(22, secondCallSummary);
-            p.metadata.summaries.set(23, thirdCallSummary);
+            prog.metadata.summaries.set(4, methodTypeParamSummary);
+            prog.metadata.summaries.set(5, firstMethodName);
+            prog.metadata.summaries.set(6, firstMemberModifierSummary);
+            prog.metadata.summaries.set(9, firstConstructorName);
+            prog.metadata.summaries.set(10, firstConstructorModifierSummary);
+            prog.metadata.summaries.set(11, firstMemberModifierSummary);
+            prog.metadata.summaries.set(12, memberLabel);
+            prog.metadata.summaries.set(14, methodReturnSummary);
+            prog.metadata.summaries.set(15, paramSummary);
+            prog.metadata.summaries.set(16, firstConstructorParamSummary);
+            prog.metadata.summaries.set(19, firstCallSummary);
+            prog.metadata.summaries.set(20, firstMemberExprSummary);
+            prog.metadata.summaries.set(21, firstBinaryExprSummary);
+            prog.metadata.summaries.set(22, secondCallSummary);
+            prog.metadata.summaries.set(23, thirdCallSummary);
 
-            return p;
+            return prog;
         }
 
         if (this.matchKind(TokenKind.Colon)) {
@@ -1145,15 +1145,15 @@ export class Parser {
             if (modifierSummary != "") {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
-            let p = this.createEmptyProgram();
-            p.metadata.counts.set(11, 1);
-            p.metadata.counts.set(21, fieldBracketCount);
-            p.metadata.summaries.set(7, memberName);
-            p.metadata.summaries.set(8, modifierSummary);
-            p.metadata.summaries.set(11, modifierSummary);
-            p.metadata.summaries.set(12, fieldSummary);
-            p.metadata.summaries.set(13, fieldTypeSummary);
-            return p;
+            let prog = this.createEmptyProgram();
+            prog.metadata.counts.set(11, 1);
+            prog.metadata.counts.set(21, fieldBracketCount);
+            prog.metadata.summaries.set(7, memberName);
+            prog.metadata.summaries.set(8, modifierSummary);
+            prog.metadata.summaries.set(11, modifierSummary);
+            prog.metadata.summaries.set(12, fieldSummary);
+            prog.metadata.summaries.set(13, fieldTypeSummary);
+            return prog;
         }
 
         if (this.matchKind(TokenKind.Equal)) {
@@ -1162,18 +1162,18 @@ export class Parser {
             if (modifierSummary != "") {
                 fieldSummary = modifierSummary + " " + fieldSummary;
             }
-            let p = this.createEmptyProgram();
-            p.metadata.counts.set(11, 1);
-            p.metadata.summaries.set(7, memberName);
-            p.metadata.summaries.set(8, modifierSummary);
-            p.metadata.summaries.set(11, modifierSummary);
-            p.metadata.summaries.set(12, fieldSummary);
-            return p;
+            let prog = this.createEmptyProgram();
+            prog.metadata.counts.set(11, 1);
+            prog.metadata.summaries.set(7, memberName);
+            prog.metadata.summaries.set(8, modifierSummary);
+            prog.metadata.summaries.set(11, modifierSummary);
+            prog.metadata.summaries.set(12, fieldSummary);
+            return prog;
         }
 
-        let p = this.createEmptyProgram();
-        p.metadata.summaries.set(11, modifierSummary);
-        return p;
+        let prog = this.createEmptyProgram();
+        prog.metadata.summaries.set(11, modifierSummary);
+        return prog;
     }
 
     private readTypeArgSummary(typeName: string): string {
@@ -1460,9 +1460,9 @@ export class Parser {
     }
 
     private buildTypeParameterList(typeParamSummary: string): Array<string> {
-        let result = new Array<string>();
+        let prog = new Array<string>();
         this.appendTypeParameters(result, typeParamSummary);
-        return result;
+        return prog;
     }
 
     private appendTypeParameters(target: Array<string>, typeParamSummary: string): void {
@@ -1487,9 +1487,9 @@ export class Parser {
     }
 
     private buildParameterList(paramSummary: string): Array<ParameterInfo> {
-        let result = new Array<ParameterInfo>();
+        let prog = new Array<ParameterInfo>();
         this.appendParameters(result, paramSummary);
-        return result;
+        return prog;
     }
 
     private appendParameters(target: Array<ParameterInfo>, paramSummary: string): void {
@@ -1562,23 +1562,23 @@ export class Parser {
     }
 
     private parseModifierFlags(summary: string): Program {
-        let p = this.createEmptyProgram();
+        let prog = this.createEmptyProgram();
         if (this.hasModifier(summary, "public")) {
-            p.metadata.counts.set(13, 1);
+            prog.metadata.counts.set(13, 1);
         }
         if (this.hasModifier(summary, "private")) {
-            p.metadata.counts.set(14, 1);
+            prog.metadata.counts.set(14, 1);
         }
         if (this.hasModifier(summary, "protected")) {
-            p.metadata.counts.set(15, 1);
+            prog.metadata.counts.set(15, 1);
         }
         if (this.hasModifier(summary, "static")) {
-            p.metadata.counts.set(16, 1);
+            prog.metadata.counts.set(16, 1);
         }
         if (this.hasModifier(summary, "async")) {
-            p.metadata.counts.set(17, 1);
+            prog.metadata.counts.set(17, 1);
         }
-        return p;
+        return prog;
     }
 
     private hasModifier(summary: string, modifier: string): bool {
@@ -1633,7 +1633,7 @@ export class Parser {
     }
 
     private splitCommaSeparatedParts(text: string): Array<string> {
-        let result = new Array<string>();
+        let prog = new Array<string>();
         let start: i32 = 0;
         let angleDepth: i32 = 0;
         let parenDepth: i32 = 0;
@@ -1657,7 +1657,7 @@ export class Parser {
             } else if (char == 44 && angleDepth == 0 && parenDepth == 0 && bracketDepth == 0) {
                 let part = this.trimText(this.sliceText(text, start, pos));
                 if (part != "") {
-                    result.push(part);
+                    prog.push(part);
                 }
                 start = pos + 1;
             }
@@ -1666,9 +1666,9 @@ export class Parser {
 
         let tail = this.trimText(this.sliceText(text, start, text.length));
         if (tail != "") {
-            result.push(tail);
+            prog.push(tail);
         }
-        return result;
+        return prog;
     }
 
     private trimText(text: string): string {
@@ -1994,28 +1994,28 @@ export class Parser {
             this.advance();
         }
 
-        let p = this.createEmptyProgram();
-        p.metadata.counts.set(4, letCount);
-        p.metadata.counts.set(5, returnCount);
-        p.metadata.counts.set(6, ifCount);
-        p.metadata.counts.set(7, whileCount);
-        p.metadata.counts.set(8, forCount);
-        p.metadata.counts.set(18, newCount);
-        p.metadata.counts.set(19, thisCount);
-        p.metadata.counts.set(20, dotCount);
-        p.metadata.counts.set(21, bracketCount);
-        p.metadata.counts.set(22, ampCount);
-        p.metadata.counts.set(23, pipeCount);
-        p.metadata.counts.set(24, assignCount);
-        p.metadata.counts.set(37, callCount);
-        p.metadata.counts.set(38, memberExprCount);
-        p.metadata.counts.set(39, binaryExprCount);
-        p.metadata.summaries.set(19, firstCallSummary);
-        p.metadata.summaries.set(20, firstMemberExprSummary);
-        p.metadata.summaries.set(21, firstBinaryExprSummary);
-        p.metadata.summaries.set(22, secondCallSummary);
-        p.metadata.summaries.set(23, thirdCallSummary);
-        return p;
+        let prog = this.createEmptyProgram();
+        prog.metadata.counts.set(4, letCount);
+        prog.metadata.counts.set(5, returnCount);
+        prog.metadata.counts.set(6, ifCount);
+        prog.metadata.counts.set(7, whileCount);
+        prog.metadata.counts.set(8, forCount);
+        prog.metadata.counts.set(18, newCount);
+        prog.metadata.counts.set(19, thisCount);
+        prog.metadata.counts.set(20, dotCount);
+        prog.metadata.counts.set(21, bracketCount);
+        prog.metadata.counts.set(22, ampCount);
+        prog.metadata.counts.set(23, pipeCount);
+        prog.metadata.counts.set(24, assignCount);
+        prog.metadata.counts.set(37, callCount);
+        prog.metadata.counts.set(38, memberExprCount);
+        prog.metadata.counts.set(39, binaryExprCount);
+        prog.metadata.summaries.set(19, firstCallSummary);
+        prog.metadata.summaries.set(20, firstMemberExprSummary);
+        prog.metadata.summaries.set(21, firstBinaryExprSummary);
+        prog.metadata.summaries.set(22, secondCallSummary);
+        prog.metadata.summaries.set(23, thirdCallSummary);
+        return prog;
     }
 
     private skipAngleBlock(): void {
@@ -2844,15 +2844,15 @@ export class Parser {
     }
 
     private parseTypeText(): string {
-        let result = "";
+        let prog = "";
         if (this.peek().kind == TokenKind.Identifier) {
             result = this.advance().lexeme;
         } else {
-            return result;
+            return prog;
         }
         // Handle generic arguments: Foo<A, B>
         if (this.matchKind(TokenKind.Less)) {
-            result = this.sliceText(result, 0, result.length);
+            result = this.sliceText(result, 0, prog.length);
             result = result + "<";
             let first = true;
             while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
@@ -2869,7 +2869,7 @@ export class Parser {
             this.matchKind(TokenKind.Greater);
             result = result + ">";
         }
-        return result;
+        return prog;
     }
 }
 
