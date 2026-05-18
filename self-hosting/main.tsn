@@ -17,6 +17,7 @@ function logBool(label: string, value: bool): void {
 }
 
 function parseFile(path: string): i32 {
+    log("--- parseFile: start reading");
     let fsResult = readText(path);
     if (!fsResult.isOk()) {
         log("parse FAILED: could not read file");
@@ -24,15 +25,19 @@ function parseFile(path: string): i32 {
         return 1;
     }
 
+    log("--- parseFile: read success, starting lexer");
     let source = fsResult.value();
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
+    log("--- parseFile: tokenize success");
     if (tokens.length == 0) {
         log("parse FAILED: no tokens generated");
         return 1;
     }
+    log("--- parseFile: starting parser constructor");
     let parser = new Parser(tokens);
     let program: Program = parser.parse();
+    log("--- parseFile: parse success");
 
     if (program.declarations.length == 0) {
         log("parse FAILED: no declarations found in file");

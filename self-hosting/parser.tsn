@@ -8,11 +8,16 @@ export class Parser {
     private pos: i32;
 
     constructor(tokens: Array<ptr<Token>>) {
+        log("--- Parser constructor: start");
         this.tokens = tokens;
+        log("--- Parser constructor: tokens assigned");
         this.pos = 0;
+        log("--- Parser constructor: pos assigned");
     }
 
     parse(): Program {
+        log("--- Parser.parse: start");
+        log("--- Parser.parse: pos=" + this.pos.toString());
         let importCount: i32 = 0;
         let exportCount: i32 = 0;
         let functionCount: i32 = 0;
@@ -2347,6 +2352,7 @@ export class Parser {
     }
 
     private peek(): ptr<Token> {
+        log("--- Parser.peek: pos=" + this.pos.toString());
         return this.tokens.get(this.pos);
     }
 

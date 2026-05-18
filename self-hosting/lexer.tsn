@@ -18,6 +18,7 @@ export class Lexer {
     }
 
     tokenize(): Array<ptr<Token>> {
+        log("--- Lexer.tokenize: start");
         let tokens = new Array<ptr<Token>>();
 
         while (this.pos < this.sourceLength) {
@@ -30,7 +31,9 @@ export class Lexer {
             tokens.push(token);
         }
 
+        log("--- Lexer.tokenize: scan complete, adding EOF");
         tokens.push(new Token(TokenKind.EOF, "", this.line, this.column) as ptr<Token>);
+        log("--- Lexer.tokenize: success");
         return tokens;
     }
 

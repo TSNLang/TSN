@@ -18,8 +18,8 @@ void* class_alloc(int32_t size) {
     void* p = calloc(1, size);
     if (p) {
         *((int32_t*)p) = 1; // Initial refCount = 1
-        // printf("DEBUG: class_alloc(%d) -> %p (refcount=1)\n", size, p);
-        // fflush(stdout);
+        printf("DEBUG: class_alloc(%d) -> %p (refcount=1)\n", size, p);
+        fflush(stdout);
     }
     return p;
 }
@@ -115,6 +115,8 @@ void* tsn_GetProcessHeap_bridge() {
 void* tsn_HeapAlloc_bridge(void* heap, int32_t flags, int64_t size) __asm__("tsn_HeapAlloc");
 void* tsn_HeapAlloc_bridge(void* heap, int32_t flags, int64_t size) {
     void* p = HeapAlloc((HANDLE)heap, (DWORD)flags, (SIZE_T)size);
+    printf("DEBUG: HeapAlloc(%p, %d, %lld) -> %p\n", heap, flags, size, p);
+    fflush(stdout);
     return p;
 }
 
