@@ -3661,6 +3661,7 @@ if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") 
       if (t === 'i128') return 16;
       if (t === 'i64' || this.isPointerType(t) || this.isClassType(t) || this.isInterfaceType(t) || t === 'double') return 8;
       if (t === 'i8' || t === 'i1' || t === 'void') return 1;
+      if (t === 'ptr') return 8; // Explicitly ensure 'ptr' is 8-byte aligned
       return 4; 
   }
   
