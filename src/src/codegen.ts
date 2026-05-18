@@ -207,9 +207,6 @@ export class CodeGenerator {
   private currentProgram: Program | null = null;
   generate(program: Program, moduleNamespace?: string): string {
     this.currentProgram = program;
-    if (this.localDecls.size === 0) {
-        this.localDecls = new Set(program.declarations);
-    }
     // Deno.writeTextFileSync("codegen_debug.txt", `--- generate start: program declarations=${program.declarations.length}\n`, { append: true });
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
     this.externalDecls = []; this.externalDeclarations.clear(); this.exportedSymbols = [];
@@ -287,7 +284,11 @@ export class CodeGenerator {
     this.emit('');
 
     // Phase 4: Function definitions
-    for (const decl of program.declarations) this.generateFunctionsRecursive(decl);
+    Deno.writeTextFileSync("codegen_debug.txt", `--- Phase 4: Function definitions start, count=${program.declarations.length}\n`, { append: true });
+    for (const decl of program.declarations) {
+        Deno.writeTextFileSync("codegen_debug.txt", `--- generateFunctionsRecursive entry: kind=${decl.kind}\n`, { append: true });
+        this.generateFunctionsRecursive(decl);
+    }
 
     // Phase 5: Collect exported symbols
     for (const decl of program.declarations) this.collectExportedSymbols(decl);
@@ -481,7 +482,15 @@ export class CodeGenerator {
   }
 
   private generateFunctionsRecursive(decl: Declaration): void {
-    if (!this.localDecls.has(decl) && decl.kind !== ASTKind.NamespaceDecl && decl.kind !== ASTKind.ExportDecl) {
+    const isLocal = this.localDecls.has(decl);
+    if (decl.kind === ASTKind.ExportDecl) {
+        const inner = (decl as ExportDecl).declaration;
+        if (inner.kind === ASTKind.ClassDecl) {
+            Deno.writeTextFileSync("codegen_debug.txt", `--- generateFunctionsRecursive: ExportDecl(ClassDecl name=${(inner as ClassDecl).name}) isLocal=${isLocal}\n`, { append: true });
+        }
+    }
+    
+    if (!isLocal && decl.kind !== ASTKind.NamespaceDecl && decl.kind !== ASTKind.ExportDecl) {
         if (decl.kind === ASTKind.FunctionDecl) {
             const f = decl as FunctionDecl;
             if (f.typeParameters && f.typeParameters.length > 0) return;
@@ -516,6 +525,8 @@ export class CodeGenerator {
   }
 
   private collectExportedSymbols(decl: Declaration, currentNamespace: string = ""): void {
+    if (!this.localDecls.has(decl) && decl.kind !== ASTKind.NamespaceDecl) return;
+
     if (decl.kind === ASTKind.ExportDecl) {
       const exportDecl = decl as ExportDecl;
       const innerDecl = exportDecl.declaration;
@@ -2034,6 +2045,8 @@ export class CodeGenerator {
     if (e.genericArgs && e.genericArgs.length > 0) {
         className = this.instantiateClass(e.className, e.genericArgs);
     }
+
+    Deno.writeTextFileSync("codegen_debug.txt", `--- generateNew: className=${className} structs.has=${this.structs.has(className)} importedSymbols.has=${this.importedSymbols.has(className)}\n`, { append: true });
 
     // Lazy instantiate imported classes
     if (!this.structs.has(className) && this.importedSymbols.has(className)) {
@@ -4491,7 +4504,6 @@ if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") 
           }
           continue;
         }
-        this.markAsLocalRecursive(decl);
         declarations.push(decl);
       }
     };

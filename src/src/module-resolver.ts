@@ -327,8 +327,10 @@ export class ModuleResolver {
         const sourceLines = content.split(/\r?\n/);
 
         const addExportedSymbol = (innerDecl: FunctionDecl | ClassDecl | VarDecl | EnumDecl) => {
+          Deno.writeTextFileSync("codegen_debug.txt", `--- addExportedSymbol: kind=${innerDecl.kind}\n`, { append: true });
           if (innerDecl.kind === ASTKind.ClassDecl) {
             const c = innerDecl as ClassDecl;
+            Deno.writeTextFileSync("codegen_debug.txt", `--- addExportedSymbol: class name=${c.name}\n`, { append: true });
             if (seenSymbols.has(`class:${c.name}`)) return;
             seenSymbols.add(`class:${c.name}`);
             symbols.push({ name: c.name, kind: 'class', ast: c });
@@ -367,6 +369,7 @@ export class ModuleResolver {
         };
 
         for (const decl of program.declarations) {
+          Deno.writeTextFileSync("codegen_debug.txt", `--- resolveFileModule: top-level decl kind=${decl.kind}, line=${decl.line}\n`, { append: true });
           if (decl.kind === ASTKind.ExportDecl) {
             addExportedSymbol((decl as ExportDecl).declaration as FunctionDecl | ClassDecl | VarDecl | EnumDecl);
             continue;

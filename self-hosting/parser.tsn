@@ -372,7 +372,6 @@ export class Parser {
     }
 
     private parseImportDecl(): ImportParseResult {
-    private parseImportDecl(): ImportParseResult {
         let clause = "";
         let source = "";
         let defaultImport = "";
@@ -1461,7 +1460,7 @@ export class Parser {
 
     private buildTypeParameterList(typeParamSummary: string): Array<string> {
         let prog = new Array<string>();
-        this.appendTypeParameters(result, typeParamSummary);
+        this.appendTypeParameters(prog, typeParamSummary);
         return prog;
     }
 
@@ -1488,7 +1487,7 @@ export class Parser {
 
     private buildParameterList(paramSummary: string): Array<ParameterInfo> {
         let prog = new Array<ParameterInfo>();
-        this.appendParameters(result, paramSummary);
+        this.appendParameters(prog, paramSummary);
         return prog;
     }
 
@@ -2846,28 +2845,27 @@ export class Parser {
     private parseTypeText(): string {
         let prog = "";
         if (this.peek().kind == TokenKind.Identifier) {
-            result = this.advance().lexeme;
+            prog = this.advance().lexeme;
         } else {
             return prog;
         }
         // Handle generic arguments: Foo<A, B>
         if (this.matchKind(TokenKind.Less)) {
-            result = this.sliceText(result, 0, prog.length);
-            result = result + "<";
+            prog = prog + "<";
             let first = true;
             while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
                 if (!first) {
-                    result = result + ", ";
+                    prog = prog + ", ";
                 }
                 first = false;
                 let argType = this.parseTypeText();
-                result = result + argType;
+                prog = prog + argType;
                 if (!this.matchKind(TokenKind.Comma)) {
                     break;
                 }
             }
             this.matchKind(TokenKind.Greater);
-            result = result + ">";
+            prog = prog + ">";
         }
         return prog;
     }

@@ -28,8 +28,7 @@ test_*.tsn
 !test_namespace.ts
 !test_enum.ts
 !test_ts.ts
-debug_*.txt
-*_debug.txt
+*.txt
 
 # Logs
 *.log
