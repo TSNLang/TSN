@@ -18,8 +18,8 @@ void* class_alloc(int32_t size) {
     void* p = calloc(1, size);
     if (p) {
         *((int32_t*)p) = 1; // Initial refCount = 1
-        printf("DEBUG: class_alloc(%d) -> %p (refcount=1)\n", size, p);
-        fflush(stdout);
+        // printf("DEBUG: class_alloc(%d) -> %p (refcount=1)\n", size, p);
+        // fflush(stdout);
     }
     return p;
 }
@@ -27,20 +27,20 @@ void* class_alloc(int32_t size) {
 void class_incref(void* p) {
     if (p) {
         int32_t* rc = (int32_t*)p;
+        // printf("DEBUG: class_incref(%p) rc_ptr=%p rc_val=%d\n", p, rc, *rc);
+        // fflush(stdout);
         if (*rc == -1) return;
         (*rc)++;
-        // printf("DEBUG: class_incref(%p) -> refcount=%d\n", p, *rc);
-        // fflush(stdout);
     }
 }
 
 void class_decref(void* p, void (*disposer)(void*)) {
     if (p) {
         int32_t* rc_ptr = (int32_t*)p;
+        // printf("DEBUG: class_decref(%p, %p) rc_ptr=%p rc_val=%d\n", p, disposer, rc_ptr, *rc_ptr);
+        // fflush(stdout);
         if (*rc_ptr == -1) return;
         int32_t rc = --(*rc_ptr);
-        // printf("DEBUG: class_decref(%p) -> refcount=%d\n", p, rc);
-        // fflush(stdout);
         if (rc <= 0) {
             // printf("DEBUG: class_freeing(%p)\n", p);
             // fflush(stdout);
@@ -99,11 +99,11 @@ void* tsn_CreateFileA_bridge(const char* name_with_header, int32_t access, int32
 void* tsn_CreateFileA_bridge(const char* name_with_header, int32_t access, int32_t share, void* sec, int32_t disp, int32_t flags, void* temp) {
     const char* name = name_with_header ? name_with_header + 8 : NULL;
     if (name) {
-        printf("DEBUG: CreateFileA called for '%s' (len %zu)\n", name, strlen(name));
+        // printf("DEBUG: CreateFileA called for '%s' (len %zu)\n", name, strlen(name));
     } else {
-        printf("DEBUG: CreateFileA called with NULL name\n");
+        // printf("DEBUG: CreateFileA called with NULL name\n");
     }
-    fflush(stdout);
+    // fflush(stdout);
     return CreateFileA(name, (DWORD)access, (DWORD)share, (LPSECURITY_ATTRIBUTES)sec, (DWORD)disp, (DWORD)flags, (HANDLE)temp);
 }
 
@@ -115,8 +115,8 @@ void* tsn_GetProcessHeap_bridge() {
 void* tsn_HeapAlloc_bridge(void* heap, int32_t flags, int64_t size) __asm__("tsn_HeapAlloc");
 void* tsn_HeapAlloc_bridge(void* heap, int32_t flags, int64_t size) {
     void* p = HeapAlloc((HANDLE)heap, (DWORD)flags, (SIZE_T)size);
-    printf("DEBUG: HeapAlloc(%p, %d, %lld) -> %p\n", heap, flags, size, p);
-    fflush(stdout);
+    // printf("DEBUG: HeapAlloc(%p, %d, %lld) -> %p\n", heap, flags, size, p);
+    // fflush(stdout);
     return p;
 }
 
@@ -133,25 +133,25 @@ int32_t tsn_GetLastError_bridge() {
 int32_t tsn_GetFileSize_bridge(void* handle, int32_t* high) __asm__("tsn_GetFileSize");
 int32_t tsn_GetFileSize_bridge(void* handle, int32_t* high) {
     DWORD type = GetFileType((HANDLE)handle);
-    printf("DEBUG: GetFileSize called with handle %p, GetFileType=%lu\n", handle, type);
-    fflush(stdout);
+    // printf("DEBUG: GetFileSize called with handle %p, GetFileType=%lu\n", handle, type);
+    // fflush(stdout);
     return (int32_t)GetFileSize((HANDLE)handle, (LPDWORD)high);
 }
 
 int32_t tsn_ReadFile_bridge(void* handle, void* buffer, int32_t size, int32_t* read, void* over) __asm__("tsn_ReadFile");
 int32_t tsn_ReadFile_bridge(void* handle, void* buffer, int32_t size, int32_t* read, void* over) {
     DWORD type = GetFileType((HANDLE)handle);
-    printf("DEBUG: ReadFile called with handle %p, GetFileType=%lu, size=%d\n", handle, type, size);
+    // printf("DEBUG: ReadFile called with handle %p, GetFileType=%lu, size=%d\n", handle, type, size);
     
     DWORD dummyRead = 0;
     BOOL dummyOk = ReadFile((HANDLE)handle, NULL, 0, &dummyRead, NULL);
     if (!dummyOk) {
-        printf("DEBUG: dummy 0-byte ReadFile FAILED. Error=%lu\n", GetLastError());
+        // printf("DEBUG: dummy 0-byte ReadFile FAILED. Error=%lu\n", GetLastError());
     } else {
-        printf("DEBUG: dummy 0-byte ReadFile OK\n");
+        // printf("DEBUG: dummy 0-byte ReadFile OK\n");
     }
 
-    fflush(stdout);
+    // fflush(stdout);
     return (int32_t)ReadFile((HANDLE)handle, buffer, (DWORD)size, (LPDWORD)read, (LPOVERLAPPED)over);
 }
 
@@ -178,14 +178,14 @@ int32_t tsn_CloseHandle_bridge(void* handle) {
 
 void* tsn_malloc(int32_t size) {
     void* p = calloc(1, size);
-    printf("DEBUG: tsn_malloc(%d) -> %p\n", size, p);
-    fflush(stdout);
+    // printf("DEBUG: tsn_malloc(%d) -> %p\n", size, p);
+    // fflush(stdout);
     return p;
 }
 
 void memory_free(void* p) {
-    printf("DEBUG: memory_free(%p)\n", p);
-    fflush(stdout);
+    // printf("DEBUG: memory_free(%p)\n", p);
+    // fflush(stdout);
     free(p);
 }
 

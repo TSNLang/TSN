@@ -4,10 +4,10 @@ import * as string from "std:string";
 import { ClassDeclInfo, ClassMemberDecl, Declaration, FunctionDeclInfo, ImportDeclInfo, ImportParseResult, ImportSpecifierInfo, ParameterInfo, Program, ProgramMembers, ProgramMetadata, Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr } from "./ast.tsn";
 
 export class Parser {
-    private tokens: Array<ptr<Token>>;
+    private tokens: Array<Token>;
     private pos: i32;
 
-    constructor(tokens: Array<ptr<Token>>) {
+    constructor(tokens: Array<Token>) {
         log("--- Parser constructor: start");
         this.tokens = tokens;
         log("--- Parser constructor: tokens assigned");
@@ -17,7 +17,7 @@ export class Parser {
 
     parse(): Program {
         log("--- Parser.parse: start");
-        log("--- Parser.parse: pos=" + this.pos.toString());
+        log("--- Parser.parse: pos");
         let importCount: i32 = 0;
         let exportCount: i32 = 0;
         let functionCount: i32 = 0;
@@ -2337,7 +2337,7 @@ export class Parser {
         return this.peek().kind == kind;
     }
 
-    private advance(): ptr<Token> {
+    private advance(): Token {
         if (!this.isAtEnd()) {
             this.pos = this.pos + 1;
         }
@@ -2351,12 +2351,12 @@ export class Parser {
         return this.peek().kind == TokenKind.EOF;
     }
 
-    private peek(): ptr<Token> {
-        log("--- Parser.peek: pos=" + this.pos.toString());
+    private peek(): Token {
+        log("--- Parser.peek: pos");
         return this.tokens.get(this.pos);
     }
 
-    private previous(): ptr<Token> {
+    private previous(): Token {
         return this.tokens.get(this.pos - 1);
     }
 

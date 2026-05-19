@@ -29,7 +29,8 @@ test_*.tsn
 !test_enum.ts
 !test_ts.ts
 *.txt
-
+*.pdb
+*.s
 # Logs
 *.log
 

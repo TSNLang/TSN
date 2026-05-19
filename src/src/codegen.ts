@@ -165,17 +165,34 @@ export class CodeGenerator {
       return;
     }
 
-    if (isClass || isPtr) {
-      const className = type.startsWith('%') ? type.substring(1) : (isPtr ? type.substring(4, type.length - 1) : type);
-      const disposeName = `${className}.dispose`;
-      const disposeInfo = this.functions.get(disposeName) || this.functions.get(this.resolveMangledName(disposeName));
-      if (disposeInfo) {
-        this.emit(`call void @${disposeInfo.name}(ptr ${ptr})`);
-      }
-    }
-
     if (isPtr) {
-      // Owned pointer RAII: gọi free trực tiếp
+      const innerType = this.getPointerInnerType(type);
+      const innerIsClass = this.isClassType(innerType);
+      
+      if (innerIsClass) {
+        // Load the class object pointer from the unique wrapper pointer
+        const classPtr = this.newTemp();
+        this.emit(`${classPtr} = load ptr, ptr ${ptr}, align 8`);
+        
+        // Decrement the refcount of the loaded class object
+        const innerClassName = innerType.startsWith('%') ? innerType.substring(1) : innerType;
+        const disposeName = `${innerClassName}.dispose`;
+        const disposeInfo = this.functions.get(disposeName) || this.functions.get(this.resolveMangledName(disposeName));
+        const disposerFn = disposeInfo ? `@${disposeInfo.name}` : 'ptr null';
+        
+        this.ensureExternalDeclaration('class_decref', { name: 'class_decref', kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'ptr'] } as any);
+        this.emit(`call void @class_decref(ptr ${classPtr}, ptr ${disposerFn})`);
+      } else {
+        // Primitive or struct inside unique pointer: call its .dispose() method if it exists
+        const className = innerType;
+        const disposeName = `${className}.dispose`;
+        const disposeInfo = this.functions.get(disposeName) || this.functions.get(this.resolveMangledName(disposeName));
+        if (disposeInfo) {
+          this.emit(`call void @${disposeInfo.name}(ptr ${ptr})`);
+        }
+      }
+      
+      // Owned pointer RAII: gọi free trực tiếp cho wrapper pointer
       this.ensureExternalDeclaration('free', { name: 'free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
       this.emit(`call void @free(ptr ${ptr})`);
     } else {
@@ -216,7 +233,7 @@ export class CodeGenerator {
     // Standard runtime builtins
     this.ensureExternalDeclaration('class_alloc', { name: 'class_alloc', kind: 'function', llvmType: 'ptr', paramTypes: ['i32'] } as any);
     this.ensureExternalDeclaration('class_incref', { name: 'class_incref', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
-    this.ensureExternalDeclaration('class_decref', { name: 'class_decref', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
+    this.ensureExternalDeclaration('class_decref', { name: 'class_decref', kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'ptr'] } as any);
     this.ensureExternalDeclaration('class_freeing', { name: 'class_freeing', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
     this.ensureExternalDeclaration('free', { name: 'free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] } as any);
     
@@ -597,7 +614,7 @@ export class CodeGenerator {
     }
 
     for (const f of c.fields) {
-        let t = this.getLLVMType(f.type);
+        let t = this.getLLVMTypeWithClass(f.type);
         if (t === "ptr" && this.resolveTypeName(f.type) === "string") t = "string";
         fields.push({ name: f.name, type: t }); 
         llvmFields.push(this.toLLVMType(t)); // Ensure we use 'ptr' for pointers
@@ -614,7 +631,7 @@ export class CodeGenerator {
           fields.push(...this.getRecursiveClassFields(decl.baseClassName).filter(f => f.name !== '_refCount' && f.name !== '_vtable'));
       }
       for (const f of decl.fields) {
-          fields.push({ name: f.name, type: this.getLLVMType(f.type) });
+          fields.push({ name: f.name, type: this.getLLVMTypeWithClass(f.type) });
       }
       return fields;
   }
@@ -956,8 +973,9 @@ export class CodeGenerator {
   private ensureExternalDeclaration(mangled: string, sym: ExportedSymbol): void {
     const existing = this.functions.get(mangled);
     if (existing && (existing as any).isExternal) {
-        if (existing.returnType === 'void' && (sym as any).returnType !== 'void') {
-            existing.returnType = (sym as any).returnType;
+        const symRt = (sym as any).llvmType || (sym as any).returnType;
+        if (existing.returnType === 'void' && symRt && symRt !== 'void') {
+            existing.returnType = symRt;
         }
     }
     if (existing && !(existing as any).isExternal) {
@@ -965,19 +983,29 @@ export class CodeGenerator {
     }
     if (this.externalDeclarations.has(mangled)) {
         const ext = this.externalDeclarations.get(mangled)!;
-        if (ext.llvmType === 'void' && (sym as any).llvmType !== 'void') {
-            ext.llvmType = (sym as any).llvmType;
+        const symRt = (sym as any).llvmType || (sym as any).returnType;
+        const extRt = (ext as any).llvmType || (ext as any).returnType;
+        if (extRt === 'void' && symRt && symRt !== 'void') {
+            (ext as any).llvmType = symRt;
+            const params = (ext.paramTypes || []).map(p => this.toLLVMType(p)).join(', ');
+            const rt = this.toLLVMType(symRt);
+            const namePattern = `@${mangled}(`;
+            this.externalDecls = this.externalDecls.filter(d => !d.includes(namePattern));
+            this.externalDecls.push(`declare ${rt} @${mangled}(${params})`);
         }
         return;
     }
 
     if (sym.kind === 'function' || !sym.kind) {
       const params = (sym.paramTypes || []).map(p => this.toLLVMType(p)).join(', ');
-      const rt = this.toLLVMType(sym.llvmType || 'void');
+      const rt = this.toLLVMType(sym.llvmType || (sym as any).returnType || 'void');
       const declLine = `declare ${rt} @${mangled}(${params})`;
       
       // If we already have this exact declaration, skip
-      if (this.externalDecls.includes(declLine)) return;
+      if (this.externalDecls.includes(declLine)) {
+        this.externalDeclarations.set(mangled, sym);
+        return;
+      }
 
       // Final check: scan the entire output for the definition to be sure
       const allOutput = this.output.join('\n') + '\n' + this.globalBuffer.join('\n');
@@ -993,6 +1021,7 @@ export class CodeGenerator {
       this.externalDecls = this.externalDecls.filter(d => !d.includes(namePattern));
       
       this.externalDecls.push(declLine);
+      this.externalDeclarations.set(mangled, sym);
     }
   }
 
@@ -1202,7 +1231,7 @@ export class CodeGenerator {
     this.emit('entry:'); this.indent++;
 
     if (this.isCurrentMain) {
-      this.emit(`store i32 %argc, ptr @__tsn_argc, align 4`);
+      this.emit(`store i32 %argc, ptr @__tsn_argc, align 8`);
       this.emit(`store ptr %argv, ptr @__tsn_argv, align 8`);
     }
 
@@ -1584,6 +1613,23 @@ export class CodeGenerator {
       const vt = this.getValueType(val);
       
       const coerced = this.coerceToType(val, vt, allocaType);
+      
+      if (isClass) {
+        let needsIncref = true;
+        if (s.init.kind === ASTKind.NewExpr) {
+          needsIncref = false;
+        } else if (s.init.kind === ASTKind.Identifier) {
+          const srcId = (s.init as Identifier).name;
+          const srcType = this.localVarTypes.get(srcId);
+          if (srcType && srcType === t) {
+            needsIncref = false;
+          }
+        }
+        if (needsIncref) {
+          this.emit(`call void @class_incref(ptr ${coerced})`);
+        }
+      }
+
       this.emit(`store ${this.toLLVMType(allocaType)} ${coerced}, ptr %${s.name}, align ${this.getAlignment(allocaType)}`);
       
       const isOwningPtr = allocaType.startsWith('ptr<');
@@ -1688,7 +1734,7 @@ export class CodeGenerator {
           this.emit(`${oldVal} = load ptr, ptr ${fPtr}, align 8`);
           this.emit(`call void @class_incref(ptr ${coercedVal})`);
           this.emit(`store ${lType} ${coercedVal}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
-          this.emit(`call void @class_decref(ptr ${oldVal})`);
+          this.emit(`call void @class_decref(ptr ${oldVal}, ptr null)`);
       } else {
           this.emit(`store ${lType} ${coercedVal}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
       }
@@ -1717,13 +1763,31 @@ export class CodeGenerator {
               const oldVal = this.newTemp();
               this.emit(`${oldVal} = load ptr, ptr %${id}, align 8`);
               this.emitOwnedCleanupForValue(oldVal, lt);
+
+              let needsIncref = true;
+              if (s.value.kind === ASTKind.NewExpr) {
+                  needsIncref = false;
+              } else if (s.value.kind === ASTKind.Identifier) {
+                  const srcId = (s.value as Identifier).name;
+                  const srcType = this.localVarTypes.get(srcId) || this.currentFunctionParamTypes.get(srcId);
+                  if (srcType && srcType === lt) {
+                      needsIncref = false;
+                  }
+              }
+              if (needsIncref) {
+                  this.emit(`call void @class_incref(ptr ${val})`);
+              }
+
               this.emit(`store ${this.toLLVMType(lt)} ${val}, ptr %${id}, align 8`);
               this.movedLocals.delete(id);
               this.movedLocals.delete(id);
               if (s.value.kind === ASTKind.Identifier) {
                   const srcId = (s.value as Identifier).name;
-                  this.emit(`store ptr null, ptr %${srcId}, align 8`);
-                  this.movedLocals.add(srcId);
+                  const srcType = this.localVarTypes.get(srcId) || this.currentFunctionParamTypes.get(srcId);
+                  if (srcType && srcType === lt) {
+                      this.emit(`store ptr null, ptr %${srcId}, align 8`);
+                      this.movedLocals.add(srcId);
+                  }
               }
           }
       } else {
@@ -2337,11 +2401,11 @@ export class CodeGenerator {
             const tempAlloc = this.newTemp();
             const llvmUnionType = lt;
             this.emit(`${tempAlloc} = alloca ${llvmUnionType}, align 8`);
-            this.emit(`store ${llvmUnionType} ${l}, ptr ${tempAlloc}, align 4`);
+            this.emit(`store ${llvmUnionType} ${l}, ptr ${tempAlloc}, align 8`);
             const tagPtr = this.newTemp();
             this.emit(`${tagPtr} = getelementptr inbounds ${llvmUnionType}, ptr ${tempAlloc}, i32 0, i32 0`);
             const tag = this.newTemp();
-            this.emit(`${tag} = load i32, ptr ${tagPtr}, align 4`);
+            this.emit(`${tag} = load i32, ptr ${tagPtr}, align 8`);
             
             const cmp = op.includes('eq') ? 'eq' : 'ne';
             const res = this.newTemp();
@@ -2702,7 +2766,7 @@ export class CodeGenerator {
                     const fPtr = this.newTemp();
                     const t = this.newTemp();
                     this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
-                    this.emit(`${t} = load i32, ptr ${fPtr}, align 4`);
+                    this.emit(`${t} = load i32, ptr ${fPtr}, align 8`);
                     this.tempTypes.set(t, 'i32');
                     return t;
                 }
@@ -2728,7 +2792,7 @@ export class CodeGenerator {
                 this.emit(`${oldVal} = load ptr, ptr ${obj}, align 8`);
                 this.emit(`call void @class_incref(ptr ${coercedVal})`);
                 this.emit(`store ${llvmInnerType} ${coercedVal}, ptr ${obj}, align ${this.getAlignment(innerType)}`);
-                this.emit(`call void @class_decref(ptr ${oldVal})`);
+                this.emit(`call void @class_decref(ptr ${oldVal}, ptr null)`);
             } else {
                 this.emit(`store ${llvmInnerType} ${coercedVal}, ptr ${obj}, align ${this.getAlignment(innerType)}`);
             }
@@ -3106,7 +3170,7 @@ export class CodeGenerator {
       const ePtr = this.newTemp();
       const t = this.newTemp();
       this.emit(`${ePtr} = getelementptr inbounds ${g.type}, ptr @${g.name}, i32 0, i32 ${idx}`);
-      this.emit(`${t} = load ${this.toLLVMType(et)}, ptr ${ePtr}, align 4`); 
+      this.emit(`${t} = load ${this.toLLVMType(et)}, ptr ${ePtr}, align ${this.getAlignment(et)}`); 
       this.tempTypes.set(t, et); 
       return t;
     }
@@ -3116,14 +3180,14 @@ export class CodeGenerator {
       const ePtr = this.newTemp();
       const t = this.newTemp();
       this.emit(`${ePtr} = getelementptr inbounds ${lt}, ptr %${base}, i32 0, i32 ${idx}`);
-      this.emit(`${t} = load ${this.toLLVMType(et)}, ptr ${ePtr}, align 4`); 
+      this.emit(`${t} = load ${this.toLLVMType(et)}, ptr ${ePtr}, align ${this.getAlignment(et)}`); 
       this.tempTypes.set(t, et); 
       return t;
     }
     const ePtr = this.newTemp();
     const t = this.newTemp();
     this.emit(`${ePtr} = getelementptr inbounds i32, ptr %${base}, i32 ${idx}`);
-    this.emit(`${t} = load i32, ptr ${ePtr}, align 4`); 
+    this.emit(`${t} = load i32, ptr ${ePtr}, align 8`); 
     this.tempTypes.set(t, 'i32'); 
     return t;
   }
@@ -3142,7 +3206,7 @@ export class CodeGenerator {
               const g = this.globals.get(fullName);
               if (g) {
                   const t = this.newTemp();
-                  this.emit(`${t} = load ${g.type}, ptr @${g.name}, align 4`);
+                  this.emit(`${t} = load ${g.type}, ptr @${g.name}, align ${this.getAlignment(g.type)}`);
                   this.tempTypes.set(t, g.type);
                   return t;
               }
@@ -3579,7 +3643,7 @@ if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") 
     if (!llvmType) return false;
     if (llvmType === 'ptr' || llvmType.startsWith('ptr<') || llvmType.startsWith('rawPtr<')) return false;
     const name = llvmType.startsWith('%') ? llvmType.substring(1) : llvmType;
-    return this.structDecls.has(name) || this.classDecls.has(name) || this.interfaceDecls.has(name);
+    return this.structDecls.has(name);
   }
 
   private isPointerType(t: string): boolean {
@@ -3652,8 +3716,39 @@ if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") 
       }
       const oldPtr = this.newTemp();
       this.emit(`${oldPtr} = load ptr, ptr %${id}, align 8`);
-      this.ensureExternalDeclaration('memory_free', { name: 'memory_free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });
-      this.emit(`call void @memory_free(ptr ${oldPtr})`);
+      
+      const innerIsClass = this.isClassType(innerType);
+      if (innerIsClass) {
+          const hasOld = this.newTemp();
+          this.emit(`${hasOld} = icmp ne ptr ${oldPtr}, null`);
+          const cleanupLabel = this.newLabel('cleanup');
+          const cleanupDoneLabel = this.newLabel('cleanup.done');
+          this.emit(`br i1 ${hasOld}, label %${cleanupLabel}, label %${cleanupDoneLabel}`);
+          this.emit(`\n${cleanupLabel}:`);
+          this.indent++;
+          
+          const classPtr = this.newTemp();
+          this.emit(`${classPtr} = load ptr, ptr ${oldPtr}, align 8`);
+          
+          const innerClassName = innerType.startsWith('%') ? innerType.substring(1) : innerType;
+          const disposeName = `${innerClassName}.dispose`;
+          const disposeInfo = this.functions.get(disposeName) || this.functions.get(this.resolveMangledName(disposeName));
+          const disposerFn = disposeInfo ? `@${disposeInfo.name}` : 'ptr null';
+          
+          this.ensureExternalDeclaration('class_decref', { name: 'class_decref', kind: 'function', llvmType: 'void', paramTypes: ['ptr', 'ptr'] } as any);
+          this.emit(`call void @class_decref(ptr ${classPtr}, ptr ${disposerFn})`);
+          
+          this.ensureExternalDeclaration('memory_free', { name: 'memory_free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });
+          this.emit(`call void @memory_free(ptr ${oldPtr})`);
+          
+          this.emit(`br label %${cleanupDoneLabel}`);
+          this.indent--;
+          this.emit(`\n${cleanupDoneLabel}:`);
+      } else {
+          this.ensureExternalDeclaration('memory_free', { name: 'memory_free', kind: 'function', llvmType: 'void', paramTypes: ['ptr'] });
+          this.emit(`call void @memory_free(ptr ${oldPtr})`);
+      }
+      
       this.generateAutoAllocation(`%${id}`, newVal, innerType);
   }
 
@@ -3777,7 +3872,7 @@ if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") 
             // Set Tag
             const tagPtr = this.newTemp();
             this.emit(`${tagPtr} = getelementptr inbounds ${d}, ptr ${tempUnion}, i32 0, i32 0`);
-            this.emit(`store i32 ${typeIndex}, ptr ${tagPtr}, align 4`);
+            this.emit(`store i32 ${typeIndex}, ptr ${tagPtr}, align 8`);
             
             // Set Data
             const dataPtr = this.newTemp();

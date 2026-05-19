@@ -1,5 +1,6 @@
 declare function print_i32(n: i32): void;
 import { log } from "std:console";
+import { Array } from "std:array";
 
 export enum TokenKind {
     EOF,

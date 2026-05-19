@@ -17,9 +17,9 @@ export class Lexer {
         this.column = 1;
     }
 
-    tokenize(): Array<ptr<Token>> {
+    tokenize(): Array<Token> {
         log("--- Lexer.tokenize: start");
-        let tokens = new Array<ptr<Token>>();
+        let tokens = new Array<Token>();
 
         while (this.pos < this.sourceLength) {
             this.skipWhitespaceAndComments();
@@ -32,12 +32,12 @@ export class Lexer {
         }
 
         log("--- Lexer.tokenize: scan complete, adding EOF");
-        tokens.push(new Token(TokenKind.EOF, "", this.line, this.column) as ptr<Token>);
+        tokens.push(new Token(TokenKind.EOF, "", this.line, this.column) as Token);
         log("--- Lexer.tokenize: success");
         return tokens;
     }
 
-    private nextToken(): ptr<Token> {
+    private nextToken(): Token {
         let line = this.line;
         let column = this.column;
         let ch = this.current();
@@ -176,7 +176,7 @@ export class Lexer {
         return new Token(TokenKind.Unknown, "?", line, column);
     }
 
-    private readNumber(line: i32, column: i32): ptr<Token> {
+    private readNumber(line: i32, column: i32): Token {
         let start = this.pos;
 
         while (this.pos < this.sourceLength && this.isDigit(this.current())) {
@@ -191,10 +191,10 @@ export class Lexer {
         }
 
         let text = this.source.slice(start, this.pos);
-        return new Token(TokenKind.Number, text, line, column) as ptr<Token>;
+        return new Token(TokenKind.Number, text, line, column) as Token;
     }
 
-    private readIdentifierOrKeyword(line: i32, column: i32): ptr<Token> {
+    private readIdentifierOrKeyword(line: i32, column: i32): Token {
         let start = this.pos;
 
         while (this.pos < this.sourceLength && (this.isAlpha(this.current()) || this.isDigit(this.current()))) {
@@ -202,10 +202,10 @@ export class Lexer {
         }
 
         let text = this.source.slice(start, this.pos);
-        return new Token(this.getKeywordKind(text), text, line, column) as ptr<Token>;
+        return new Token(this.getKeywordKind(text), text, line, column) as Token;
     }
 
-    private readString(quote: i32, line: i32, column: i32): ptr<Token> {
+    private readString(quote: i32, line: i32, column: i32): Token {
         let start = this.pos;
         this.advance();
 
@@ -226,7 +226,7 @@ export class Lexer {
             this.advance();
         }
 
-        return new Token(TokenKind.String, text, line, column) as ptr<Token>;
+        return new Token(TokenKind.String, text, line, column) as Token;
     }
 
     private getKeywordKind(text: string): i32 {
