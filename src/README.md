@@ -40,36 +40,10 @@ Nguyên tắc hiện tại:
 
 ## Sử dụng
 
-### Node
-
-```bash
-node src/main.ts input.tsn output.ll
-```
-
-### Bun
-
-```bash
-bun src/main.ts input.tsn output.ll
-```
-
 ### Deno
 
 ```bash
 deno run --allow-read --allow-write --allow-run src/main.ts input.tsn output.ll
-```
-
-### Dùng npm-style scripts
-
-```bash
-npm run compile:node -- input.tsn output.ll
-```
-
-```bash
-npm run compile:bun -- input.tsn output.ll
-```
-
-```bash
-npm run compile:deno -- input.tsn output.ll
 ```
 
 ## Features

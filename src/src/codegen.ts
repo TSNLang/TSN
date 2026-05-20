@@ -2972,6 +2972,12 @@ export class CodeGenerator {
                         semanticRt = '%' + stName.substring(6);
                     }
                     this.tempTypes.set(t, semanticRt || rt);
+
+                    const finalRt = semanticRt || rt;
+                    if (finalRt && (this.isClassType(finalRt) || (finalRt.startsWith('ptr<') && !finalRt.startsWith('ptr<void>')))) {
+                        this.emit(`call void @class_incref(ptr ${t})`);
+                    }
+
                     return t;
                 }
             }
@@ -3006,6 +3012,11 @@ export class CodeGenerator {
             const t = this.newTemp(); 
             this.emit(`${t} = call ${llvmRt} @${actualName}(${aStr})`); 
             this.tempTypes.set(t, rt); 
+
+            if (rt && (this.isClassType(rt) || (rt.startsWith('ptr<') && !rt.startsWith('ptr<void>')))) {
+                this.emit(`call void @class_incref(ptr ${t})`);
+            }
+
             return t;
         }
     }
@@ -3051,6 +3062,12 @@ export class CodeGenerator {
                  }
                  this.emit(`${t} = call ${lRt} @${mName}(${aStr})`);
                  this.tempTypes.set(t, mInfo.llvmType);
+
+                 const returnType = mInfo.llvmType;
+                 if (returnType && (this.isClassType(returnType) || (returnType.startsWith('ptr<') && !returnType.startsWith('ptr<void>')))) {
+                     this.emit(`call void @class_incref(ptr ${t})`);
+                 }
+
                  return t;
              }
         }
@@ -3067,6 +3084,12 @@ export class CodeGenerator {
     // Use semantic type for tempTypes so field access on the result can resolve struct type
     const staticSemanticRt = (rt === 'ptr') ? this.guessReturnTypeClass(stName, m.member) : rt;
     this.tempTypes.set(t, staticSemanticRt || rt);
+
+    const finalStaticRt = staticSemanticRt || rt;
+    if (finalStaticRt && (this.isClassType(finalStaticRt) || (finalStaticRt.startsWith('ptr<') && !finalStaticRt.startsWith('ptr<void>')))) {
+        this.emit(`call void @class_incref(ptr ${t})`);
+    }
+
     return t;
   }
 
@@ -3155,6 +3178,11 @@ export class CodeGenerator {
             semanticRt = '%Optional_' + actualMangled.substring(actualMangled.indexOf('Some_') + 5, actualMangled.indexOf('$P'));
         } else if (actualMangled.includes('None_')) {
             semanticRt = '%Optional_' + actualMangled.substring(actualMangled.indexOf('None_') + 5, actualMangled.indexOf('$P'));
+        }
+    } else if (rt === 'ptr' && sym.ast && sym.ast.returnType) {
+        const classType = this.getLLVMTypeWithClass(sym.ast.returnType);
+        if (classType.startsWith('%') || classType.startsWith('ptr<') || classType.startsWith('rawPtr<')) {
+            semanticRt = classType;
         }
     }
     
@@ -3450,6 +3478,9 @@ if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") 
 
   private resolveTypeName(t: TypeAnnotation): string {
     let name = t.name;
+    if (name === 'Array') {
+        this.ensureGenericArrayAvailable();
+    }
     if (t.genericArgs && t.genericArgs.length > 0) {
         if (this.genericClasses.has(name)) {
             name = this.instantiateClass(name, t.genericArgs);

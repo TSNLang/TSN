@@ -22,8 +22,8 @@ void* class_alloc(int32_t size) {
     void* p = calloc(1, size);
     if (p) {
         *((int32_t*)p) = 1; // Initial refCount = 1
-        // printf("DEBUG: class_alloc(%d) -> %p (refcount=1)\n", size, p);
-        // fflush(stdout);
+        printf("DEBUG: class_alloc(%d) -> %p (refcount=1)\n", size, p);
+        fflush(stdout);
     }
     return p;
 }
@@ -31,8 +31,8 @@ void* class_alloc(int32_t size) {
 void class_incref(void* p) {
     if (p) {
         int32_t* rc = (int32_t*)p;
-        // printf("DEBUG: class_incref(%p) rc_ptr=%p rc_val=%d\n", p, rc, *rc);
-        // fflush(stdout);
+        printf("DEBUG: class_incref(%p) rc_ptr=%p rc_val=%d\n", p, rc, *rc);
+        fflush(stdout);
         if (*rc == -1) return;
         (*rc)++;
     }
@@ -41,13 +41,13 @@ void class_incref(void* p) {
 void class_decref(void* p, void (*disposer)(void*)) {
     if (p) {
         int32_t* rc_ptr = (int32_t*)p;
-        // printf("DEBUG: class_decref(%p, %p) rc_ptr=%p rc_val=%d\n", p, disposer, rc_ptr, *rc_ptr);
-        // fflush(stdout);
+        printf("DEBUG: class_decref(%p, %p) rc_ptr=%p rc_val=%d\n", p, disposer, rc_ptr, *rc_ptr);
+        fflush(stdout);
         if (*rc_ptr == -1) return;
         int32_t rc = --(*rc_ptr);
         if (rc <= 0) {
-            // printf("DEBUG: class_freeing(%p)\n", p);
-            // fflush(stdout);
+            printf("DEBUG: class_freeing(%p)\n", p);
+            fflush(stdout);
             if (disposer) disposer(p);
             free(p);
         }

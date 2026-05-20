@@ -1,7 +1,9 @@
 declare function print_i32(n: i32): void;
 import { Array } from "std:array";
 import { log } from "std:console";
-import { IdentifierExpr, NumberLiteral, BinaryExpr, Expr } from "./ast.tsn";
+import { IdentifierExpr, NumberLiteral, BinaryExpr, Expr, ClassDecl, ClassMemberDecl, Decl } from "./ast.tsn";
+import { Lexer } from "./lexer.tsn";
+import { ASTParser } from "./ast-parser.tsn";
 
 function testAST(): i32 {
     let left = new NumberLiteral("1");
@@ -9,11 +11,102 @@ function testAST(): i32 {
     let leftCopy = left;
     let rightCopy = right;
     let expr = new BinaryExpr("+", leftCopy, rightCopy);
-    log("AST test passed");
+    log("AST basic structures passed");
+    return 0;
+}
+
+function testClassParsing(): i32 {
+    let source = "class MyClass {\n    public myField: i32;\n    constructor(val: i32) {\n        this.myField = val;\n    }\n    public getVal(): i32 {\n        return this.myField;\n    }\n}";
+    let lexer = new Lexer(source);
+    let tokens = lexer.tokenize();
+    if (tokens.length == 0) {
+        log("Lexer failed: no tokens generated");
+        return 1;
+    }
+    log("Lexer tokenize passed, number of tokens:");
+    print_i32(tokens.length);
+
+    let idx = 0;
+    while (idx < tokens.length) {
+        let t = tokens.get(idx);
+        log("Token:");
+        print_i32(t.kind);
+        log(t.lexeme);
+        idx = idx + 1;
+    }
+
+    let parser = new ASTParser(tokens);
+    log("Parser instance created, starting parse...");
+    let program = parser.parse();
+    log("Parser.parse finished!");
+
+    if (program.declarations.length == 0) {
+        log("Parser failed: no declarations parsed");
+        return 1;
+    }
+    log("Number of declarations:");
+    print_i32(program.declarations.length);
+
+    let firstDecl: Decl = program.declarations.get(0);
+    log("First decl kind:");
+    log(firstDecl.kind);
+
+    if (firstDecl.kind != "ClassDecl") {
+        log("Parser failed: declaration is not ClassDecl");
+        return 1;
+    }
+
+    let classDecl: ClassDecl = firstDecl;
+    log("Class name:");
+    log(classDecl.name);
+
+    if (classDecl.name != "MyClass") {
+        log("Parser failed: class name is incorrect");
+        return 1;
+    }
+
+    log("Class members length:");
+    print_i32(classDecl.members.length);
+
+    if (classDecl.members.length != 3) {
+        log("Parser failed: expected 3 members");
+        return 1;
+    }
+
+    let member0 = classDecl.members.get(0);
+    if (member0.kind != "FieldDecl" || member0.name != "myField" || !member0.isPublic || member0.typeText != "i32") {
+        log("Parser failed: field member parsed incorrectly");
+        return 1;
+    }
+    log("Member 0 field check passed");
+
+    let member1 = classDecl.members.get(1);
+    if (member1.kind != "ConstructorDecl" || !member1.isConstructor || member1.params.length != 1) {
+        log("Parser failed: constructor parsed incorrectly");
+        return 1;
+    }
+    log("Member 1 constructor check passed");
+
+    let member2 = classDecl.members.get(2);
+    if (member2.kind != "MethodDecl" || member2.name != "getVal" || !member2.isPublic || member2.returnTypeText != "i32") {
+        log("Parser failed: method parsed incorrectly");
+        return 1;
+    }
+    log("Member 2 method check passed");
+
+    log("Class member parsing test passed");
     return 0;
 }
 
 function main(): i32 {
-    return testAST();
+    if (testAST() != 0) {
+        return 1;
+    }
+    if (testClassParsing() != 0) {
+        return 1;
+    }
+    log("All AST and Parser tests passed!");
+    return 0;
 }
+
 

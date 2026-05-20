@@ -2,8 +2,8 @@ import { log } from "std:console";
 import { readText } from "std:fs";
 import { args } from "std:os";
 import { Lexer } from "./lexer.tsn";
-import { Parser } from "./parser.tsn";
-import { Program } from "./ast.tsn";
+import { ASTParser } from "./ast-parser.tsn";
+import { ASTProgram } from "./ast.tsn";
 import { MIRBuilder } from "./mir-builder.tsn";
 import { MIRCodegen } from "./mir-codegen.tsn";
 import { MIRType } from "./mir.tsn";
@@ -36,8 +36,8 @@ function parseFile(path: string): i32 {
         return 1;
     }
     log("--- parseFile: starting parser constructor");
-    let parser = new Parser(tokens);
-    let program: Program = parser.parse();
+    let parser = new ASTParser(tokens);
+    let program: ASTProgram = parser.parse();
     log("--- parseFile: parse success");
 
     if (program.declarations.length == 0) {

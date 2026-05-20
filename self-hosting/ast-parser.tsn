@@ -1,5 +1,6 @@
 declare function print_i32(n: i32): void;
 import { Array } from "std:array";
+import { log } from "std:console";
 import { Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr, ParameterInfo, ImportSpecifierInfo, ClassMemberDecl } from "./ast.tsn";
 
 export class ASTParser {
@@ -13,24 +14,30 @@ export class ASTParser {
 
     public parse(): ASTProgram {
         let declarations = new Array<Decl>();
+        log("ASTParser.parse: start");
         while (!this.isAtEnd()) {
             let decl = this.parseDeclaration();
             declarations.push(decl);
         }
+        log("ASTParser.parse: complete");
         return new ASTProgram(declarations);
     }
 
     private parseDeclaration(): Decl {
         if (this.matchKind(TokenKind.Import)) {
+            log("ASTParser.parseDeclaration: import");
             return this.parseImportDecl();
         }
         let isExported = this.matchKind(TokenKind.Export);
         if (this.matchKind(TokenKind.Function)) {
+            log("ASTParser.parseDeclaration: function");
             return this.parseFunctionDecl(isExported);
         }
         if (this.matchKind(TokenKind.Class)) {
+            log("ASTParser.parseDeclaration: class");
             return this.parseClassDecl(isExported);
         }
+        log("ASTParser.parseDeclaration: unknown, advancing");
         this.advance();
         return new ImportDecl("", "", "", new Array<ImportSpecifierInfo>());
     }
@@ -120,6 +127,7 @@ export class ASTParser {
         if (this.peek().kind == TokenKind.Identifier) {
             name = this.advance().lexeme;
         }
+        log("ASTParser.parseClassDecl: name = " + name);
         
         let typeParams = new Array<string>();
         if (this.matchKind(TokenKind.Less)) {
@@ -136,51 +144,166 @@ export class ASTParser {
         
         let members = new Array<ClassMemberDecl>();
         if (this.matchKind(TokenKind.LBrace)) {
+            log("ASTParser.parseClassDecl: matched LBrace");
             while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
-                this.skipClassMember();
+                log("ASTParser.parseClassDecl: parsing member...");
+                members.push(this.parseClassMember());
             }
+            log("ASTParser.parseClassDecl: exiting LBrace loop");
             this.matchKind(TokenKind.RBrace);
         }
         
         return new ClassDecl(name, members, typeParams, isExported);
     }
 
-    private skipClassMember(): void {
-        while (this.peek().kind == TokenKind.Public || this.peek().kind == TokenKind.Private || this.peek().kind == TokenKind.Protected || this.peek().kind == TokenKind.Static) {
-            this.advance();
-        }
-        
-        if (this.matchKind(TokenKind.Constructor)) {
-            if (this.matchKind(TokenKind.LParen)) {
-                this.skipUntil(TokenKind.RParen);
-                this.matchKind(TokenKind.RParen);
-            }
-            if (this.matchKind(TokenKind.LBrace)) {
-                this.skipUntil(TokenKind.RBrace);
-                this.matchKind(TokenKind.RBrace);
-            }
-            return;
-        }
-        
-        if (this.peek().kind == TokenKind.Identifier) {
-            this.advance();
-            if (this.matchKind(TokenKind.Colon)) {
-                this.parseTypeText();
-            }
-            if (this.matchKind(TokenKind.LParen)) {
-                this.skipUntil(TokenKind.RParen);
-                this.matchKind(TokenKind.RParen);
-                if (this.matchKind(TokenKind.Colon)) {
-                    this.parseTypeText();
-                }
-                if (this.matchKind(TokenKind.LBrace)) {
-                    this.skipUntil(TokenKind.RBrace);
-                    this.matchKind(TokenKind.RBrace);
-                }
+    private parseClassMember(): ClassMemberDecl {
+        let isPublic = false;
+        let isPrivate = false;
+        let isProtected = false;
+        let isStatic = false;
+        let isAsync = false;
+
+        log("ASTParser.parseClassMember: entering");
+        log("ASTParser.parseClassMember: pos =");
+        print_i32(this.pos);
+        log("ASTParser.parseClassMember: tokens length =");
+        print_i32(this.tokens.length);
+        while (true) {
+            let kind = this.peek().kind;
+            if (kind == TokenKind.Public) {
+                isPublic = true;
+                this.advance();
+            } else if (kind == TokenKind.Private) {
+                isPrivate = true;
+                this.advance();
+            } else if (kind == TokenKind.Protected) {
+                isProtected = true;
+                this.advance();
+            } else if (kind == TokenKind.Static) {
+                isStatic = true;
+                this.advance();
+            } else if (kind == TokenKind.Async) {
+                isAsync = true;
+                this.advance();
             } else {
-                this.matchKind(TokenKind.Semicolon);
+                break;
             }
         }
+
+        let isConstructor = false;
+        let name = "";
+        let kind = "";
+        let returnTypeText = "";
+        let typeText = "";
+        let typeParams = new Array<string>();
+        let params = new Array<ParameterInfo>();
+
+        if (this.matchKind(TokenKind.Constructor)) {
+            isConstructor = true;
+            name = "constructor";
+            kind = "ConstructorDecl";
+            
+            if (this.matchKind(TokenKind.LParen)) {
+                while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                    let paramName = "";
+                    if (this.peek().kind == TokenKind.Identifier) {
+                        paramName = this.advance().lexeme;
+                    }
+                    let paramType = "";
+                    if (this.matchKind(TokenKind.Colon)) {
+                        paramType = this.parseTypeText();
+                    }
+                    params.push(new ParameterInfo(paramName, paramType, false));
+                    if (!this.matchKind(TokenKind.Comma)) {
+                        break;
+                    }
+                }
+                this.matchKind(TokenKind.RParen);
+            }
+
+            if (this.matchKind(TokenKind.LBrace)) {
+                this.pos = this.pos - 1;
+                let body = this.parseBlockStmt();
+                let bodyStmtCount = body.statements.length;
+                return new ClassMemberDecl(
+                    kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
+                    "", typeParams, "", params, "", "", "", "", true, bodyStmtCount, 0, 0, 0, 0, 0, 0
+                );
+            }
+            return new ClassMemberDecl(
+                kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
+                "", typeParams, "", params, "", "", "", "", false, 0, 0, 0, 0, 0, 0, 0
+            );
+        }
+
+        if (this.peek().kind == TokenKind.Identifier) {
+            name = this.advance().lexeme;
+
+            if (this.matchKind(TokenKind.Less)) {
+                while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
+                    if (this.peek().kind == TokenKind.Identifier) {
+                        typeParams.push(this.advance().lexeme);
+                    }
+                    if (!this.matchKind(TokenKind.Comma)) {
+                        break;
+                    }
+                }
+                this.matchKind(TokenKind.Greater);
+            }
+
+            if (this.matchKind(TokenKind.LParen)) {
+                kind = "MethodDecl";
+                while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                    let paramName = "";
+                    if (this.peek().kind == TokenKind.Identifier) {
+                        paramName = this.advance().lexeme;
+                    }
+                    let paramType = "";
+                    if (this.matchKind(TokenKind.Colon)) {
+                        paramType = this.parseTypeText();
+                    }
+                    params.push(new ParameterInfo(paramName, paramType, false));
+                    if (!this.matchKind(TokenKind.Comma)) {
+                        break;
+                    }
+                }
+                this.matchKind(TokenKind.RParen);
+
+                if (this.matchKind(TokenKind.Colon)) {
+                    returnTypeText = this.parseTypeText();
+                }
+
+                if (this.matchKind(TokenKind.LBrace)) {
+                    this.pos = this.pos - 1;
+                    let body = this.parseBlockStmt();
+                    let bodyStmtCount = body.statements.length;
+                    return new ClassMemberDecl(
+                        kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
+                        "", typeParams, "", params, "", returnTypeText, "", "", true, bodyStmtCount, 0, 0, 0, 0, 0, 0
+                    );
+                }
+                return new ClassMemberDecl(
+                    kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
+                    "", typeParams, "", params, "", returnTypeText, "", "", false, 0, 0, 0, 0, 0, 0, 0
+                );
+            } else {
+                kind = "FieldDecl";
+                if (this.matchKind(TokenKind.Colon)) {
+                    typeText = this.parseTypeText();
+                }
+                this.matchKind(TokenKind.Semicolon);
+                return new ClassMemberDecl(
+                    kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
+                    "", typeParams, "", params, "", "", "", typeText, false, 0, 0, 0, 0, 0, 0, 0
+                );
+            }
+        }
+
+        this.advance();
+        return new ClassMemberDecl(
+            "Unknown", "", "", false, false, false, false, false, false,
+            "", typeParams, "", params, "", "", "", "", false, 0, 0, 0, 0, 0, 0, 0
+        );
     }
 
     private parseBlockStmt(): BlockStmt {
@@ -295,16 +418,12 @@ export class ASTParser {
     }
 
     private parseAssignment(): Expr {
-        if (this.peek().kind == TokenKind.Identifier) {
-            let savedPos = this.pos;
-            let tempLeft = this.parseLogicalOr();
-            if (this.matchKind(TokenKind.Equal)) {
-                let right = this.parseAssignment();
-                return new BinaryExpr("=", tempLeft, right);
-            }
-            this.pos = savedPos;
+        let left = this.parseLogicalOr();
+        if (this.matchKind(TokenKind.Equal)) {
+            let right = this.parseAssignment();
+            return new BinaryExpr("=", left, right);
         }
-        return this.parseLogicalOr();
+        return left;
     }
 
     private parseLogicalOr(): Expr {
