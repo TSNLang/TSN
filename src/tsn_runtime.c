@@ -1,6 +1,10 @@
 // tsn_runtime.c - Runtime support for TSN programs
 // Minimal version - most logic is now in TSN stdlib
 
+/**
+ Because memory security cannot be guaranteed within Clayer/Cruntime, we implemented reference counting (RC) for this C-class.
+ **/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

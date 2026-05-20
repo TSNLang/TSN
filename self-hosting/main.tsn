@@ -1,5 +1,6 @@
 import { log } from "std:console";
 import { readText } from "std:fs";
+import { args } from "std:os";
 import { Lexer } from "./lexer.tsn";
 import { Parser } from "./parser.tsn";
 import { Program } from "./ast.tsn";
@@ -52,14 +53,30 @@ function parseFile(path: string): i32 {
 }
 
 function main(): i32 {
-    log("=== TSN SELF-HOSTING COMPILER (PARSER PHASE) ===");
-    if (parseFile("d:\\project\\TSN\\test_simple.tsn") != 0) return 1;
-    if (parseFile("d:\\project\\TSN\\self-hosting\\parser.tsn") != 0) return 1;
-    if (parseFile("d:\\project\\TSN\\self-hosting\\lexer.tsn") != 0) return 1;
-    if (parseFile("d:\\project\\TSN\\self-hosting\\ast.tsn") != 0) return 1;
-    if (parseFile("d:\\project\\TSN\\self-hosting\\main.tsn") != 0) return 1;
-    
-    log("=== ALL FILES PARSED SUCCESSFULLY BY SELF-HOSTED COMPILER ===");
+    let argIt = args();
+    let argList = argIt.toArray();
+
+    if (argList.length < 2) {
+        log("Usage: tsnc <input.tsn>");
+        return 1;
+    }
+
+    let inputPath = argList.get(1);
+    if (inputPath == "-h" || inputPath == "--help") {
+        log("Usage: tsnc <input.tsn>");
+        return 0;
+    }
+
+    log("=== TSN SELF-HOSTING COMPILER ===");
+    log("Compiling file:");
+    log(inputPath);
+
+    if (parseFile(inputPath) != 0) {
+        log("Compilation failed during parsing.");
+        return 1;
+    }
+
+    log("=== PARSED SUCCESSFULLY BY SELF-HOSTED COMPILER ===");
 
     log("=== RUNNING SELF-HOSTED CODEGEN SMOKE TEST ===");
     let builder = new MIRBuilder("smoke_test");

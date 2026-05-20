@@ -30,7 +30,31 @@ export class ArgsIterator implements Iterator<string> {
         let ptrOffset = (this.index as i64) * 8;
         let strPtr = memory.getPointer(this.argv, ptrOffset);
         
-        let s: string = strPtr as string;
+        // Find length of null-terminated C string
+        let len = 0;
+        while (true) {
+            let b = memory.getByte(strPtr, len as i64);
+            if (b == 0) break;
+            len = len + 1;
+        }
+
+        // Allocate TSN string: 4 bytes refCount + 4 bytes length + len + 1 null terminator
+        let totalSize = (len as i64) + 9;
+        let buf = memory.alloc(totalSize);
+        
+        let pRefCount: rawPtr<i32> = buf;
+        pRefCount.set(1);
+        
+        let pLength: rawPtr<i32> = memory.offset(buf, 4);
+        pLength.set(len);
+        
+        let dataDest = memory.offset(buf, 8);
+        if (len > 0) {
+            memory.copy(dataDest, strPtr, len as i64);
+        }
+        memory.setByte(dataDest, len as i64, 0); // Null terminator
+        
+        let s: string = buf;
         
         this.index = this.index + 1;
         return Some<string>(s);
