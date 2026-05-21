@@ -93,8 +93,14 @@ export class MIRCodegen {
     }
 
     private emitBlock(block: MIRBasicBlock): void {
-        this.output.push(block.label);
+        this.output.push("bb");
+        this.output.push(this.idToStr(block.id));
         this.output.push(":");
+        if (block.label != "") {
+            this.output.push(" ; ");
+            this.output.push(block.label);
+        }
+        this.output.push("\n");
         
         let i = 0;
         while (i < block.instructions.length) {
@@ -106,127 +112,189 @@ export class MIRCodegen {
     }
 
     private emitInstruction(inst: MIRInst): void {
-        if (inst.opcode == "Add") {
-            this.emitBinaryInst(inst);
-        }
-        if (inst.opcode == "Sub") {
-            this.emitBinaryInst(inst);
-        }
-        if (inst.opcode == "Mul") {
-            this.emitBinaryInst(inst);
-        }
-        if (inst.opcode == "Div") {
-            this.emitBinaryInst(inst);
-        }
-        if (inst.opcode == "Load") {
-            this.emitLoadInst(inst);
-        }
-        if (inst.opcode == "Store") {
-            this.emitStoreInst(inst);
-        }
-        if (inst.opcode == "Call") {
-            this.emitCallInst(inst);
-        }
-        if (inst.opcode == "Return") {
-            this.emitReturnInst(inst);
-        }
-        if (inst.opcode == "Branch") {
-            this.emitBranchInst(inst);
-        }
-        if (inst.opcode == "Jump") {
-            this.emitJumpInst(inst);
-        }
-        if (inst.opcode == "Alloca") {
-            this.emitAllocaInst(inst);
-        }
-        if (inst.opcode == "GetElementPtr") {
-            this.emitGetElementPtrInst(inst);
+        if (inst.opcode == "Binary") {
+            this.emitBinaryInst(inst as MIRBinaryInst);
+        } else if (inst.opcode == "Load") {
+            this.emitLoadInst(inst as MIRLoadInst);
+        } else if (inst.opcode == "Store") {
+            this.emitStoreInst(inst as MIRStoreInst);
+        } else if (inst.opcode == "Call") {
+            this.emitCallInst(inst as MIRCallInst);
+        } else if (inst.opcode == "Return") {
+            this.emitReturnInst(inst as MIRReturnInst);
+        } else if (inst.opcode == "Branch") {
+            this.emitBranchInst(inst as MIRBranchInst);
+        } else if (inst.opcode == "Jump") {
+            this.emitJumpInst(inst as MIRJumpInst);
+        } else if (inst.opcode == "Alloca") {
+            this.emitAllocaInst(inst as MIRAllocaInst);
+        } else if (inst.opcode == "GetElementPtr") {
+            this.emitGetElementPtrInst(inst as MIRGetElementPtrInst);
+        } else if (inst.opcode == "Incref") {
+            this.emitIncrefInst(inst as MIRIncrefInst);
+        } else if (inst.opcode == "Decref") {
+            this.emitDecrefInst(inst as MIRDecrefInst);
         }
     }
 
-    private emitBinaryInst(inst: MIRInst): void {
+    private emitBinaryInst(inst: MIRBinaryInst): void {
         this.output.push(this.emitValue(inst.result));
         this.output.push(" = ");
-        if (inst.opcode == "Add") {
+        if (inst.op == "+") {
             this.output.push("add ");
-        }
-        if (inst.opcode == "Sub") {
+        } else if (inst.op == "-") {
             this.output.push("sub ");
-        }
-        if (inst.opcode == "Mul") {
+        } else if (inst.op == "*") {
             this.output.push("mul ");
-        }
-        if (inst.opcode == "Div") {
+        } else if (inst.op == "/") {
             this.output.push("sdiv ");
+        } else {
+            this.output.push("add "); // fallback
         }
-        this.output.push(this.emitType(inst.result.valueType));
+        this.output.push(this.emitType(inst.left.valueType));
         this.output.push(" ");
-        this.output.push("0");
+        this.output.push(this.emitValue(inst.left));
         this.output.push(", ");
-        this.output.push("0");
+        this.output.push(this.emitValue(inst.right));
+        this.output.push("\n");
     }
 
-    private emitLoadInst(inst: MIRInst): void {
+    private emitLoadInst(inst: MIRLoadInst): void {
         this.output.push(this.emitValue(inst.result));
         this.output.push(" = load ");
         this.output.push(this.emitType(inst.result.valueType));
-        this.output.push(", ptr null");
+        this.output.push(", ptr ");
+        this.output.push(this.emitValue(inst.address));
+        this.output.push("\n");
     }
 
-    private emitStoreInst(inst: MIRInst): void {
-        this.output.push("store i32 0, ptr null");
-    }
-
-    private emitCallInst(inst: MIRInst): void {
-        this.output.push(this.emitValue(inst.result));
-        this.output.push(" = call ");
-        this.output.push(this.emitType(inst.result.valueType));
-        this.output.push(" @unknown()");
-    }
-
-    private emitReturnInst(inst: MIRInst): void {
-        this.output.push("ret ");
-        this.output.push(this.emitType(inst.result.valueType));
+    private emitStoreInst(inst: MIRStoreInst): void {
+        this.output.push("store ");
+        this.output.push(this.emitType(inst.value.valueType));
         this.output.push(" ");
-        this.output.push("0");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(", ptr ");
+        this.output.push(this.emitValue(inst.address));
+        this.output.push("\n");
     }
 
-    private emitBranchInst(inst: MIRInst): void {
-        this.output.push("br i1 false, label %bb0, label %bb1");
+    private emitCallInst(inst: MIRCallInst): void {
+        if (inst.result.valueType.name != "void") {
+            this.output.push(this.emitValue(inst.result));
+            this.output.push(" = ");
+        }
+        this.output.push("call ");
+        this.output.push(this.emitType(inst.result.valueType));
+        this.output.push(" @");
+        this.output.push(inst.callee);
+        this.output.push("(");
+        for (let i = 0; i < inst.args.length; i = i + 1) {
+            if (i > 0) this.output.push(", ");
+            let arg = inst.args.get(i);
+            this.output.push(this.emitType(arg.valueType));
+            this.output.push(" ");
+            this.output.push(this.emitValue(arg));
+        }
+        this.output.push(")\n");
     }
 
-    private emitJumpInst(inst: MIRInst): void {
-        this.output.push("br label %bb0");
+    private emitReturnInst(inst: MIRReturnInst): void {
+        this.output.push("ret ");
+        this.output.push(this.emitType(inst.value.valueType));
+        if (inst.value.valueType.name != "void") {
+            this.output.push(" ");
+            this.output.push(this.emitValue(inst.value));
+        }
+        this.output.push("\n");
     }
 
-    private emitAllocaInst(inst: MIRInst): void {
+    private emitBranchInst(inst: MIRBranchInst): void {
+        this.output.push("br i1 ");
+        this.output.push(this.emitValue(inst.condition));
+        this.output.push(", label %bb");
+        this.output.push(this.idToStr(inst.trueBlock));
+        this.output.push(", label %bb");
+        this.output.push(this.idToStr(inst.falseBlock));
+        this.output.push("\n");
+    }
+
+    private emitJumpInst(inst: MIRJumpInst): void {
+        this.output.push("br label %bb");
+        this.output.push(this.idToStr(inst.targetBlock));
+        this.output.push("\n");
+    }
+
+    private emitAllocaInst(inst: MIRAllocaInst): void {
         this.output.push(this.emitValue(inst.result));
-        this.output.push(" = alloca i32");
+        this.output.push(" = alloca ");
+        this.output.push(this.emitType(inst.allocType));
+        this.output.push("\n");
     }
 
-    private emitGetElementPtrInst(inst: MIRInst): void {
+    private emitGetElementPtrInst(inst: MIRGetElementPtrInst): void {
         this.output.push(this.emitValue(inst.result));
-        this.output.push(" = getelementptr i32, ptr null, i32 0");
+        this.output.push(" = getelementptr ");
+        this.output.push(this.emitType(inst.base.valueType));
+        this.output.push(", ptr ");
+        this.output.push(this.emitValue(inst.base));
+        this.output.push(", i32 ");
+        this.output.push(this.emitValue(inst.index));
+        this.output.push("\n");
+    }
+
+    private emitIncrefInst(inst: MIRIncrefInst): void {
+        this.output.push("call void @tsn_incref(ptr ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(")\n");
+    }
+
+    private emitDecrefInst(inst: MIRDecrefInst): void {
+        this.output.push("call void @tsn_decref(ptr ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(")\n");
     }
 
     private emitType(t: MIRType): string {
         if (t.isPointer) {
             return "ptr";
         }
+        if (t.name == "i32") return "i32";
+        if (t.name == "bool") return "i1";
+        if (t.name == "void") return "void";
+        if (t.name == "string") return "ptr";
         return t.name;
     }
 
     private emitValue(v: MIRValue): string {
         if (v.kind == "Constant") {
-            return "0";
+            let c = v as MIRConstant;
+            return c.value;
         }
         if (v.kind == "Register") {
-            return "%0";
+            let r = v as MIRRegister;
+            return "%r" + this.idToStr(r.id);
         }
         if (v.kind == "Global") {
-            return "@global";
+            let g = v as MIRGlobal;
+            return "@" + g.globalName;
         }
         return "%unknown";
+    }
+
+    private idToStr(id: i32): string {
+        // Simple conversion since we don't have a library yet
+        if (id == 0) return "0";
+        if (id == 1) return "1";
+        if (id == 2) return "2";
+        if (id == 3) return "3";
+        if (id == 4) return "4";
+        if (id == 5) return "5";
+        if (id == 6) return "6";
+        if (id == 7) return "7";
+        if (id == 8) return "8";
+        if (id == 9) return "9";
+        // fallback for bigger IDs (could use a real int-to-string later)
+        return "x"; 
     }
 
     private joinOutput(): string {
