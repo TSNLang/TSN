@@ -4,6 +4,9 @@
 *.ll
 *.meta
 *.o
+*.s
+*.pdb
+*.ilk
 
 # Node.js
 node_modules/
@@ -29,8 +32,6 @@ test_*.tsn
 !test_enum.ts
 !test_ts.ts
 *.txt
-*.pdb
-*.s
 # Logs
 *.log
 
