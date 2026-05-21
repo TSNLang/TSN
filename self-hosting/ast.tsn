@@ -117,8 +117,8 @@ export class ClassMemberDecl {
         this.isConstructor = isConstructor;
         this.typeParamSummary = typeParamSummary;
         this.typeParameters = typeParameters;
-        this.paramSummary = paramSummary;
         this.params = params;
+        this.paramSummary = paramSummary;
         this.returnSummary = returnSummary;
         this.returnTypeText = returnTypeText;
         this.typeSummary = typeSummary;
@@ -131,6 +131,7 @@ export class ClassMemberDecl {
         this.bodyWhileCount = bodyWhileCount;
         this.bodyForCount = bodyForCount;
         this.bodyAssignCount = bodyAssignCount;
+        log("--- ClassMemberDecl.constructor: end");
     }
 }
 

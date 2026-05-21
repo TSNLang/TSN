@@ -169,20 +169,20 @@ export class ASTParser {
         log("ASTParser.parseClassMember: tokens length =");
         print_i32(this.tokens.length);
         while (true) {
-            let kind = this.peek().kind;
-            if (kind == TokenKind.Public) {
+            let tKind = this.peek().kind;
+            if (tKind == TokenKind.Public) {
                 isPublic = true;
                 this.advance();
-            } else if (kind == TokenKind.Private) {
+            } else if (tKind == TokenKind.Private) {
                 isPrivate = true;
                 this.advance();
-            } else if (kind == TokenKind.Protected) {
+            } else if (tKind == TokenKind.Protected) {
                 isProtected = true;
                 this.advance();
-            } else if (kind == TokenKind.Static) {
+            } else if (tKind == TokenKind.Static) {
                 isStatic = true;
                 this.advance();
-            } else if (kind == TokenKind.Async) {
+            } else if (tKind == TokenKind.Async) {
                 isAsync = true;
                 this.advance();
             } else {

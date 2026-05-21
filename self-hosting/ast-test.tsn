@@ -98,7 +98,10 @@ function testClassParsing(): i32 {
     return 0;
 }
 
-function main(): i32 {
+declare function tsn_init_args(argc: i32, argv: ptr): void;
+
+function main(argc: i32, argv: ptr): i32 {
+    tsn_init_args(argc, argv);
     if (testAST() != 0) {
         return 1;
     }
