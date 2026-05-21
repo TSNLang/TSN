@@ -34,18 +34,105 @@ export class MIRBuilder {
 
     private buildFunction(decl: Declaration): void {
         log("MIRBuilder.buildFunction: " + decl.name);
-        let func = new MIRFunction(decl.name, new MIRType("i32", false, 4));
+        // Cast Declaration to access more fields if it's a FunctionDecl
+        // In ast.tsn, we have FunctionDecl class but buildDeclaration takes Declaration.
         
-        let entryId = func.createBlock("entry");
+        let func = new MIRFunction(decl.name, new MIRType("i32", false, 4));
         this.currentFunction = func;
+        let entryId = func.createBlock("entry");
         this.currentBlockId = entryId;
         
-        this.createReturn(this.createConstant("0", new MIRType("i32", false, 4)));
+        // In a real scenario, we'd have the AST body here.
+        // For self-hosting demonstration, we assume the structure is accessible.
         
         this.module.functions.push(func);
     }
 
-    private buildClass(decl: Declaration): void {
+    private analyzeStatement(stmt: Stmt): void {
+        if (stmt.kind == "BlockStmt") {
+            let block = stmt as BlockStmt;
+            for (let i = 0; i < block.statements.length; i = i + 1) {
+                this.analyzeStatement(block.statements.get(i));
+            }
+        } else if (stmt.kind == "VarDeclStmt") {
+            let varDecl = stmt as VarDeclStmt;
+            let val = this.analyzeExpression(varDecl.init);
+            // In a real compiler, we would track this in a symbol table
+            // For now, we store it in an alloca if it's a local variable
+            let addr = this.createAlloca(val.valueType);
+            this.createStore(val, addr);
+        } else if (stmt.kind == "ExprStmt") {
+            let exprStmt = stmt as ExprStmt;
+            this.analyzeExpression(exprStmt.expr);
+        } else if (stmt.kind == "ReturnStmt") {
+            let retStmt = stmt as ReturnStmt;
+            let val = this.analyzeExpression(retStmt.value);
+            this.createReturn(val);
+        } else if (stmt.kind == "IfStmt") {
+            let ifStmt = stmt as IfStmt;
+            let cond = this.analyzeExpression(ifStmt.condition);
+            let thenId = this.createBasicBlock("if.then");
+            let elseId = this.createBasicBlock("if.else");
+            let mergeId = this.createBasicBlock("if.merge");
+
+            this.createBranch(cond, thenId, elseId);
+
+            this.setInsertPoint(thenId);
+            this.analyzeStatement(ifStmt.thenBranch);
+            this.createJump(mergeId);
+
+            this.setInsertPoint(elseId);
+            if (ifStmt.elseBranch != null) {
+                this.analyzeStatement(ifStmt.elseBranch);
+            }
+            this.createJump(mergeId);
+
+            this.setInsertPoint(mergeId);
+        } else if (stmt.kind == "WhileStmt") {
+            let whileStmt = stmt as WhileStmt;
+            let condId = this.createBasicBlock("while.cond");
+            let bodyId = this.createBasicBlock("while.body");
+            let endId = this.createBasicBlock("while.end");
+
+            this.createJump(condId);
+            this.setInsertPoint(condId);
+            let cond = this.analyzeExpression(whileStmt.condition);
+            this.createBranch(cond, bodyId, endId);
+
+            this.setInsertPoint(bodyId);
+            this.analyzeStatement(whileStmt.body);
+            this.createJump(condId);
+
+            this.setInsertPoint(endId);
+        }
+    }
+
+    private analyzeExpression(expr: Expr): MIRValue {
+        if (expr.kind == "NumberLiteral") {
+            let lit = expr as NumberLiteral;
+            return this.createConstant(lit.value, new MIRType("i32", false, 4));
+        } else if (expr.kind == "BinaryExpr") {
+            let bin = expr as BinaryExpr;
+            let left = this.analyzeExpression(bin.left);
+            let right = this.analyzeExpression(bin.right);
+            return this.createBinary(bin.operator, left, right);
+        } else if (expr.kind == "Identifier") {
+            let id = expr as IdentifierExpr;
+            // Simplified: return a dummy or look up in locals
+            return this.createConstant("0", new MIRType("i32", false, 4));
+        } else if (expr.kind == "CallExpr") {
+            let call = expr as CallExpr;
+            let args = new Array<MIRValue>();
+            for (let i = 0; i < call.args.length; i = i + 1) {
+                args.push(this.analyzeExpression(call.args.get(i)));
+            }
+            // Simplified callee lookup
+            return this.createCall("unknown", args, new MIRType("i32", false, 4));
+        }
+        return this.createConstant("0", new MIRType("i32", false, 4));
+    }
+
+    public setInsertPoint(blockId: i32): void {
         log("MIRBuilder.buildClass: " + decl.name);
         for (let i = 0; i < decl.members.length; i = i + 1) {
             let m = decl.members.get(i);
@@ -116,6 +203,23 @@ export class MIRBuilder {
 
     public createJump(targetBlock: i32): void {
         let inst = new MIRJumpInst(targetBlock);
+        this.getCurrentBlock().instructions.push(inst);
+    }
+
+    public createAlloca(allocType: MIRType): MIRRegister {
+        let result = this.currentFunction.createRegister(new MIRType(allocType.name, true, 8));
+        let inst = new MIRAllocaInst(result, allocType);
+        this.getCurrentBlock().instructions.push(inst);
+        return result;
+    }
+
+    public createIncref(value: MIRValue): void {
+        let inst = new MIRIncrefInst(value);
+        this.getCurrentBlock().instructions.push(inst);
+    }
+
+    public createDecref(value: MIRValue): void {
+        let inst = new MIRDecrefInst(value);
         this.getCurrentBlock().instructions.push(inst);
     }
 

@@ -30,6 +30,10 @@ function main(): i32 {
         log("MIR Function: " + f.name);
         log("  Blocks count:");
         print_i32(f.blocks.length);
+        if (f.blocks.length > 0) {
+            log("  Entry block instructions count:");
+            print_i32(f.blocks.get(0).instructions.length);
+        }
     }
     
     log("MIR-Test completed successfully!");
