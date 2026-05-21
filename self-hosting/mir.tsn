@@ -166,6 +166,24 @@ export class MIRGetElementPtrInst extends MIRInst {
     }
 }
 
+export class MIRIncrefInst extends MIRInst {
+    public value: MIRValue;
+
+    constructor(value: MIRValue) {
+        super("Incref", new MIRRegister(new MIRType("void", false, 0), 0));
+        this.value = value;
+    }
+}
+
+export class MIRDecrefInst extends MIRInst {
+    public value: MIRValue;
+
+    constructor(value: MIRValue) {
+        super("Decref", new MIRRegister(new MIRType("void", false, 0), 0));
+        this.value = value;
+    }
+}
+
 // MIR Basic Block
 
 export class MIRBasicBlock {

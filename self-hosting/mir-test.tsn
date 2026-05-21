@@ -1,40 +1,37 @@
 declare function print_i32(n: i32): void;
-// Test MIR builder
-
+declare function print_ptr(s: string): void;
+import { Array } from "std:array";
 import { log } from "std:console";
-import { buildSimpleMIR } from "./mir-builder.tsn";
-import { MIRModule, MIRFunction } from "./mir.tsn";
+import { Lexer } from "./lexer.tsn";
+import { ASTParser } from "./ast-parser.tsn";
+import { MIRBuilder } from "./mir-builder.tsn";
+import { MIRModule } from "./mir.tsn";
 
-export function main(): i32 {
-    log("Building simple MIR...");
-    let module = buildSimpleMIR();
+function main(): i32 {
+    let source = "function test() { return 1; } class MyClass { public method() { return 2; } }";
+    log("MIR-Test: Starting Lexer...");
+    let lexer = new Lexer(source);
+    let tokens = lexer.tokenize();
     
-    log("Module name: ");
-    log(module.name);
+    log("MIR-Test: Starting Parser...");
+    let parser = new ASTParser(tokens);
+    let program = parser.parse();
     
-    log("Number of functions: ");
-    let funcCount = module.functions.length;
-    if (funcCount > 0) {
-        log("1");
-        let func = module.functions.get(0);
-        log("Function name: ");
-        log(func.name);
-        log("Number of blocks: ");
-        let blockCount = func.blocks.length;
-        if (blockCount > 0) {
-            log("1");
-            let block = func.blocks.get(0);
-            log("Block label: ");
-            log(block.label);
-            log("Number of instructions: ");
-            let instCount = block.instructions.length;
-            if (instCount == 2) {
-                log("2");
-            }
-        }
+    log("MIR-Test: Starting MIRBuilder...");
+    let builder = new MIRBuilder("main_module");
+    let mirModule = builder.build(program);
+    
+    log("MIR-Test: MIR Module Name: " + mirModule.name);
+    log("MIR-Test: Functions count:");
+    print_i32(mirModule.functions.length);
+    
+    for (let i = 0; i < mirModule.functions.length; i = i + 1) {
+        let f = mirModule.functions.get(i);
+        log("MIR Function: " + f.name);
+        log("  Blocks count:");
+        print_i32(f.blocks.length);
     }
     
-    log("MIR test completed!");
+    log("MIR-Test completed successfully!");
     return 0;
 }
-
