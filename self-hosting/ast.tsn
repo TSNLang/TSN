@@ -56,6 +56,11 @@ export enum TokenKind {
     BangEqual,
     LessEqual,
     GreaterEqual,
+    Const,
+    Break,
+    Continue,
+    AmpAmp,
+    PipePipe,
 }
 
 export class Token {

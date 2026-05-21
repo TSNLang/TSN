@@ -319,8 +319,9 @@ export class ASTParser {
     }
 
     private parseStatement(): Stmt {
-        if (this.matchKind(TokenKind.Let)) {
-            return this.parseVarDeclStmt();
+        if (this.matchKind(TokenKind.Let) || this.matchKind(TokenKind.Const)) {
+            let isConst = this.previous().kind == TokenKind.Const;
+            return this.parseVarDeclStmt(isConst);
         }
         if (this.matchKind(TokenKind.Return)) {
             return this.parseReturnStmt();
@@ -334,6 +335,14 @@ export class ASTParser {
         if (this.matchKind(TokenKind.For)) {
             return this.parseForStmt();
         }
+        if (this.matchKind(TokenKind.Break)) {
+            this.matchKind(TokenKind.Semicolon);
+            return new ExprStmt(new IdentifierExpr("break")); // Cần AST BreakStmt nếu muốn chuẩn, tạm thời dùng ExprStmt
+        }
+        if (this.matchKind(TokenKind.Continue)) {
+            this.matchKind(TokenKind.Semicolon);
+            return new ExprStmt(new IdentifierExpr("continue"));
+        }
         if (this.matchKind(TokenKind.LBrace)) {
             this.pos = this.pos - 1;
             return this.parseBlockStmt();
@@ -341,7 +350,7 @@ export class ASTParser {
         return this.parseExprStmt();
     }
 
-    private parseVarDeclStmt(): VarDeclStmt {
+    private parseVarDeclStmt(isConst: bool): VarDeclStmt {
         let name = "";
         if (this.peek().kind == TokenKind.Identifier) {
             name = this.advance().lexeme;
@@ -355,7 +364,7 @@ export class ASTParser {
             init = this.parseExpression();
         }
         this.matchKind(TokenKind.Semicolon);
-        return new VarDeclStmt(name, typeText, init, false);
+        return new VarDeclStmt(name, typeText, init, isConst);
     }
 
     private parseReturnStmt(): ReturnStmt {
@@ -389,20 +398,28 @@ export class ASTParser {
 
     private parseForStmt(): ForStmt {
         this.matchKind(TokenKind.LParen);
-        let init = new BlockStmt(new Array<Stmt>());
-        if (this.matchKind(TokenKind.Let)) {
-            init = this.parseVarDeclStmt();
+        let init: Stmt = new ExprStmt(new IdentifierExpr(""));
+        if (this.matchKind(TokenKind.Let) || this.matchKind(TokenKind.Const)) {
+            let isConst = this.previous().kind == TokenKind.Const;
+            init = this.parseVarDeclStmt(isConst);
+        } else if (!this.check(TokenKind.Semicolon)) {
+            init = this.parseExprStmt();
+        } else {
+            this.matchKind(TokenKind.Semicolon);
         }
-        let condition = new IdentifierExpr("");
+
+        let condition: Expr = new IdentifierExpr("");
         if (!this.check(TokenKind.Semicolon)) {
             condition = this.parseExpression();
         }
         this.matchKind(TokenKind.Semicolon);
-        let update = new IdentifierExpr("");
+
+        let update: Expr = new IdentifierExpr("");
         if (!this.check(TokenKind.RParen)) {
             update = this.parseExpression();
         }
         this.matchKind(TokenKind.RParen);
+
         let body = this.parseStatement();
         return new ForStmt(init, condition, update, body);
     }
@@ -428,22 +445,22 @@ export class ASTParser {
 
     private parseLogicalOr(): Expr {
         let left = this.parseLogicalAnd();
-        if (!this.matchKind(TokenKind.Pipe)) {
-            return left;
+        if (this.matchKind(TokenKind.PipePipe)) {
+            let op = this.previous().lexeme;
+            let right = this.parseLogicalOr();
+            return new BinaryExpr(op, left, right);
         }
-        let op = this.previous().lexeme;
-        let right = this.parseLogicalOr();
-        return new BinaryExpr(op, left, right);
+        return left;
     }
 
     private parseLogicalAnd(): Expr {
         let left = this.parseEquality();
-        if (!this.matchKind(TokenKind.Amp)) {
-            return left;
+        if (this.matchKind(TokenKind.AmpAmp)) {
+            let op = this.previous().lexeme;
+            let right = this.parseLogicalAnd();
+            return new BinaryExpr(op, left, right);
         }
-        let op = this.previous().lexeme;
-        let right = this.parseLogicalAnd();
-        return new BinaryExpr(op, left, right);
+        return left;
     }
 
     private parseEquality(): Expr {
