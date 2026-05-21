@@ -4,7 +4,7 @@ import {
     Program, Declaration, ClassMemberDecl,
     Stmt, BlockStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, ExprStmt,
     Expr, BinaryExpr, UnaryExpr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral,
-    MemberExpr, CallExpr, NewExpr, ThisExpr
+    MemberExpr, CallExpr, NewExpr, ThisExpr, ArrayLiteral
 } from "./ast.tsn";
 
 export class Symbol {
@@ -33,15 +33,18 @@ export class Scope {
     }
 
     public resolve(name: string): Symbol {
-        for (let i = 0; i < this.symbols.length; i = i + 1) {
-            let sym = this.symbols.get(i);
-            if (sym.name == name) {
-                return sym;
+        let syms = this.symbols;
+        let s_len = (syms as Array<Symbol>).length;
+        for (let i = 0; i < s_len; i = i + 1) {
+            let s = syms.get(i);
+            if (s.name == name) {
+                return s;
             }
         }
         
         if (this.parent != null) {
-            return this.parent.resolve(name);
+            let p = this.parent;
+            return p.resolve(name);
         }
         
         return null;
@@ -62,44 +65,56 @@ export class SemanticAnalyzer {
     public analyze(program: Program): void {
         log("Semantics: starting analysis");
         
-        // Pass 1: Collect global symbols
-        for (let i = 0; i < program.declarations.length; i = i + 1) {
-            this.collectGlobalSymbol(program.declarations.get(i));
+        let decls = program.declarations;
+        let d_len = (decls as Array<Declaration>).length;
+        for (let i = 0; i < d_len; i = i + 1) {
+            let d = decls.get(i);
+            this.collectGlobalSymbol(d);
         }
 
-        // Pass 2: Full analysis
-        for (let i = 0; i < program.declarations.length; i = i + 1) {
-            this.analyzeDeclaration(program.declarations.get(i));
+        for (let j = 0; j < d_len; j = j + 1) {
+            let d2 = decls.get(j);
+            this.analyzeDeclaration(d2);
         }
         
         log("Semantics: analysis complete");
     }
 
     private collectGlobalSymbol(decl: Declaration): void {
-        if (decl.kind == "ClassDecl") {
-            this.globalScope.define(new Symbol(decl.name, "class", decl.name));
-        } else if (decl.kind == "FunctionDecl") {
-            this.globalScope.define(new Symbol(decl.name, "func", "function"));
+        let dk = decl.kind;
+        let dn = decl.name;
+        if (dk == "ClassDecl") {
+            this.globalScope.define(new Symbol(dn, "class", dn));
+        } else if (dk == "FunctionDecl") {
+            this.globalScope.define(new Symbol(dn, "func", "function"));
         }
     }
 
-    private analyzeDeclaration(decl: Declaration): void {
-        if (decl.kind == "ClassDecl") {
-            this.analyzeClass(decl);
-        } else if (decl.kind == "FunctionDecl") {
-            this.analyzeFunction(decl);
+    private analyzeDeclaration(decl_node: Declaration): void {
+        if (decl_node == null) return;
+        let dk_str = decl_node.kind;
+        if (dk_str == "ClassDecl") {
+            this.analyzeClass(decl_node);
+        } else if (dk_str == "FunctionDecl") {
+            this.analyzeFunction(decl_node);
         }
     }
 
     private analyzeClass(decl: Declaration): void {
-        log("Semantics: analyzing class " + decl.name);
-        this.currentClassName = decl.name;
-        // Collect members
-        for (let i = 0; i < decl.members.length; i = i + 1) {
-            let m = decl.members.get(i);
-            if (m.kind == "MethodDecl" || m.kind == "ConstructorDecl") {
+        if (decl == null) return;
+        let dn = decl.name;
+        log("Semantics: analyzing class " + dn);
+        this.currentClassName = dn;
+        let members = decl.members;
+        let mCount = (members as Array<ClassMemberDecl>).length;
+        let mi = 0;
+        while (mi < mCount) {
+            let m = members.get(mi);
+            let mk = m.kind;
+            if (mk == "MethodDecl" || mk == "ConstructorDecl") {
                 this.analyzeMethod(m);
             }
+            mi = mi + 1;
         }
         this.currentClassName = "";
     }
@@ -107,143 +122,168 @@ export class SemanticAnalyzer {
     private analyzeMethod(member: ClassMemberDecl): void {
         log("Semantics: analyzing method/constructor " + member.name);
         this.enterScope();
-        // Add 'this'
         if (this.currentClassName != "") {
             this.currentScope.define(new Symbol("this", "var", this.currentClassName));
         }
-        // Add parameters
-        for (let i = 0; i < member.params.length; i = i + 1) {
-            let p = member.params.get(i);
-            this.currentScope.define(new Symbol(p.name, "param", p.typeText));
+        let pList = member.params;
+        let pCount = (pList as Array<any>).length;
+        let pIdx = 0;
+        while (pIdx < pCount) {
+            let p_param = pList.get(pIdx);
+            let pt = p_param.typeText;
+            let pn = p_param.name;
+            this.currentScope.define(new Symbol(pn, "param", pt));
+            pIdx = pIdx + 1;
         }
-
-        // Analyze body if exists
-        // Note: For simplicity, we assume we can reach the body.
-        // In ast-parser.tsn, we might need to store the body BlockStmt in ClassMemberDecl
-        // but currently ast.tsn ClassMemberDecl only has bodyStatementCount.
-        // Let's stub this or keep it as is if body isn't directly accessible yet.
-        
         this.exitScope();
     }
 
     private analyzeFunction(decl: Declaration): void {
         log("Semantics: analyzing function " + decl.name);
         this.enterScope();
-        // Parameters and body analysis would go here
         this.exitScope();
     }
 
     private analyzeStatement(stmt: Stmt): void {
         if (stmt == null) return;
 
-        if (stmt.kind == "BlockStmt") {
-            let b = stmt as BlockStmt;
-            this.analyzeBlock(b);
-        } else if (stmt.kind == "VarDeclStmt") {
-            let v = stmt as VarDeclStmt;
-            let varType = v.typeText;
-            this.currentScope.define(new Symbol(v.name, "var", varType));
-            if (v.init != null) {
-                this.analyzeExpression(v.init);
-            }
-        } else if (stmt.kind == "ExprStmt") {
-            let es = stmt as ExprStmt;
-            this.analyzeExpression(es.expr);
-        } else if (stmt.kind == "IfStmt") {
-            let s = stmt as IfStmt;
-            this.analyzeExpression(s.condition);
-            this.analyzeStatement(s.thenBranch);
-            if (s.elseBranch != null) {
-                this.analyzeStatement(s.elseBranch);
-            }
-        } else if (stmt.kind == "WhileStmt") {
-            let w = stmt as WhileStmt;
-            this.analyzeExpression(w.condition);
-            this.analyzeStatement(w.body);
-        } else if (stmt.kind == "ForStmt") {
-            let f = stmt as ForStmt;
-            this.enterScope();
-            this.analyzeStatement(f.init);
-            if (f.condition != null) this.analyzeExpression(f.condition);
-            if (f.update != null) this.analyzeExpression(f.update);
-            this.analyzeStatement(f.body);
-            this.exitScope();
-        } else if (stmt.kind == "ReturnStmt") {
-            let r = stmt as ReturnStmt;
-            if (r.value != null) {
-                this.analyzeExpression(r.value);
-            }
+        let kind = stmt.kind;
+        if (kind == "BlockStmt") {
+            this.analyzeBlock(stmt as BlockStmt);
+        } else if (kind == "VarDeclStmt") {
+            this.analyzeVarDecl(stmt as VarDeclStmt);
+        } else if (kind == "ExprStmt") {
+            this.analyzeExprStmt(stmt as ExprStmt);
+        } else if (kind == "IfStmt") {
+            this.analyzeIf(stmt as IfStmt);
+        } else if (kind == "WhileStmt") {
+            this.analyzeWhile(stmt as WhileStmt);
+        } else if (kind == "ForStmt") {
+            this.analyzeFor(stmt as ForStmt);
+        } else if (kind == "ReturnStmt") {
+            this.analyzeReturn(stmt as ReturnStmt);
+        }
+    }
+
+    private analyzeBlock(b_stmt: BlockStmt): void {
+        if (b_stmt == null) return;
+        let stmts = b_stmt.statements;
+        let b_len = (stmts as Array<Stmt>).length;
+        for (let i = 0; i < b_len; i = i + 1) {
+            this.analyzeStatement(stmts.get(i));
+        }
+    }
+
+    private analyzeVarDecl(v_node: VarDeclStmt): void {
+        if (v_node == null) return;
+        this.currentScope.define(new Symbol((v_node as VarDeclStmt).name, "var", (v_node as VarDeclStmt).typeText));
+        if (v_node.init != null) {
+            this.analyzeExpression(v_node.init);
+        }
+    }
+
+    private analyzeExprStmt(es_stmt: ExprStmt): void {
+        if (es_stmt == null) return;
+        this.analyzeExpression(es_stmt.expr);
+    }
+
+    private analyzeIf(s_if: IfStmt): void {
+        if (s_if == null) return;
+        this.analyzeExpression(s_if.condition);
+        this.analyzeStatement(s_if.thenBranch);
+        if (s_if.elseBranch != null) {
+            this.analyzeStatement(s_if.elseBranch);
+        }
+    }
+
+    private analyzeWhile(w_stmt: WhileStmt): void {
+        if (w_stmt == null) return;
+        this.analyzeExpression(w_stmt.condition);
+        this.analyzeStatement(w_stmt.body);
+    }
+
+    private analyzeFor(f_stmt: ForStmt): void {
+        if (f_stmt == null) return;
+        this.enterScope();
+        if (f_stmt.init != null) {
+            this.analyzeStatement(f_stmt.init);
+        }
+        if (f_stmt.condition != null) {
+            this.analyzeExpression(f_stmt.condition);
+        }
+        if (f_stmt.update != null) {
+            this.analyzeExpression(f_stmt.update);
+        }
+        this.analyzeStatement(f_stmt.body);
+        this.exitScope();
+    }
+
+    private analyzeReturn(r_stmt: ReturnStmt): void {
+        if (r_stmt == null) return;
+        if (r_stmt.value != null) {
+            this.analyzeExpression(r_stmt.value);
         }
     }
 
     private analyzeExpression(expr: Expr): string {
         if (expr == null) return "void";
         
-        if (expr.kind == "NumberLiteral") return "i32";
-        if (expr.kind == "StringLiteral") return "string";
-        if (expr.kind == "BooleanLiteral") return "bool";
+        let ek = expr.kind;
+        if (ek == "NumberLiteral") return "i32";
+        if (ek == "StringLiteral") return "string";
+        if (ek == "BooleanLiteral") return "bool";
         
-        if (expr.kind == "Identifier") {
-            let idExpr = expr as IdentifierExpr;
-            let name = idExpr.name;
-            let sym = this.currentScope.resolve(name);
+        if (ek == "Identifier") {
+            let sym = this.currentScope.resolve((expr as IdentifierExpr).name);
             if (sym == null) {
-                log("Semantics Error: undefined identifier " + name);
+                log("Semantics Error: undefined identifier " + (expr as IdentifierExpr).name);
                 return "unknown";
             }
             return sym.symType;
         }
 
-        if (expr.kind == "BinaryExpr") {
-            let b = expr as BinaryExpr;
-            let lt = this.analyzeExpression(b.left);
-            let rt = this.analyzeExpression(b.right);
-            // Simple type check: must match
-            if (lt != rt && lt != "unknown" && rt != "unknown") {
-                log("Semantics Warning: type mismatch in binary expr " + lt + " vs " + rt);
-            }
+        if (ek == "BinaryExpr") {
+            let lt = this.analyzeExpression((expr as BinaryExpr).left);
+            let rt = this.analyzeExpression((expr as BinaryExpr).right);
             return lt;
         }
 
-        if (expr.kind == "UnaryExpr") {
-            let u = expr as UnaryExpr;
-            return this.analyzeExpression(u.operand);
+        if (ek == "UnaryExpr") {
+            return this.analyzeExpression((expr as UnaryExpr).operand);
         }
 
-        if (expr.kind == "CallExpr") {
-            let c = expr as CallExpr;
-            let calleeType = this.analyzeExpression(c.callee);
-            for (let i = 0; i < c.args.length; i = i + 1) {
-                this.analyzeExpression(c.args.get(i));
+        if (ek == "CallExpr") {
+            this.analyzeExpression((expr as CallExpr).callee);
+            let c_args = (expr as CallExpr).args;
+            let c_len = (c_args as Array<Expr>).length;
+            for (let i = 0; i < c_len; i = i + 1) {
+                this.analyzeExpression(c_args.get(i));
             }
-            // In a real compiler, look up return type from calleeType
             return "unknown"; 
         }
 
-        if (expr.kind == "MemberExpr") {
-            let m = expr as MemberExpr;
-            let objType = this.analyzeExpression(m.object);
-            // For now, return unknown as we don't have a class registry yet
+        if (ek == "MemberExpr") {
+            this.analyzeExpression((expr as MemberExpr).object);
             return "unknown";
         }
 
-        if (expr.kind == "NewExpr") {
-            let n = expr as NewExpr;
-            for (let i = 0; i < n.args.length; i = i + 1) {
-                this.analyzeExpression(n.args.get(i));
+        if (ek == "NewExpr") {
+            let n_args = (expr as NewExpr).args;
+            let n_len = (n_args as Array<Expr>).length;
+            for (let i = 0; i < n_len; i = i + 1) {
+                this.analyzeExpression(n_args.get(i));
             }
-            return n.className;
+            return (expr as NewExpr).className;
         }
 
-        if (expr.kind == "ThisExpr") {
-            return this.currentClassName != "" ? this.currentClassName : "unknown";
+        if (ek == "ThisExpr") {
+            if (this.currentClassName != "") {
+                return this.currentClassName;
+            }
+            return "unknown";
         }
 
-        if (expr.kind == "ArrayLiteral") {
-            let a = expr as ArrayLiteral;
-            for (let i = 0; i < a.elements.length; i = i + 1) {
-                this.analyzeExpression(a.elements.get(i));
-            }
+        if (ek == "ArrayLiteral") {
             return "Array";
         }
 
@@ -255,8 +295,9 @@ export class SemanticAnalyzer {
     }
 
     private exitScope(): void {
-        if (this.currentScope.parent != null) {
-            this.currentScope = this.currentScope.parent;
+        let p = this.currentScope.parent;
+        if (p != null) {
+            this.currentScope = p;
         }
     }
 }
