@@ -1,7 +1,7 @@
 declare function print_i32(n: i32): void;
 import { Array } from "std:array";
 import { log } from "std:console";
-import { Token, TokenKind, ASTProgram, Decl, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr, ParameterInfo, ImportSpecifierInfo, ClassMemberDecl } from "./ast.tsn";
+import { Token, TokenKind, Program, Declaration, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr, ParameterInfo, ImportSpecifierInfo, ClassMemberDecl } from "./ast.tsn";
 
 export class ASTParser {
     private tokens: Array<Token>;
@@ -12,18 +12,20 @@ export class ASTParser {
         this.pos = 0;
     }
 
-    public parse(): ASTProgram {
-        let declarations = new Array<Decl>();
+    public parse(): Program {
+        let declarations = new Array<Declaration>();
         log("ASTParser.parse: start");
         while (!this.isAtEnd()) {
             let decl = this.parseDeclaration();
-            declarations.push(decl);
+            if (decl != null) {
+                declarations.push(decl);
+            }
         }
         log("ASTParser.parse: complete");
-        return new ASTProgram(declarations);
+        return new Program(declarations);
     }
 
-    private parseDeclaration(): Decl {
+    private parseDeclaration(): Declaration {
         if (this.matchKind(TokenKind.Import)) {
             log("ASTParser.parseDeclaration: import");
             return this.parseImportDecl();
@@ -42,7 +44,7 @@ export class ASTParser {
         return new ImportDecl("", "", "", new Array<ImportSpecifierInfo>());
     }
 
-    private parseImportDecl(): ImportDecl {
+    private parseImportDecl(): Declaration {
         let defaultImport = "";
         let namespaceImport = "";
         let namedImports = new Array<ImportSpecifierInfo>();
@@ -71,10 +73,10 @@ export class ASTParser {
             source = this.advance().lexeme;
         }
         
-        return new ImportDecl(source, defaultImport, namespaceImport, namedImports);
+        return new Declaration("ImportDecl", source, defaultImport, namespaceImport, "", new Array<ClassMemberDecl>());
     }
 
-    private parseFunctionDecl(isExported: bool): FunctionDecl {
+    private parseFunctionDecl(isExported: bool): Declaration {
         let name = "";
         if (this.peek().kind == TokenKind.Identifier) {
             name = this.advance().lexeme;
@@ -119,10 +121,10 @@ export class ASTParser {
         
         let body = this.parseBlockStmt();
         
-        return new FunctionDecl(name, params, returnType, body, typeParams, isExported, false);
+        return new Declaration("FunctionDecl", name, "", "", "", new Array<ClassMemberDecl>());
     }
 
-    private parseClassDecl(isExported: bool): ClassDecl {
+    private parseClassDecl(isExported: bool): Declaration {
         let name = "";
         if (this.peek().kind == TokenKind.Identifier) {
             name = this.advance().lexeme;
@@ -153,7 +155,7 @@ export class ASTParser {
             this.matchKind(TokenKind.RBrace);
         }
         
-        return new ClassDecl(name, members, typeParams, isExported);
+        return new Declaration("ClassDecl", name, "", "", "", members);
     }
 
     private parseClassMember(): ClassMemberDecl {

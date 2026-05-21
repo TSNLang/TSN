@@ -4,6 +4,7 @@ import { log } from "std:console";
 import { IdentifierExpr, NumberLiteral, BinaryExpr, Expr, ClassDecl, ClassMemberDecl, Decl } from "./ast.tsn";
 import { Lexer } from "./lexer.tsn";
 import { ASTParser } from "./ast-parser.tsn";
+import { SemanticAnalyzer } from "./semantics.tsn";
 
 function testAST(): i32 {
     let left = new NumberLiteral("1");
@@ -106,6 +107,11 @@ function testComplexStatements(): i32 {
     let tokens = lexer.tokenize();
     let parser = new ASTParser(tokens);
     let program = parser.parse();
+
+    let analyzer = new SemanticAnalyzer();
+    log("AST-Test: starting semantic analysis of complex statements");
+    analyzer.analyze(program);
+    log("AST-Test: semantic analysis finished");
 
     log("Complex statements parsing test passed");
     return 0;
