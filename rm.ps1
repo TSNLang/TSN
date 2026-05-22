@@ -1,33 +1,33 @@
 # Danh sách các đuôi file cần xóa
-$extensions = "*.ll", "*.exe", "*.txt", "*.tsn", "*.log", "*.c", "*.ts", "*.meta", "test*", "*.obj"
+$extensions = "*.ll", "*.exe", "*.txt", "*.tsn", "*.log", "*.c", "*.ts", "*.meta", "test*", "*.obj", "*.o", "*.a", "*.so", "*.dll", "*.dylib", "*.pdb", "*.cache", "*.tmp", "*.bak", "*.old", "*.swp", "*.swo", "*.DS_Store", "*.ilk", "*.s"
 
 Write-Host "Đang dọn dẹp thư mục dự án..." -ForegroundColor Cyan
 
-# 1. Lấy danh sách tất cả các file khớp với định dạng
-$filesToDelete = Get-ChildItem -Path . -Include $extensions -Recurse
+# 1. SỬA LỖI: Đổi thành .\* để -Include hoạt động chính xác khi Recurse
+$filesToDelete = Get-ChildItem -Path .\* -Include $extensions -Recurse
 
 # 2. Lọc bỏ các file không muốn xóa
 $filteredFiles = $filesToDelete | Where-Object {
     # Điều kiện 1: Không xóa file bắt đầu bằng .git hoặc git
     $isGitFile = $_.Name -like ".git*" -or $_.Name -like "git*"
     
-    # Điều kiện 2: Không xóa file .ts trong src/src
-    $isSourceTs = $_.Extension -eq ".ts" -and $_.FullName -like "*\src\src\*"
+    # Điều kiện 2: TỐI ƯU: Dùng -match để nhận diện cả \src\src\ và /src/src/
+    $isSourceTs = $_.Extension -eq ".ts" -and $_.FullName -match 'src[/\\]src'
 
     # Điều kiện 2.1: Không xóa file .c quan trọng
     $isSourceC = $_.Extension -eq ".c" -and $_.Name -eq "tsn_runtime.c"
 
     # Điều kiện 3: Không xóa file .tsn trong self-hosting hoặc src/std
-    $isSourceTsn = $_.Extension -eq ".tsn" -and ($_.FullName -like "*\self-hosting\*" -or $_.FullName -like "*\src\std\*")
+    $isSourceTsn = $_.Extension -eq ".tsn" -and ($_.FullName -match 'self-hosting' -or $_.FullName -match 'src[/\\]std')
 
     # Điều kiện 4: Nếu là file *.tsn VÀ nằm trong thư mục "examples" thì bỏ qua
-    $isTsnInExamples = $_.Extension -eq ".tsn" -and $_.FullName -like "*\examples\*"
+    $isTsnInExamples = $_.Extension -eq ".tsn" -and $_.FullName -match 'examples'
 
     # Chỉ giữ lại những file KHÔNG vi phạm các điều kiện trên
     return (-not $isGitFile) -and (-not $isSourceTs) -and (-not $isSourceC) -and (-not $isSourceTsn) -and (-not $isTsnInExamples)
 }
 
-# 3. Thực hiện xóa
+# 3. Thực hiện xóa (Mẹo: Thêm -WhatIf ở cuối để test trước khi xóa thật)
 $filteredFiles | Remove-Item -Force -ErrorAction SilentlyContinue
 
 Write-Host "Đã dọn dẹp xong!" -ForegroundColor Green

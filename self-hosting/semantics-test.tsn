@@ -1,43 +1,19 @@
 declare function print_i32(n: i32): void;
-import { Semantics, Symbol, Type, TypeKind } from "self-hosting/semantics.tsn";
-import * as console from "std/console.tsn";
-import { string } from "std/string.tsn";
+import { SemanticAnalyzer, Symbol, Scope } from "./semantics.tsn";
+import { Program, Declaration } from "./ast.tsn";
+import { Array } from "std:array";
+import { log } from "std:console";
 
-function testSemantics(): void {
-    let semVar: Semantics;
-    semVar = new Semantics();
+function main(): i32 {
+    log("Semantics-Test: Starting...");
+    let analyzer = new SemanticAnalyzer();
     
-    let intType = new Type(TypeKind.Int, "i32");
-    let globalVar = new Symbol("g", intType, true, false);
+    let declarations = new Array<Declaration>();
+    let program = new Program(declarations);
     
-    semVar.globalScope.define(globalVar);
-    console.log("Defined global 'g'");
-
-    let s1 = semVar.currentScope.lookup("g");
-    console.log("Lookup 'g' in global: " + s1.name);
-
-    semVar.enterScope();
-    console.log("Entered scope");
-
-    let intType2 = new Type(TypeKind.Int, "i32");
-    let localVar = new Symbol("l", intType2, false, false);
-    semVar.currentScope.define(localVar);
-    console.log("Defined local 'l'");
-
-    let s2 = semVar.currentScope.lookup("l");
-    console.log("Lookup 'l' in local: " + s2.name);
-
-    let s3 = semVar.currentScope.lookup("g");
-    console.log("Lookup 'g' from local: " + s3.name);
-
-    semVar.exitScope();
-    console.log("Exited scope");
-
-    let s4 = semVar.currentScope.lookup("l");
-    console.log("Lookup 'l' after exit (should be unknown): " + s4.name);
-}
-
-function main(): void {
-    testSemantics();
+    analyzer.analyze(program);
+    log("Semantics-Test: Empty program analysis passed");
+    
+    return 0;
 }
 

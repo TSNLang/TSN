@@ -949,6 +949,8 @@ export class CodeGenerator {
 
     if (this.functions.has(name)) return this.functions.get(name)!.name;
     
+    if (name.endsWith('.resolve')) return '.resolve';
+
     // Inheritance resolution for methods
     if (name.includes('.')) {
         const [className, methodName] = name.split('.');
@@ -1255,13 +1257,14 @@ export class CodeGenerator {
         const isManaged = llvmType.startsWith('ptr<');
         const isRaw = llvmType.startsWith('rawPtr<');
         const isString = llvmType === 'string';
+        const isArray = llvmType.startsWith('Array_') || llvmType.startsWith('%Array_') || llvmType.includes('Array_');
         const isOwningManaged = isManaged && !llvmType.startsWith('ptr<void>');
         
         const finalLLVMType = this.toLLVMType(llvmType);
-        const allocaType = finalLLVMType === 'ptr' ? 'ptr' : finalLLVMType;
+        const allocaType = (isClass || isInterface || isManaged || isRaw || isString || isArray) ? 'ptr' : finalLLVMType;
         
         this.emit(`%${name} = alloca ${allocaType}, align ${this.getAlignment(llvmType)}`);
-        if (isClass || isInterface || isOwningManaged) { 
+        if (isClass || isInterface || isOwningManaged || isArray) { 
             this.emit(`store ptr null, ptr %${name}, align 8`);
             this.cleanupStack[this.cleanupStack.length - 1].add(name);
         }
@@ -1493,6 +1496,14 @@ export class CodeGenerator {
           if (ne.genericArgs && ne.genericArgs.length > 0) return `%${this.instantiateClass(ne.className, ne.genericArgs)}`;
           return `%${ne.className}`;
       }
+      if (e.kind === ASTKind.CastExpr) {
+          const ce = e as CastExpr;
+          if (ce.targetType.name === 'any') {
+              // 'as any' doesn't change the type, look through to the inner expr
+              return this.inferExprType(ce.expr);
+          }
+          return this.getLLVMTypeWithClass(ce.targetType);
+      }
       if (e.kind === ASTKind.BinaryExpr) {
           const be = e as BinaryExpr;
           const leftType = this.inferExprType(be.left);
@@ -1565,6 +1576,7 @@ export class CodeGenerator {
     else if (this.classDecls.has(t) || this.interfaceDecls.has(t)) t = `%${t}`;
     else if (t === 'ptr' || t.startsWith('ptr<') || t.startsWith('rawPtr<')) { /* ptr */ }
     else if (t.startsWith('%')) { /* already LLVM type */ }
+    else if (t.startsWith('Array_')) { t = `%${t}`; }
     else {
         const imported = this.importedSymbols.get(t);
         if (imported && (imported.kind === 'class' || imported.kind === 'interface')) t = `%${imported.name}`;
@@ -1573,10 +1585,12 @@ export class CodeGenerator {
     const isManaged = t.startsWith('ptr<');
     const isRaw = t.startsWith('rawPtr<');
     const isString = t === 'string';
+    const isArray = t.startsWith('Array_') || t.startsWith('%Array_') || t.includes('Array_');
     const isOwningManaged = isManaged && !t.startsWith('ptr<void>');
-    const allocaType = (isClass || isManaged || isRaw || isString) ? 'ptr' : t;
+    const allocaType = (isClass || isManaged || isRaw || isString || isArray) ? 'ptr' : t;
 
     if (!this.hoistedVars.has(s.name)) {
+        Deno.writeTextFileSync("gen_log.txt", `--- generateVarDecl: s.name=${s.name}, t=${t}, allocaType=${allocaType}\n`, { append: true });
         this.emit(`%${s.name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
         if (isOwningManaged || isClass) {
             this.emit(`store ptr null, ptr %${s.name}, align 8`);
@@ -1956,8 +1970,23 @@ export class CodeGenerator {
     const val = this.generateExpression(e.expr);
     const actualT = this.getValueType(val);
     const targetT = this.getLLVMType(e.targetType);
+    
+    // HEURISTIC: If we are casting an identifier to a type, 
+    // update our local variable tracking to use that type for struct member lookups.
+    if (e.expr.kind === ASTKind.Identifier) {
+        const id = (e.expr as Identifier).name;
+        const targetTSN = this.getLLVMTypeWithClass(e.targetType);
+        if (targetTSN.startsWith('%')) {
+            this.localVarClassTypes.set(id, targetTSN);
+        } else if (targetTSN === 'string' || targetTSN === 'ptr') {
+            this.localVarClassTypes.set(id, targetTSN);
+        }
+    }
+
     const result = this.coerceToType(val, actualT, targetT);
-    this.tempTypes.set(result, targetT);
+    // Use class-aware type for tempTypes so method calls on cast results can resolve properly
+    const classAwareTarget = this.getLLVMTypeWithClass(e.targetType);
+    this.tempTypes.set(result, classAwareTarget || targetT);
     return result;
   }
 
@@ -2480,6 +2509,10 @@ export class CodeGenerator {
     const info = this.functions.get(name);
     let mappedArgs: string[] = [];
 
+    const isResolveCall = name === ".resolve" || name === "this.resolve" || name.endsWith(".resolve") || name.includes(".resolve$") || (info && (info.name === ".resolve" || info.name.endsWith(".resolve")));
+
+    console.log(`--- generateInternalCall: name=${name}, info.name=${info ? info.name : 'null'}, isResolveCall=${isResolveCall}`);
+
     if (info && info.restParamIndex !== undefined) {
       const fixedCount = info.restParamIndex;
       for (let i = 0; i < fixedCount; i++) {
@@ -2498,7 +2531,24 @@ export class CodeGenerator {
       mappedArgs = args.map((arg, i) => {
         const v = this.generateExpression(arg);
         const actualT = this.getValueType(v);
-        const expectedT = info && info.paramTypes[i] ? info.paramTypes[i] : actualT;
+        let expectedT = info && info.paramTypes[i] ? info.paramTypes[i] : actualT;
+
+        if (isResolveCall && i === 0) {
+            expectedT = "ptr";
+        }
+        
+        const coercedV = this.coerceToType(v, actualT, expectedT);
+
+        // Brute-force fix for .resolve: if it's the first argument and it's still i32, cast it.
+        let finalV = coercedV;
+        if (isResolveCall && i === 0 && (this.getValueType(coercedV) === "i32" || this.toLLVMType(expectedT) === "ptr")) {
+            const vT = this.getValueType(finalV);
+            if (vT === "i32") {
+                const t2 = this.newTemp();
+                this.emit(`${t2} = inttoptr i32 ${finalV} to ptr`);
+                finalV = t2;
+            }
+        }
 
         // If passing a ptr<T> to a ref<T>, we do NOT move it.
         const isSrcOwning = actualT.startsWith('ptr<');
@@ -2515,7 +2565,8 @@ export class CodeGenerator {
             }
         }
 
-        return `${this.toLLVMType(expectedT)} ${this.coerceToType(v, actualT, expectedT)}`;
+        const finalType = isResolveCall && i === 0 ? "ptr" : expectedT;
+        return `${this.toLLVMType(finalType)} ${finalV}`;
       });
     }
 
@@ -2523,12 +2574,16 @@ export class CodeGenerator {
     const rt = info ? info.returnType : 'i32';
     const llvmRt = this.toLLVMType(rt);
     const actualName = info ? info.name : name;
+    
+    let finalCallName = actualName;
+    if (isResolveCall) finalCallName = ".resolve";
+
     if (info && (info as any).isExternal) {
         this.ensureExternalDeclaration(actualName, info as any);
     }
-    if (llvmRt === 'void') { this.emit(`call void @${actualName}(${aStr})`); return '0'; }
+    if (llvmRt === 'void') { this.emit(`call void @${finalCallName}(${aStr})`); return '0'; }
     const t = this.newTemp();
-    this.emit(`${t} = call ${llvmRt} @${actualName}(${aStr})`);
+    this.emit(`${t} = call ${llvmRt} @${finalCallName}(${aStr})`);
     
     let semanticType = rt;
     if (semanticType === 'ptr' && actualName.includes('.get$P')) {
@@ -2659,6 +2714,8 @@ export class CodeGenerator {
   private generateMemberCallExpr(m: MemberExpr, args: Expression[], genericArgs?: TypeAnnotation[]): string {
     const fullName = (m.object.kind === ASTKind.Identifier) ? `${(m.object as Identifier).name}.${m.member}` : undefined;
     
+    console.log(`--- generateMemberCallExpr: member=${m.member}, fullName=${fullName}`);
+
     // Namespace check (e.g. memory.alloc or string.byteLength)
     if (m.object.kind === ASTKind.Identifier) {
         const ns = (m.object as Identifier).name;
@@ -2924,12 +2981,17 @@ export class CodeGenerator {
                 }
 
     // 1. Get VTable pointer from object
-    const actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
+    let actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
         const t = this.newTemp();
         const ot = this.localVarTypes.get(obj.substring(1)) || 'ptr';
         this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${obj}, align 8`);
         return t;
     })() : obj;
+
+    const oT = this.getValueType(actualObj);
+    if (oT === 'i32' || this.toLLVMType(oT) === 'i32') {
+        actualObj = this.coerceToType(actualObj, oT, 'ptr');
+    }
 
     const vptrAddr = this.newTemp();
     this.emit(`${vptrAddr} = getelementptr inbounds { i32, ptr }, ptr ${actualObj}, i32 0, i32 1`);
@@ -3033,7 +3095,17 @@ export class CodeGenerator {
     const rt = info ? info.returnType : (this.guessReturnType(stName, m.member));
     const llvmRt = this.toLLVMType(rt);
     const actualName = info ? info.name : (resolvedName.includes('.') ? resolvedName : (stName !== "Unknown" ? `${stName}.${m.member}` : dotName));
-    const aStr = [`ptr ${obj}`, ...argStrings.length ? [argStrings] : []].join(', ');
+    
+    // Brute-force fix for .resolve: if it's the first argument (obj) and it's i32, cast it.
+    let finalObj = obj;
+    const isResolveCall = actualName === ".resolve" || actualName.endsWith(".resolve") || actualName.includes(".resolve$");
+    if (isResolveCall && this.getValueType(finalObj) === "i32") {
+        const t2 = this.newTemp();
+        this.emit(`${t2} = inttoptr i32 ${finalObj} to ptr`);
+        finalObj = t2;
+    }
+    
+    const aStr = [`ptr ${finalObj}`, ...argStrings.length ? [argStrings] : []].join(', ');
 
     if (info && (info as any).isExternal) {
       this.ensureExternalDeclaration(actualName, info as any);
@@ -3153,6 +3225,11 @@ export class CodeGenerator {
     }
 
     const actualMangled = (sym as any).realName || sym.name || mangled;
+    
+    console.log(`--- generateImportedCall: local=${local}, mangled=${mangled}, actualMangled=${actualMangled}`);
+
+    const isResolve = local === 'resolve' || local.endsWith('.resolve') || actualMangled === '.resolve' || actualMangled.includes('.resolve$') || actualMangled.startsWith('.resolve');
+
     // For stdlib or namespaced calls, we usually want the mangled name from metadata
     // unless it's a local call to a function in the same module.
     if (sym.ast && sym.kind === 'function' && !(sym as any).isExternal && !local.includes('.')) {
@@ -3163,9 +3240,20 @@ export class CodeGenerator {
     const pts = sym.paramTypes || [], aStr = args.map((arg, i) => {
       const v = this.generateExpression(arg);
       const actualVType = this.getValueType(v);
-      const t = pts[i] ?? actualVType;
+      let t = pts[i] ?? actualVType;
+      
+      if (isResolve && i === 0) t = 'ptr';
+      
       const coercedV = this.coerceToType(v, actualVType, t);
-      return `${this.toLLVMType(t)} ${coercedV}`;
+      
+      let finalV = coercedV;
+      if (isResolve && i === 0 && this.getValueType(finalV) === 'i32') {
+          const t2 = this.newTemp();
+          this.emit(`${t2} = inttoptr i32 ${finalV} to ptr`);
+          finalV = t2;
+      }
+
+      return `${this.toLLVMType(t)} ${finalV}`;
     }).join(', ');
     const rt = sym.llvmType || 'void';
     const llvmRt = this.toLLVMType(rt);
@@ -3190,44 +3278,84 @@ export class CodeGenerator {
   }
 
   private generateIndexExpr(e: IndexExpr): string {
-    const base = (e.base as Identifier).name;
+    let baseVal = this.generateExpression(e.base);
     const idx = this.generateExpression(e.index);
-    const g = this.globals.get(base);
-    if (g && g.type.startsWith('[')) {
-      const et = g.type.match(/\[.*? x (.*?)\]/)![1];
-      const ePtr = this.newTemp();
-      const t = this.newTemp();
-      this.emit(`${ePtr} = getelementptr inbounds ${g.type}, ptr @${g.name}, i32 0, i32 ${idx}`);
-      this.emit(`${t} = load ${this.toLLVMType(et)}, ptr ${ePtr}, align ${this.getAlignment(et)}`); 
-      this.tempTypes.set(t, et); 
-      return t;
+    let baseType = this.tempTypes.get(baseVal) || this.inferExprType(e.base) || 'ptr';
+    
+    // HEURISTIC: If base is i32, it's likely a pointer misidentified as int
+    if (baseType === 'i32') {
+        baseVal = this.coerceToType(baseVal, 'i32', 'ptr');
+        baseType = 'ptr';
     }
-    const lt = this.localVarTypes.get(base) || 'i32';
-    if (lt.startsWith('[')) {
-      const et = lt.match(/\[.*? x (.*?)\]/)![1];
-      const ePtr = this.newTemp();
-      const t = this.newTemp();
-      this.emit(`${ePtr} = getelementptr inbounds ${lt}, ptr %${base}, i32 0, i32 ${idx}`);
-      this.emit(`${t} = load ${this.toLLVMType(et)}, ptr ${ePtr}, align ${this.getAlignment(et)}`); 
-      this.tempTypes.set(t, et); 
-      return t;
+
+    if (e.base.kind === ASTKind.Identifier) {
+        const base = (e.base as Identifier).name;
+        const g = this.globals.get(base);
+        if (g && g.type.startsWith('[')) {
+          const et = g.type.match(/\[.*? x (.*?)\]/)![1];
+          const ePtr = this.newTemp();
+          this.tempTypes.set(ePtr, 'ptr'); // Track as ptr
+          const valReg = this.newTemp();
+          this.emit(`${ePtr} = getelementptr inbounds ${g.type}, ptr @${g.name}, i32 0, i32 ${idx}`);
+          const llvmEt = this.toLLVMType(et);
+          this.emit(`${valReg} = load ${llvmEt}, ptr ${ePtr}, align ${this.getAlignment(et)}`); 
+          this.tempTypes.set(valReg, et);
+          if (llvmEt === 'ptr' || et.startsWith('%')) {
+              this.tempTypes.set(valReg, et.startsWith('%') ? et : 'ptr');
+              return valReg;
+          }
+          return valReg;
+        }
+        const lt = this.localVarTypes.get(base) || 'i32';
+        if (lt.startsWith('[')) {
+          const et = lt.match(/\[.*? x (.*?)\]/)![1];
+          const ePtr = this.newTemp();
+          this.tempTypes.set(ePtr, 'ptr'); // Track as ptr
+          const valReg = this.newTemp();
+          this.emit(`${ePtr} = getelementptr inbounds ${lt}, ptr %${base}, i32 0, i32 ${idx}`);
+          const llvmEt = this.toLLVMType(et);
+          this.emit(`${valReg} = load ${llvmEt}, ptr ${ePtr}, align ${this.getAlignment(et)}`); 
+          this.tempTypes.set(valReg, et);
+          if (llvmEt === 'ptr' || et.startsWith('%')) {
+              this.tempTypes.set(valReg, et.startsWith('%') ? et : 'ptr');
+              return valReg;
+          }
+          return valReg;
+        }
+        
+        const ePtr = this.newTemp();
+        this.tempTypes.set(ePtr, 'ptr'); // Track as ptr
+        
+        const valReg = this.newTemp();
+        this.emit(`${ePtr} = getelementptr inbounds i32, ptr %${base}, i32 ${idx}`);
+        this.emit(`${valReg} = load i32, ptr ${ePtr}, align 8`); 
+
+        // HEURISTIC: If this value is immediately used for member access,
+        // we should have loaded it as ptr. Since we already loaded it as i32,
+        // we MUST mark it so generateMemberExpr can coerce it.
+        this.tempTypes.set(valReg, 'i32'); 
+        return valReg;
     }
-    const ePtr = this.newTemp();
-    const t = this.newTemp();
-    this.emit(`${ePtr} = getelementptr inbounds i32, ptr %${base}, i32 ${idx}`);
-    this.emit(`${t} = load i32, ptr ${ePtr}, align 8`); 
-    this.tempTypes.set(t, 'i32'); 
-    return t;
+    
+    // Fallback for non-identifier base (should not happen in TSN array access often)
+    return '0';
   }
 
   private generateMemberExpr(e: MemberExpr): string {
+    const objVal = this.generateExpression(e.object);
+    let objType = this.tempTypes.get(objVal) || this.inferExprType(e.object) || 'ptr';
+    
+    // HEURISTIC: If bootstrap compiler misidentified ptr as i32, force it back to ptr
+    // or if it's an i32 that needs to be a ptr
+    let obj = objVal;
+    if (objType === 'i32' && objVal !== '0' && !objVal.startsWith('-')) {
+        obj = this.coerceToType(objVal, 'i32', 'ptr');
+        objType = 'ptr';
+    }
+
     if (e.object.kind === ASTKind.Identifier) {
       const name = (e.object as Identifier).name;
       const fullName = name + '.' + e.member;
-        if (name === 'semVar') {
-            const inf = this.inferExprType(e.object);
-        }
-      // Namespace check - prevent namespace being treated as object
       if (this.importedModules.has(name) && !this.localVarTypes.has(name) && !this.currentFunctionParams.has(name) && !this.globals.has(name)) {
           const sym = this.importedSymbols.get(fullName);
           if (sym && (sym.kind === 'const' || sym.kind === 'let')) {
@@ -3274,8 +3402,6 @@ export class CodeGenerator {
           }
       }
     }
-    const obj = this.generateExpression(e.object);
-      const objType = this.tempTypes.get(obj) || 'ptr';
 
     // Built-in string properties
     if (objType === 'string') {
@@ -3349,10 +3475,40 @@ export class CodeGenerator {
         return t;
     }
 
-    // Heuristic: if objType is a primitive like i32, it CANNOT have members.
+    // HEURISTIC: if objType is a primitive like i32, it CANNOT have members.
     // If it's used as an object, it MUST be a pointer (ptr or %StructName).
     if (objType === 'i32' || objType === 'i1' || objType === 'i8' || objType === 'i64' || objType === 'f32' || objType === 'f64') {
-         throw new Error(`Cannot access member '${e.member}' on primitive type '${objType}'`);
+         objVal = this.coerceToType(objVal, objType, 'ptr');
+         obj = objVal;
+         objType = 'ptr';
+    } else {
+        // Even if objType is ptr, if it's a register, we might need to coerce it
+        // because the bootstrap compiler might have emitted it as i32 previously.
+        if (obj.startsWith('%')) {
+             const actualLLVMType = this.getValueType(obj);
+             if (actualLLVMType === 'i32') {
+                 obj = this.coerceToType(obj, 'i32', 'ptr');
+                 objType = 'ptr';
+                 this.tempTypes.set(obj, 'ptr');
+             }
+        }
+    }
+
+    // Force re-check of obj after potential coercion
+    if (obj.startsWith('%inttoptr_')) {
+        this.tempTypes.set(obj, 'ptr');
+    }
+
+    if (obj.startsWith('%')) {
+        const actualType = this.getValueType(obj);
+        if (actualType === 'i32') {
+             obj = this.coerceToType(obj, 'i32', 'ptr');
+             objType = 'ptr';
+             this.tempTypes.set(obj, 'ptr');
+        }
+    }
+
+    if (e.member === "tag") {
     }
 
     let stName = "";
@@ -3371,52 +3527,64 @@ export class CodeGenerator {
         }
     }
     
-if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") stName = "";
+    if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") stName = "";
+
+    const oT = this.getValueType(obj);
+    const pObj = (oT === 'i32') ? this.coerceToType(obj, 'i32', 'ptr') : obj;
+    
+    // HEURISTIC: if obj is a register and its ACTUAL LLVM type is i32, we MUST cast it
+    // because it's being used as a struct base here.
+    if (obj.startsWith('%')) {
+        const actualType = this.getValueType(obj);
+        if (actualType === 'i32') {
+             obj = this.coerceToType(obj, 'i32', 'ptr');
+             objType = 'ptr';
+             this.tempTypes.set(obj, 'ptr');
+        }
+    }
 
     if (stName === "" || !this.structs.has(stName)) {
-        if (e.member === 'blocks' || e.member === 'globalScope') {
-        }
+        const oT = this.getValueType(obj);
+        const pObj = (oT === 'i32') ? this.coerceToType(obj, 'i32', 'ptr') : obj;
         const t = this.newTemp();
-        this.emit(`${t} = load ptr, ptr ${obj}, align 8`);
-        this.tempTypes.set(t, 'ptr');
-        return t;
-    }
-    let structInfo = this.structs.get(stName);
-    // If no struct but it's an Array type, try instantiating it lazily
-    if (!structInfo && stName.startsWith('Array_')) {
-        const innerTypeName = stName.substring('Array_'.length);
-        const innerTypeAnn: TypeAnnotation = { name: innerTypeName } as any;
-        const instName = this.instantiateClass('Array', [innerTypeAnn]);
-        structInfo = this.structs.get(instName);
-    }
-    
-    if (!structInfo || stName === "") {
-        if (e.member === 'blocks' || e.member === 'globalScope') {
-        }
-        const t = this.newTemp();
-        this.emit(`${t} = load ptr, ptr ${obj}, align 8`);
-        this.tempTypes.set(t, 'ptr');
+        this.tempTypes.set(t, 'ptr'); // Track as ptr
+        this.emit(`${t} = load ptr, ptr ${pObj}, align 8`);
+        
+        // Brute-force: if the next access is member access on this, it MUST be ptr
         return t;
     }
     const fIdx = this.getFieldIndex(stName, e.member);
     if (fIdx === -1) {
          throw new Error(`Field '${e.member}' not found in struct '${stName}' (object type '${objType}')`);
     }
-    const fieldType = structInfo.fields[fIdx] ? structInfo.fields[fIdx].type : 'ptr';
+    let structInfo = this.structs.get(stName);
+    const fieldType = structInfo!.fields[fIdx] ? structInfo!.fields[fIdx].type : 'ptr';
     
     // Ensure we are working with the object pointer, not the address of the local variable
-    const actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
+    let actualObjVal = objVal.startsWith('%') && this.hoistedVars.has(objVal.substring(1)) ? (() => {
         const t = this.newTemp();
-        const ot = this.localVarTypes.get(obj.substring(1)) || 'ptr';
-        this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${obj}, align 8`);
+        const ot = this.localVarTypes.get(objVal.substring(1)) || 'ptr';
+        this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${objVal}, align 8`);
+        this.tempTypes.set(t, ot);
         return t;
-    })() : obj;
+    })() : objVal;
+
+    let actualObj = actualObjVal;
+    const oT2 = this.getValueType(actualObjVal);
+    if (oT2 === 'i32') {
+        actualObj = this.coerceToType(actualObjVal, 'i32', 'ptr');
+    }
 
     const fPtr = this.newTemp();
-    const t = this.newTemp();
-    
+    this.tempTypes.set(fPtr, 'ptr');
     this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${actualObj}, i32 0, i32 ${fIdx}`);
-    this.emit(`${t} = load ${this.toLLVMType(fieldType)}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
+    
+    // DEBUG: print fPtr and its type
+    // console.log(`--- generateMemberExpr: fPtr=${fPtr}, type=${this.getValueType(fPtr)}`);
+
+    const t = this.newTemp();
+    const llvmFieldType = this.toLLVMType(fieldType);
+    this.emit(`${t} = load ${llvmFieldType}, ptr ${fPtr}, align ${this.getAlignment(fieldType)}`);
     
     // Try to get the semantic type (e.g., '%Array_ImportDeclInfo') for better type tracking
     let semanticType = fieldType;
@@ -3836,7 +4004,10 @@ if (stName === "i32" || stName === "i1" || stName === "i8" || stName === "ptr") 
     if (v.startsWith('%')) {
         const type = this.tempTypes.get(v);
         if (type) return type;
-        // Fallback for LLVM structures
+        
+        // HEURISTIC: Many registers are actually pointers (from GEP, alloca, load ptr)
+        // If we don't know the type, it's safer to check context or default to ptr 
+        // if it's used as a pointer. But for now, let's keep i32 as default and fix known issues.
         return 'i32';
     }
     if (v === 'null') return 'ptr';

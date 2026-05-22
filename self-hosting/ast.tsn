@@ -109,8 +109,9 @@ export class ClassMemberDecl {
     public bodyWhileCount: i32;
     public bodyForCount: i32;
     public bodyAssignCount: i32;
+    public body: Stmt;
 
-    constructor(kind: string, name: string, modifierSummary: string, isPublic: bool, isPrivate: bool, isProtected: bool, isStatic: bool, isAsync: bool, isConstructor: bool, typeParamSummary: string, typeParameters: Array<string>, paramSummary: string, params: Array<ParameterInfo>, returnSummary: string, returnTypeText: string, typeSummary: string, typeText: string, hasBody: bool, bodyStatementCount: i32, bodyLetCount: i32, bodyReturnCount: i32, bodyIfCount: i32, bodyWhileCount: i32, bodyForCount: i32, bodyAssignCount: i32) {
+    constructor(kind: string, name: string, modifierSummary: string, isPublic: bool, isPrivate: bool, isProtected: bool, isStatic: bool, isAsync: bool, isConstructor: bool, typeParamSummary: string, typeParameters: Array<string>, paramSummary: string, params: Array<ParameterInfo>, returnSummary: string, returnTypeText: string, typeSummary: string, typeText: string, hasBody: bool, bodyStatementCount: i32, bodyLetCount: i32, bodyReturnCount: i32, bodyIfCount: i32, bodyWhileCount: i32, bodyForCount: i32, bodyAssignCount: i32, body: Stmt) {
         this.kind = kind;
         this.name = name;
         this.modifierSummary = modifierSummary;
@@ -136,6 +137,7 @@ export class ClassMemberDecl {
         this.bodyWhileCount = bodyWhileCount;
         this.bodyForCount = bodyForCount;
         this.bodyAssignCount = bodyAssignCount;
+        this.body = body;
         log("--- ClassMemberDecl.constructor: end");
     }
 }
@@ -147,14 +149,16 @@ export class Declaration {
     public detailB: string;
     public detailC: string;
     public members: Array<ClassMemberDecl>;
+    public body: Stmt;
 
-    constructor(kind: string, name: string, detailA: string, detailB: string, detailC: string, members: Array<ClassMemberDecl>) {
+    constructor(kind: string, name: string, detailA: string, detailB: string, detailC: string, members: Array<ClassMemberDecl>, body: Stmt) {
         this.kind = kind;
         this.name = name;
         this.detailA = detailA;
         this.detailB = detailB;
         this.detailC = detailC;
         this.members = members;
+        this.body = body;
     }
 }
 
