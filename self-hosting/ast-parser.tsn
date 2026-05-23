@@ -8,14 +8,23 @@ export class ASTParser {
     private pos: i32;
 
     constructor(tokens: Array<Token>) {
+        log("ASTParser.constructor: start");
         this.tokens = tokens;
         this.pos = 0;
+        log("ASTParser.constructor: tokens count =");
+        print_i32(tokens.length);
     }
 
     public parse(): Program {
         let declarations = new Array<Declaration>();
         log("ASTParser.parse: start");
+        log("tokens count:");
+        print_i32(this.tokens.length);
         while (!this.isAtEnd()) {
+            let pToken = this.tokens.get(this.pos);
+            log("Current token lexeme: " + pToken.lexeme);
+            print_i32(pToken.kind);
+            
             let decl = this.parseDeclaration();
             if (decl != null) {
                 declarations.push(decl);
@@ -26,6 +35,11 @@ export class ASTParser {
     }
 
     private parseDeclaration(): Declaration {
+        let pToken = this.tokens.get(this.pos);
+        log("ASTParser.parseDeclaration: peek.lexeme = " + pToken.lexeme);
+        log("ASTParser.parseDeclaration: peek.kind =");
+        print_i32(pToken.kind);
+        
         if (this.matchKind(TokenKind.Declare)) {
             log("ASTParser.parseDeclaration: declare");
             if (this.matchKind(TokenKind.Function)) {

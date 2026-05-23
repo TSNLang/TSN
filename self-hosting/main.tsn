@@ -36,11 +36,17 @@ function parseFile(path: string): i32 {
         return 1;
     }
     log("--- parseFile: starting parser constructor");
+    log("tokens length check before parser:");
+    print_i32(tokens.length);
     let parser = new ASTParser(tokens);
     let program: ASTProgram = parser.parse();
     log("--- parseFile: parse success");
 
-    if (program.declarations.length == 0) {
+    let decls_count = program.declarations.length;
+    log("--- declarations count:");
+    print_i32(decls_count);
+
+    if (decls_count == 0) {
         log("parse FAILED: no declarations found in file");
         log(path);
         return 1;
