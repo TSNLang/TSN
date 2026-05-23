@@ -1,30 +1,26 @@
 declare function print_i32(n: i32): void;
-import { Array } from "std:array";
 import { log } from "std:console";
-import { Token, TokenKind, Program, Declaration, FunctionDecl, ClassDecl, ImportDecl, Stmt, BlockStmt, ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, BinaryExpr, UnaryExpr, CallExpr, MemberExpr, IndexExpr, NewExpr, ArrayLiteral, ThisExpr, ParameterInfo, ImportSpecifierInfo, ClassMemberDecl } from "./ast.tsn";
+import { Array } from "std:array";
+import { 
+    Token, TokenKind, Program, Declaration, ClassMemberDecl, ParameterInfo,
+    Stmt, BlockStmt, VarDeclStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, ExprStmt,
+    Expr, BinaryExpr, UnaryExpr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral,
+    MemberExpr, CallExpr, NewExpr, ThisExpr, ArrayLiteral, IndexExpr
+} from "./ast.tsn";
 
 export class ASTParser {
     private tokens: Array<Token>;
     private pos: i32;
 
     constructor(tokens: Array<Token>) {
-        log("ASTParser.constructor: start");
         this.tokens = tokens;
         this.pos = 0;
-        log("ASTParser.constructor: tokens count =");
-        print_i32(tokens.length);
     }
 
     public parse(): Program {
         let declarations = new Array<Declaration>();
         log("ASTParser.parse: start");
-        log("tokens count:");
-        print_i32(this.tokens.length);
         while (!this.isAtEnd()) {
-            let pToken = this.tokens.get(this.pos);
-            log("Current token lexeme: " + pToken.lexeme);
-            print_i32(pToken.kind);
-            
             let decl = this.parseDeclaration();
             if (decl != null) {
                 declarations.push(decl);
@@ -35,77 +31,46 @@ export class ASTParser {
     }
 
     private parseDeclaration(): Declaration {
-        let pToken = this.tokens.get(this.pos);
-        log("ASTParser.parseDeclaration: peek.lexeme = " + pToken.lexeme);
-        log("ASTParser.parseDeclaration: peek.kind =");
-        print_i32(pToken.kind);
+        let isExported = this.matchKind(TokenKind.Export);
+        let isDeclare = this.matchKind(TokenKind.Declare);
         
-        if (this.matchKind(TokenKind.Declare)) {
-            log("ASTParser.parseDeclaration: declare");
-            if (this.matchKind(TokenKind.Function)) {
-                return this.parseFunctionDecl(false);
-            }
-            if (this.matchKind(TokenKind.Class)) {
-                return this.parseClassDecl(false);
-            }
-        }
         if (this.matchKind(TokenKind.Import)) {
-            log("ASTParser.parseDeclaration: import");
             return this.parseImportDecl();
         }
-        let isExported = this.matchKind(TokenKind.Export);
+        
         if (this.matchKind(TokenKind.Function)) {
-            log("ASTParser.parseDeclaration: function");
-            return this.parseFunctionDecl(isExported);
+            return this.parseFunctionDecl(isExported, isDeclare);
         }
+        
         if (this.matchKind(TokenKind.Class)) {
-            log("ASTParser.parseDeclaration: class");
-            return this.parseClassDecl(isExported);
+            return this.parseClassDecl(isExported, isDeclare);
         }
-        log("ASTParser.parseDeclaration: unknown, advancing");
-        this.advance();
-        return new ImportDecl("", "", "", new Array<ImportSpecifierInfo>());
+        
+        if (!this.isAtEnd()) {
+            this.advance();
+        }
+        return null as Declaration;
     }
 
     private parseImportDecl(): Declaration {
         let defaultImport = "";
         let namespaceImport = "";
-        let namedImports = new Array<ImportSpecifierInfo>();
-        let clause = "";
+        let namedImports = new Array<any>(); // Tạm thời
         
         if (this.peek().kind == TokenKind.Identifier) {
             defaultImport = this.advance().lexeme;
-            clause = defaultImport;
-            if (this.matchKind(TokenKind.Comma)) {
-                clause = clause + ", ";
-            }
+            this.matchKind(TokenKind.Comma);
         }
         
         if (this.matchKind(TokenKind.LBrace)) {
-            clause = clause + "{ ";
             while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
-                let imported = this.advance().lexeme;
-                let local = imported;
-                if (this.matchKind(TokenKind.As)) { // Cần thêm TokenKind.As
-                    local = this.advance().lexeme;
-                }
-                namedImports.push(new ImportSpecifierInfo(imported, local));
-                clause = clause + imported;
-                if (local != imported) {
-                    clause = clause + " as " + local;
-                }
-                if (this.matchKind(TokenKind.Comma)) {
-                    clause = clause + ", ";
-                } else {
-                    break;
-                }
+                this.advance(); // Skip specifiers for now
+                if (!this.matchKind(TokenKind.Comma)) break;
             }
             this.matchKind(TokenKind.RBrace);
-            clause = clause + " }";
         } else if (this.matchKind(TokenKind.Star)) {
             this.matchKind(TokenKind.As);
             namespaceImport = this.advance().lexeme;
-            clause = "* as " + namespaceImport;
         }
         
         this.matchKind(TokenKind.From);
@@ -115,85 +80,65 @@ export class ASTParser {
         }
         this.matchKind(TokenKind.Semicolon);
         
-        return new Declaration("ImportDecl", source, defaultImport, namespaceImport, clause, new Array<ClassMemberDecl>());
+        return new Declaration("ImportDecl", source, defaultImport, namespaceImport, "", new Array<ClassMemberDecl>());
     }
 
-    private parseFunctionDecl(isExported: bool): Declaration {
+    private parseFunctionDecl(isExported: bool, isDeclare: bool): Declaration {
         let name = "";
         if (this.peek().kind == TokenKind.Identifier) {
             name = this.advance().lexeme;
         }
         
-        let typeParams = new Array<string>();
         if (this.matchKind(TokenKind.Less)) {
-            while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
-                if (this.peek().kind == TokenKind.Identifier) {
-                    typeParams.push(this.advance().lexeme);
-                }
-                if (!this.matchKind(TokenKind.Comma)) {
-                    break;
-                }
-            }
+            this.skipUntil(TokenKind.Greater);
             this.matchKind(TokenKind.Greater);
         }
         
         let params = new Array<ParameterInfo>();
         if (this.matchKind(TokenKind.LParen)) {
             while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
-                let paramName = "";
-                if (this.peek().kind == TokenKind.Identifier) {
-                    paramName = this.advance().lexeme;
-                }
-                let paramType = "";
-                if (this.matchKind(TokenKind.Colon)) {
-                    paramType = this.parseTypeText();
-                }
-                params.push(new ParameterInfo(paramName, paramType, false));
-                if (!this.matchKind(TokenKind.Comma)) {
-                    break;
-                }
+                let pName = this.advance().lexeme;
+                let pType = "";
+                if (this.matchKind(TokenKind.Colon)) pType = this.parseTypeText();
+                params.push(new ParameterInfo(pName, pType, false));
+                if (!this.matchKind(TokenKind.Comma)) break;
             }
             this.matchKind(TokenKind.RParen);
         }
         
-        let returnType = "";
         if (this.matchKind(TokenKind.Colon)) {
-            returnType = this.parseTypeText();
+            this.parseTypeText();
         }
         
-        let body = this.parseBlockStmt();
+        let body: Stmt = null as Stmt;
+        if (isDeclare) {
+            this.matchKind(TokenKind.Semicolon);
+        } else {
+            body = this.parseBlockStmt();
+        }
         
-        return new Declaration("FunctionDecl", name, "", "", "", new Array<ClassMemberDecl>());
+        let decl = new Declaration("FunctionDecl", name, "", "", "", new Array<ClassMemberDecl>());
+        decl.params = params;
+        decl.body = body;
+        return decl;
     }
 
-    private parseClassDecl(isExported: bool): Declaration {
+    private parseClassDecl(isExported: bool, isDeclare: bool): Declaration {
         let name = "";
         if (this.peek().kind == TokenKind.Identifier) {
             name = this.advance().lexeme;
         }
-        log("ASTParser.parseClassDecl: name = " + name);
         
-        let typeParams = new Array<string>();
         if (this.matchKind(TokenKind.Less)) {
-            while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
-                if (this.peek().kind == TokenKind.Identifier) {
-                    typeParams.push(this.advance().lexeme);
-                }
-                if (!this.matchKind(TokenKind.Comma)) {
-                    break;
-                }
-            }
+            this.skipUntil(TokenKind.Greater);
             this.matchKind(TokenKind.Greater);
         }
         
         let members = new Array<ClassMemberDecl>();
         if (this.matchKind(TokenKind.LBrace)) {
-            log("ASTParser.parseClassDecl: matched LBrace");
             while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
-                log("ASTParser.parseClassDecl: parsing member...");
                 members.push(this.parseClassMember());
             }
-            log("ASTParser.parseClassDecl: exiting LBrace loop");
             this.matchKind(TokenKind.RBrace);
         }
         
@@ -205,273 +150,106 @@ export class ASTParser {
         let isPrivate = false;
         let isProtected = false;
         let isStatic = false;
-        let isAsync = false;
-
-        log("ASTParser.parseClassMember: entering");
-        log("ASTParser.parseClassMember: pos =");
-        print_i32(this.pos);
-        log("ASTParser.parseClassMember: tokens length =");
-        print_i32(this.tokens.length);
+        
         while (true) {
-            let tKind = this.peek().kind;
-            if (tKind == TokenKind.Public) {
-                isPublic = true;
-                this.advance();
-            } else if (tKind == TokenKind.Private) {
-                isPrivate = true;
-                this.advance();
-            } else if (tKind == TokenKind.Protected) {
-                isProtected = true;
-                this.advance();
-            } else if (tKind == TokenKind.Static) {
-                isStatic = true;
-                this.advance();
-            } else if (tKind == TokenKind.Async) {
-                isAsync = true;
-                this.advance();
-            } else {
-                break;
-            }
+            let k = this.peek().kind;
+            if (k == TokenKind.Public) { isPublic = true; this.advance(); }
+            else if (k == TokenKind.Private) { isPrivate = true; this.advance(); }
+            else if (k == TokenKind.Protected) { isProtected = true; this.advance(); }
+            else if (k == TokenKind.Static) { isStatic = true; this.advance(); }
+            else break;
         }
 
-        let isConstructor = false;
+        let isConstructor = this.matchKind(TokenKind.Constructor);
         let name = "";
-        let kind = "";
-        let returnTypeText = "";
-        let typeText = "";
-        let typeParams = new Array<string>();
-        let params = new Array<ParameterInfo>();
-
-        if (this.matchKind(TokenKind.Constructor)) {
-            isConstructor = true;
-            name = "constructor";
-            kind = "ConstructorDecl";
-            
-            if (this.matchKind(TokenKind.LParen)) {
-                while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
-                    let paramName = "";
-                    if (this.peek().kind == TokenKind.Identifier) {
-                        paramName = this.advance().lexeme;
-                    }
-                    let paramType = "";
-                    if (this.matchKind(TokenKind.Colon)) {
-                        paramType = this.parseTypeText();
-                    }
-                    params.push(new ParameterInfo(paramName, paramType, false));
-                    if (!this.matchKind(TokenKind.Comma)) {
-                        break;
-                    }
-                }
-                this.matchKind(TokenKind.RParen);
-            }
-
-            if (this.matchKind(TokenKind.LBrace)) {
-                this.pos = this.pos - 1;
-                let body = this.parseBlockStmt();
-                let bodyStmtCount = body.statements.length;
-                return new ClassMemberDecl(
-                    kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
-                    "", typeParams, "", params, "", "", "", "", true, bodyStmtCount, 0, 0, 0, 0, 0, 0
-                );
-            }
-            return new ClassMemberDecl(
-                kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
-                "", typeParams, "", params, "", "", "", "", false, 0, 0, 0, 0, 0, 0, 0
-            );
-        }
-
-        if (this.peek().kind == TokenKind.Identifier) {
+        if (!isConstructor) {
             name = this.advance().lexeme;
-
-            if (this.matchKind(TokenKind.Less)) {
-                while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
-                    if (this.peek().kind == TokenKind.Identifier) {
-                        typeParams.push(this.advance().lexeme);
-                    }
-                    if (!this.matchKind(TokenKind.Comma)) {
-                        break;
-                    }
-                }
-                this.matchKind(TokenKind.Greater);
-            }
-
-            if (this.matchKind(TokenKind.LParen)) {
-                kind = "MethodDecl";
-                while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
-                    let paramName = "";
-                    if (this.peek().kind == TokenKind.Identifier) {
-                        paramName = this.advance().lexeme;
-                    }
-                    let paramType = "";
-                    if (this.matchKind(TokenKind.Colon)) {
-                        paramType = this.parseTypeText();
-                    }
-                    params.push(new ParameterInfo(paramName, paramType, false));
-                    if (!this.matchKind(TokenKind.Comma)) {
-                        break;
-                    }
-                }
-                this.matchKind(TokenKind.RParen);
-
-                if (this.matchKind(TokenKind.Colon)) {
-                    returnTypeText = this.parseTypeText();
-                }
-
-                if (this.matchKind(TokenKind.LBrace)) {
-                    this.pos = this.pos - 1;
-                    let body = this.parseBlockStmt();
-                    let bodyStmtCount = body.statements.length;
-                    return new ClassMemberDecl(
-                        kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
-                        "", typeParams, "", params, "", returnTypeText, "", "", true, bodyStmtCount, 0, 0, 0, 0, 0, 0
-                    );
-                }
-                return new ClassMemberDecl(
-                    kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
-                    "", typeParams, "", params, "", returnTypeText, "", "", false, 0, 0, 0, 0, 0, 0, 0
-                );
-            } else {
-                kind = "FieldDecl";
-                if (this.matchKind(TokenKind.Colon)) {
-                    typeText = this.parseTypeText();
-                }
-                this.matchKind(TokenKind.Semicolon);
-                return new ClassMemberDecl(
-                    kind, name, "", isPublic, isPrivate, isProtected, isStatic, isAsync, isConstructor,
-                    "", typeParams, "", params, "", "", "", typeText, false, 0, 0, 0, 0, 0, 0, 0
-                );
-            }
+        } else {
+            name = "constructor";
         }
 
-        this.advance();
-        return new ClassMemberDecl(
-            "Unknown", "", "", false, false, false, false, false, false,
-            "", typeParams, "", params, "", "", "", "", false, 0, 0, 0, 0, 0, 0, 0
-        );
+        let params = new Array<ParameterInfo>();
+        if (this.matchKind(TokenKind.LParen)) {
+            while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                let pName = this.advance().lexeme;
+                let pType = "";
+                if (this.matchKind(TokenKind.Colon)) pType = this.parseTypeText();
+                params.push(new ParameterInfo(pName, pType, false));
+                if (!this.matchKind(TokenKind.Comma)) break;
+            }
+            this.matchKind(TokenKind.RParen);
+        }
+
+        let typeText = "";
+        if (this.matchKind(TokenKind.Colon)) {
+            typeText = this.parseTypeText();
+        }
+
+        let body: Stmt = null as Stmt;
+        let hasBody = false;
+        if (this.peek().kind == TokenKind.LBrace) {
+            body = this.parseBlockStmt();
+            hasBody = true;
+        } else {
+            this.matchKind(TokenKind.Semicolon);
+        }
+
+        let kind = hasBody ? (isConstructor ? "ConstructorDecl" : "MethodDecl") : "FieldDecl";
+        
+        let m = new ClassMemberDecl(kind, name, "", isPublic, isPrivate, isProtected, isStatic, false, isConstructor, "", new Array<string>(), "", params, "", "", "", typeText, hasBody, 0, 0, 0, 0, 0, 0, 0, body);
+        return m;
     }
 
     private parseBlockStmt(): BlockStmt {
+        this.matchKind(TokenKind.LBrace);
         let statements = new Array<Stmt>();
-        if (this.matchKind(TokenKind.LBrace)) {
-            while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
-                let stmt = this.parseStatement();
-                statements.push(stmt);
-            }
-            this.matchKind(TokenKind.RBrace);
+        while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+            statements.push(this.parseStatement());
         }
+        this.matchKind(TokenKind.RBrace);
         return new BlockStmt(statements);
     }
 
     private parseStatement(): Stmt {
         if (this.matchKind(TokenKind.Let) || this.matchKind(TokenKind.Const)) {
-            let isConst = this.previous().kind == TokenKind.Const;
-            return this.parseVarDeclStmt(isConst);
+            return this.parseVarDeclStmt();
         }
         if (this.matchKind(TokenKind.Return)) {
-            return this.parseReturnStmt();
+            let expr: Expr = null as Expr;
+            if (!this.check(TokenKind.Semicolon)) expr = this.parseExpression();
+            this.matchKind(TokenKind.Semicolon);
+            return new ReturnStmt(expr);
         }
         if (this.matchKind(TokenKind.If)) {
-            return this.parseIfStmt();
+            this.matchKind(TokenKind.LParen);
+            let cond = this.parseExpression();
+            this.matchKind(TokenKind.RParen);
+            let then = this.parseStatement();
+            let els: Stmt = null as Stmt;
+            if (this.matchKind(TokenKind.Else)) els = this.parseStatement();
+            return new IfStmt(cond, then, els);
         }
         if (this.matchKind(TokenKind.While)) {
-            return this.parseWhileStmt();
+            this.matchKind(TokenKind.LParen);
+            let cond = this.parseExpression();
+            this.matchKind(TokenKind.RParen);
+            let body = this.parseStatement();
+            return new WhileStmt(cond, body);
         }
-        if (this.matchKind(TokenKind.For)) {
-            return this.parseForStmt();
-        }
-        if (this.matchKind(TokenKind.Break)) {
-            this.matchKind(TokenKind.Semicolon);
-            return new ExprStmt(new IdentifierExpr("break")); // Cần AST BreakStmt nếu muốn chuẩn, tạm thời dùng ExprStmt
-        }
-        if (this.matchKind(TokenKind.Continue)) {
-            this.matchKind(TokenKind.Semicolon);
-            return new ExprStmt(new IdentifierExpr("continue"));
-        }
-        if (this.matchKind(TokenKind.LBrace)) {
-            this.pos = this.pos - 1;
-            return this.parseBlockStmt();
-        }
-        return this.parseExprStmt();
-    }
-
-    private parseVarDeclStmt(isConst: bool): VarDeclStmt {
-        let name = "";
-        if (this.peek().kind == TokenKind.Identifier) {
-            name = this.advance().lexeme;
-        }
-        let typeText = "";
-        if (this.matchKind(TokenKind.Colon)) {
-            typeText = this.parseTypeText();
-        }
-        let init = new IdentifierExpr("");
-        if (this.matchKind(TokenKind.Equal)) {
-            init = this.parseExpression();
-        }
-        this.matchKind(TokenKind.Semicolon);
-        return new VarDeclStmt(name, typeText, init, isConst);
-    }
-
-    private parseReturnStmt(): ReturnStmt {
-        let value = new IdentifierExpr("");
-        if (!this.check(TokenKind.Semicolon)) {
-            value = this.parseExpression();
-        }
-        this.matchKind(TokenKind.Semicolon);
-        return new ReturnStmt(value);
-    }
-
-    private parseIfStmt(): IfStmt {
-        this.matchKind(TokenKind.LParen);
-        let condition = this.parseExpression();
-        this.matchKind(TokenKind.RParen);
-        let thenBranch = this.parseStatement();
-        let elseBranch = new BlockStmt(new Array<Stmt>());
-        if (this.matchKind(TokenKind.Else)) {
-            elseBranch = this.parseStatement();
-        }
-        return new IfStmt(condition, thenBranch, elseBranch);
-    }
-
-    private parseWhileStmt(): WhileStmt {
-        this.matchKind(TokenKind.LParen);
-        let condition = this.parseExpression();
-        this.matchKind(TokenKind.RParen);
-        let body = this.parseStatement();
-        return new WhileStmt(condition, body);
-    }
-
-    private parseForStmt(): ForStmt {
-        this.matchKind(TokenKind.LParen);
-        let init: Stmt = new ExprStmt(new IdentifierExpr(""));
-        if (this.matchKind(TokenKind.Let) || this.matchKind(TokenKind.Const)) {
-            let isConst = this.previous().kind == TokenKind.Const;
-            init = this.parseVarDeclStmt(isConst);
-        } else if (!this.check(TokenKind.Semicolon)) {
-            init = this.parseExprStmt();
-        } else {
-            this.matchKind(TokenKind.Semicolon);
-        }
-
-        let condition: Expr = new IdentifierExpr("");
-        if (!this.check(TokenKind.Semicolon)) {
-            condition = this.parseExpression();
-        }
-        this.matchKind(TokenKind.Semicolon);
-
-        let update: Expr = new IdentifierExpr("");
-        if (!this.check(TokenKind.RParen)) {
-            update = this.parseExpression();
-        }
-        this.matchKind(TokenKind.RParen);
-
-        let body = this.parseStatement();
-        return new ForStmt(init, condition, update, body);
-    }
-
-    private parseExprStmt(): ExprStmt {
+        
         let expr = this.parseExpression();
         this.matchKind(TokenKind.Semicolon);
         return new ExprStmt(expr);
+    }
+
+    private parseVarDeclStmt(): VarDeclStmt {
+        let name = this.advance().lexeme;
+        let typeText = "";
+        if (this.matchKind(TokenKind.Colon)) typeText = this.parseTypeText();
+        let init: Expr = null as Expr;
+        if (this.matchKind(TokenKind.Equal)) init = this.parseExpression();
+        this.matchKind(TokenKind.Semicolon);
+        return new VarDeclStmt(name, typeText, init, false);
     }
 
     private parseExpression(): Expr {
@@ -479,7 +257,7 @@ export class ASTParser {
     }
 
     private parseAssignment(): Expr {
-        let left = this.parseLogicalOr();
+        let left = this.parseEquality();
         if (this.matchKind(TokenKind.Equal)) {
             let right = this.parseAssignment();
             return new BinaryExpr("=", left, right);
@@ -487,69 +265,39 @@ export class ASTParser {
         return left;
     }
 
-    private parseLogicalOr(): Expr {
-        let left = this.parseLogicalAnd();
-        if (this.matchKind(TokenKind.PipePipe)) {
-            let op = this.previous().lexeme;
-            let right = this.parseLogicalOr();
-            return new BinaryExpr(op, left, right);
-        }
-        return left;
-    }
-
-    private parseLogicalAnd(): Expr {
-        let left = this.parseEquality();
-        if (this.matchKind(TokenKind.AmpAmp)) {
-            let op = this.previous().lexeme;
-            let right = this.parseLogicalAnd();
-            return new BinaryExpr(op, left, right);
-        }
-        return left;
-    }
-
     private parseEquality(): Expr {
-        let left = this.parseComparison();
-        if (this.peek().kind != TokenKind.EqualEqual && this.peek().kind != TokenKind.BangEqual) {
-            return left;
-        }
-        let op = this.advance().lexeme;
-        let right = this.parseEquality();
-        return new BinaryExpr(op, left, right);
-    }
-
-    private parseComparison(): Expr {
         let left = this.parseAdditive();
-        if (this.peek().kind != TokenKind.Less && this.peek().kind != TokenKind.Greater && this.peek().kind != TokenKind.LessEqual && this.peek().kind != TokenKind.GreaterEqual) {
-            return left;
+        while (this.peek().kind == TokenKind.EqualEqual || this.peek().kind == TokenKind.BangEqual) {
+            let op = this.advance().lexeme;
+            let right = this.parseAdditive();
+            left = new BinaryExpr(op, left, right);
         }
-        let op = this.advance().lexeme;
-        let right = this.parseComparison();
-        return new BinaryExpr(op, left, right);
+        return left;
     }
 
     private parseAdditive(): Expr {
         let left = this.parseMultiplicative();
-        if (this.peek().kind != TokenKind.Plus && this.peek().kind != TokenKind.Minus) {
-            return left;
+        while (this.peek().kind == TokenKind.Plus || this.peek().kind == TokenKind.Minus) {
+            let op = this.advance().lexeme;
+            let right = this.parseMultiplicative();
+            left = new BinaryExpr(op, left, right);
         }
-        let op = this.advance().lexeme;
-        let right = this.parseAdditive();
-        return new BinaryExpr(op, left, right);
+        return left;
     }
 
     private parseMultiplicative(): Expr {
         let left = this.parseUnary();
-        if (this.peek().kind != TokenKind.Star && this.peek().kind != TokenKind.Slash && this.peek().kind != TokenKind.Percent) {
-            return left;
+        while (this.peek().kind == TokenKind.Star || this.peek().kind == TokenKind.Slash) {
+            let op = this.advance().lexeme;
+            let right = this.parseUnary();
+            left = new BinaryExpr(op, left, right);
         }
-        let op = this.advance().lexeme;
-        let right = this.parseMultiplicative();
-        return new BinaryExpr(op, left, right);
+        return left;
     }
 
     private parseUnary(): Expr {
-        if (this.peek().kind == TokenKind.Bang || this.peek().kind == TokenKind.Minus || this.peek().kind == TokenKind.Tilde) {
-            let op = this.advance().lexeme;
+        if (this.matchKind(TokenKind.Bang) || this.matchKind(TokenKind.Minus)) {
+            let op = this.previous().lexeme;
             let operand = this.parseUnary();
             return new UnaryExpr(op, operand, true);
         }
@@ -557,133 +305,84 @@ export class ASTParser {
     }
 
     private parsePostfix(): Expr {
-        let base = this.parsePrimary();
-        return this.parsePostfixContinue(base);
-    }
-
-    private parsePostfixContinue(expr: Expr): Expr {
-        if (this.matchKind(TokenKind.LParen)) {
-            let args = new Array<Expr>();
-            while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
-                args.push(this.parseExpression());
-                if (!this.matchKind(TokenKind.Comma)) {
-                    break;
+        let expr = this.parsePrimary();
+        while (true) {
+            if (this.matchKind(TokenKind.LParen)) {
+                let args = new Array<Expr>();
+                while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
+                    args.push(this.parseExpression());
+                    if (!this.matchKind(TokenKind.Comma)) break;
                 }
-            }
-            this.matchKind(TokenKind.RParen);
-            let callExpr = new CallExpr(expr, args, new Array<string>());
-            return this.parsePostfixContinue(callExpr);
-        } else if (this.matchKind(TokenKind.Dot)) {
-            let member = "";
-            if (this.peek().kind == TokenKind.Identifier) {
-                member = this.advance().lexeme;
-            }
-            let memberExpr = new MemberExpr(expr, member);
-            return this.parsePostfixContinue(memberExpr);
-        } else if (this.matchKind(TokenKind.LBracket)) {
-            let index = this.parseExpression();
-            this.matchKind(TokenKind.RBracket);
-            let indexExpr = new IndexExpr(expr, index);
-            return this.parsePostfixContinue(indexExpr);
+                this.matchKind(TokenKind.RParen);
+                expr = new CallExpr(expr, args, new Array<string>());
+            } else if (this.matchKind(TokenKind.Dot)) {
+                let name = this.advance().lexeme;
+                expr = new MemberExpr(expr, name);
+            } else if (this.matchKind(TokenKind.LBracket)) {
+                let index = this.parseExpression();
+                this.matchKind(TokenKind.RBracket);
+                expr = new IndexExpr(expr, index);
+            } else break;
         }
         return expr;
     }
 
     private parsePrimary(): Expr {
-        if (this.peek().kind == TokenKind.Number) {
-            return new NumberLiteral(this.advance().lexeme);
-        }
-        if (this.peek().kind == TokenKind.String) {
-            return new StringLiteral(this.advance().lexeme);
-        }
-        if (this.peek().kind == TokenKind.Identifier) {
-            return new IdentifierExpr(this.advance().lexeme);
-        }
-        if (this.matchKind(TokenKind.This)) {
-            return new ThisExpr();
-        }
+        if (this.matchKind(TokenKind.Number)) return new NumberLiteral(this.previous().lexeme);
+        if (this.matchKind(TokenKind.String)) return new StringLiteral(this.previous().lexeme);
+        if (this.matchKind(TokenKind.Identifier)) return new IdentifierExpr(this.previous().lexeme);
+        if (this.matchKind(TokenKind.This)) return new ThisExpr();
         if (this.matchKind(TokenKind.New)) {
-            let className = "";
-            if (this.peek().kind == TokenKind.Identifier) {
-                className = this.advance().lexeme;
-            }
+            let name = this.advance().lexeme;
             let args = new Array<Expr>();
             if (this.matchKind(TokenKind.LParen)) {
                 while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
                     args.push(this.parseExpression());
-                    if (!this.matchKind(TokenKind.Comma)) {
-                        break;
-                    }
+                    if (!this.matchKind(TokenKind.Comma)) break;
                 }
                 this.matchKind(TokenKind.RParen);
             }
-            return new NewExpr(className, args, new Array<string>());
-        }
-        if (this.matchKind(TokenKind.LBracket)) {
-            let elements = new Array<Expr>();
-            while (!this.check(TokenKind.RBracket) && !this.isAtEnd()) {
-                elements.push(this.parseExpression());
-                if (!this.matchKind(TokenKind.Comma)) {
-                    break;
-                }
-            }
-            this.matchKind(TokenKind.RBracket);
-            return new ArrayLiteral(elements);
+            return new NewExpr(name, args, new Array<string>());
         }
         if (this.matchKind(TokenKind.LParen)) {
             let expr = this.parseExpression();
             this.matchKind(TokenKind.RParen);
             return expr;
         }
-        this.advance();
-        return new IdentifierExpr("?");
+        return null as Expr;
     }
 
     private parseTypeText(): string {
-        let typeText = "";
-        while (!this.check(TokenKind.RParen) && !this.check(TokenKind.Comma) && !this.check(TokenKind.LBrace) && !this.check(TokenKind.Semicolon) && !this.check(TokenKind.Equal) && !this.isAtEnd()) {
-            typeText = typeText + this.advance().lexeme;
+        let res = "";
+        while (!this.isAtEnd()) {
+            let k = this.peek().kind;
+            if (k == TokenKind.RParen || k == TokenKind.Comma || k == TokenKind.RBrace || k == TokenKind.Semicolon || k == TokenKind.Equal || k == TokenKind.LBrace) break;
+            res = res + this.advance().lexeme;
         }
-        return typeText;
+        return res;
     }
 
     private skipUntil(kind: i32): void {
-        let depth = 1;
-        while (!this.isAtEnd() && depth > 0) {
-            if (this.peek().kind == kind) {
-                depth = depth - 1;
-                if (depth == 0) {
-                    return;
-                }
-            }
-            this.advance();
-        }
+        while (!this.isAtEnd() && !this.check(kind)) this.advance();
     }
 
     private matchKind(kind: i32): bool {
-        if (this.check(kind)) {
-            this.advance();
-            return true;
-        }
+        if (this.check(kind)) { this.advance(); return true; }
         return false;
     }
 
     private check(kind: i32): bool {
-        if (this.isAtEnd()) {
-            return false;
-        }
+        if (this.isAtEnd()) return kind == TokenKind.EOF;
         return this.peek().kind == kind;
     }
 
     private advance(): Token {
-        if (!this.isAtEnd()) {
-            this.pos = this.pos + 1;
-        }
+        if (!this.isAtEnd()) this.pos = this.pos + 1;
         return this.previous();
     }
 
     private isAtEnd(): bool {
-        return this.peek().kind == TokenKind.EOF;
+        return this.pos >= this.tokens.length || this.peek().kind == TokenKind.EOF;
     }
 
     private peek(): Token {
@@ -694,4 +393,3 @@ export class ASTParser {
         return this.tokens.get(this.pos - 1);
     }
 }
-
