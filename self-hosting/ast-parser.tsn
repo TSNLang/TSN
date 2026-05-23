@@ -26,6 +26,15 @@ export class ASTParser {
     }
 
     private parseDeclaration(): Declaration {
+        if (this.matchKind(TokenKind.Declare)) {
+            log("ASTParser.parseDeclaration: declare");
+            if (this.matchKind(TokenKind.Function)) {
+                return this.parseFunctionDecl(false);
+            }
+            if (this.matchKind(TokenKind.Class)) {
+                return this.parseClassDecl(false);
+            }
+        }
         if (this.matchKind(TokenKind.Import)) {
             log("ASTParser.parseDeclaration: import");
             return this.parseImportDecl();
@@ -48,23 +57,41 @@ export class ASTParser {
         let defaultImport = "";
         let namespaceImport = "";
         let namedImports = new Array<ImportSpecifierInfo>();
+        let clause = "";
         
         if (this.peek().kind == TokenKind.Identifier) {
             defaultImport = this.advance().lexeme;
+            clause = defaultImport;
             if (this.matchKind(TokenKind.Comma)) {
+                clause = clause + ", ";
             }
         }
         
         if (this.matchKind(TokenKind.LBrace)) {
+            clause = clause + "{ ";
             while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
                 let imported = this.advance().lexeme;
                 let local = imported;
+                if (this.matchKind(TokenKind.As)) { // Cần thêm TokenKind.As
+                    local = this.advance().lexeme;
+                }
                 namedImports.push(new ImportSpecifierInfo(imported, local));
-                if (!this.matchKind(TokenKind.Comma)) {
+                clause = clause + imported;
+                if (local != imported) {
+                    clause = clause + " as " + local;
+                }
+                if (this.matchKind(TokenKind.Comma)) {
+                    clause = clause + ", ";
+                } else {
                     break;
                 }
             }
             this.matchKind(TokenKind.RBrace);
+            clause = clause + " }";
+        } else if (this.matchKind(TokenKind.Star)) {
+            this.matchKind(TokenKind.As);
+            namespaceImport = this.advance().lexeme;
+            clause = "* as " + namespaceImport;
         }
         
         this.matchKind(TokenKind.From);
@@ -72,8 +99,9 @@ export class ASTParser {
         if (this.peek().kind == TokenKind.String) {
             source = this.advance().lexeme;
         }
+        this.matchKind(TokenKind.Semicolon);
         
-        return new Declaration("ImportDecl", source, defaultImport, namespaceImport, "", new Array<ClassMemberDecl>());
+        return new Declaration("ImportDecl", source, defaultImport, namespaceImport, clause, new Array<ClassMemberDecl>());
     }
 
     private parseFunctionDecl(isExported: bool): Declaration {

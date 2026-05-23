@@ -61,6 +61,7 @@ export enum TokenKind {
     Continue,
     AmpAmp,
     PipePipe,
+    As,
 }
 
 export class Token {

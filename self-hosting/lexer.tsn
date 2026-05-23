@@ -246,6 +246,8 @@ export class Lexer {
         if (text == "static") return TokenKind.Static;
         if (text == "async") return TokenKind.Async;
         if (text == "from") return TokenKind.From;
+        if (text == "as") return TokenKind.As;
+        if (text == "declare") return TokenKind.Declare;
         if (text == "function") return TokenKind.Function;
         if (text == "class") return TokenKind.Class;
         if (text == "constructor") return TokenKind.Constructor;
