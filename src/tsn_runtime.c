@@ -86,6 +86,7 @@ void tsn_init_args(int argc, char** argv) {
 }
 
 int32_t tsn_get_argc() { return __tsn_argc; }
+void* tsn_get_argv_ptr() { return (void*)__tsn_argv; }
 char* tsn_get_argv(int32_t index) {
     if (index < 0 || index >= __tsn_argc) return NULL;
     return __tsn_argv[index];

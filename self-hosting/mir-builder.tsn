@@ -37,15 +37,24 @@ export class MIRBuilder {
         // Cast Declaration to access more fields if it's a FunctionDecl
         // In ast.tsn, we have FunctionDecl class but buildDeclaration takes Declaration.
         
-        let func = new MIRFunction(decl.name, new MIRType("i32", false, 4));
-        this.currentFunction = func;
-        let entryId = func.createBlock("entry");
-        this.currentBlockId = entryId;
+        let func = this.createFunction(decl.name, new MIRType("i32", false, 4));
         
         // In a real scenario, we'd have the AST body here.
         // For self-hosting demonstration, we assume the structure is accessible.
         
         this.module.functions.push(func);
+    }
+
+    public createFunction(name: string, returnType: MIRType): MIRFunction {
+        let func = new MIRFunction(name, returnType);
+        this.currentFunction = func;
+        let entryId = func.createBlock("entry");
+        this.currentBlockId = entryId;
+        return func;
+    }
+
+    public getModule(): MIRModule {
+        return this.module;
     }
 
     private analyzeStatement(stmt: Stmt): void {
@@ -133,6 +142,10 @@ export class MIRBuilder {
     }
 
     public setInsertPoint(blockId: i32): void {
+        this.currentBlockId = blockId;
+    }
+
+    private buildClass(decl: Declaration): void {
         log("MIRBuilder.buildClass: " + decl.name);
         for (let i = 0; i < decl.members.length; i = i + 1) {
             let m = decl.members.get(i);
@@ -153,10 +166,6 @@ export class MIRBuilder {
         
         this.createReturn(this.createConstant("0", new MIRType("i32", false, 4)));
         this.module.functions.push(func);
-    }
-
-    public setInsertPoint(blockId: i32): void {
-        this.currentBlockId = blockId;
     }
 
     public createBasicBlock(label: string): i32 {

@@ -5,11 +5,11 @@ import { Array } from "std:array";
 
 @ffi.lib("")
 declare
-function os_get_argc(): i32;
+function tsn_get_argc(): i32;
 
 @ffi.lib("")
 declare
-function os_get_argv(): rawPtr<void>;
+function tsn_get_argv_ptr(): rawPtr<void>;
 
 export class ArgsIterator implements Iterator<string> {
     private argc: i32;
@@ -17,8 +17,8 @@ export class ArgsIterator implements Iterator<string> {
     private index: i32;
 
     constructor() {
-        this.argc = os_get_argc();
-        this.argv = os_get_argv();
+        this.argc = tsn_get_argc();
+        this.argv = tsn_get_argv_ptr();
         this.index = 0;
     }
 

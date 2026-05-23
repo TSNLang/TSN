@@ -19,10 +19,10 @@ function logBool(label: string, value: bool): void {
 
 function parseFile(path: string): i32 {
     log("--- parseFile: start reading");
+    log(path);
     let fsResult = readText(path);
     if (!fsResult.isOk()) {
         log("parse FAILED: could not read file");
-        log(path);
         return 1;
     }
 

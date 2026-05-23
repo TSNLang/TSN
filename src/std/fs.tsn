@@ -6,7 +6,7 @@ declare function print_i32(n: i32): void;
 @target_os("windows")
 @ffi.lib("kernel32")
 declare function tsn_CreateFileA(
-    fileName: string,
+    fileName: rawPtr<i8>,
     desiredAccess: i32,
     shareMode: i32,
     securityAttributes: ptr<void>,
@@ -162,18 +162,27 @@ export class ExistsResult {
 @target_os("windows")
 @unsafe
 export function readText(path: string): ReadTextResult {
+    let pathData: rawPtr<i8> = memory.offset(path as ptr<void>, 8);
     // GENERIC_READ = 0x80000000, FILE_SHARE_READ = 1, OPEN_EXISTING = 3
-    let handle = tsn_CreateFileA(path, -2147483648, 1, null, 3, 128, null);
+    let handle = tsn_CreateFileA(pathData, -2147483648, 1, null, 3, 128, null);
 
     if (handle == (0 - 1) as ptr<void> || handle == null) {
         return new ReadTextResult(false, "", FS_NOT_FOUND);
     }
+    // print_i32(44444);
 
     let high: i32 = 0;
-    let size = tsn_GetFileSize(handle, addressof(high));
-    if (size < 0) {
-        tsn_CloseHandle(handle);
-        return new ReadTextResult(false, "", FS_IO_ERROR);
+    let size = tsn_GetFileSize(handle, null);
+    // print_i32(size);
+    if (size == (0 - 1)) {
+        // print_i32(88888);
+        let err = tsn_GetLastError();
+        if (err != 0) {
+            // print_i32(err);
+            // print_i32(55555);
+            tsn_CloseHandle(handle);
+            return new ReadTextResult(false, "", FS_IO_ERROR);
+        }
     }
 
     let heap = tsn_GetProcessHeap();

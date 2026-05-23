@@ -3422,7 +3422,26 @@ export class CodeGenerator {
     }
 
     // Handle .address
+    // Handle .address
     if (e.member === 'address') {
+        const obj = this.generateExpression(e.object);
+        const objType = this.tempTypes.get(obj) || this.inferExprType(e.object) || 'ptr';
+        const stName = (e.object.kind === ASTKind.ThisExpr) ? this.currentClassName! : 
+                       (objType.startsWith('%') ? objType.substring(1) : ((this.classDecls.has(objType) || this.interfaceDecls.has(objType)) ? objType : this.guessStructTypeByVal(obj)));
+        
+        const fIdx = this.getFieldIndex(stName, 'address');
+        if (fIdx !== -1) {
+            const structInfo = this.structs.get(stName);
+            const fieldType = structInfo!.fields[fIdx] ? structInfo!.fields[fIdx].type : 'ptr';
+            const fPtr = this.newTemp();
+            const t = this.newTemp();
+            this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
+            const llvmFieldType = this.toLLVMType(fieldType);
+            this.emit(`${t} = load ${llvmFieldType}, ptr ${fPtr}, align 8`);
+            this.tempTypes.set(t, fieldType);
+            return t;
+        }
+
         if (!this.isUnsafeContext) {
             throw new Error(`.address is only allowed in @unsafe functions.`);
         }
@@ -3437,28 +3456,19 @@ export class CodeGenerator {
         } else if (e.object.kind === ASTKind.MemberExpr) {
             // Get pointer to member instead of value
             const me = e.object as MemberExpr;
-            const obj = this.generateExpression(me.object);
-            const objType = this.tempTypes.get(obj) || 'ptr';
-            const stName = (me.object.kind === ASTKind.ThisExpr) ? this.currentClassName! : 
-                           (objType.startsWith('%') ? objType.substring(1) : ((this.classDecls.has(objType) || this.interfaceDecls.has(objType)) ? objType : this.guessStructTypeByVal(obj)));
-            
-            const structInfo = this.structs.get(stName);
-            if (structInfo) {
-                const fIdx = this.getFieldIndex(stName, me.member);
-        if (me.member === "declarations" || me.member === "classMembers") {
-        }
-        if (stName === "%Program" || stName === "Program") {
-            if (structInfo) {
-                for (let i = 0; i < structInfo.fields.length; i++) {
-                }
-            }
-        }
-                const fieldType = structInfo.fields[fIdx] ? structInfo.fields[fIdx].type : 'i32';
-                const fPtr = this.newTemp();
-                this.emit(`${fPtr} = getelementptr inbounds %${stName}, ptr ${obj}, i32 0, i32 ${fIdx}`);
-                this.tempTypes.set(fPtr, `rawPtr<${fieldType}>`);
-                return fPtr;
-            }
+            const mObj = this.generateExpression(me.object);
+            const mObjType = this.tempTypes.get(mObj) || this.inferExprType(me.object) || 'ptr';
+            const mStName = (me.object.kind === ASTKind.ThisExpr) ? this.currentClassName! : 
+                           (mObjType.startsWith('%') ? mObjType.substring(1) : ((this.classDecls.has(mObjType) || this.interfaceDecls.has(mObjType)) ? mObjType : this.guessStructTypeByVal(mObj)));
+            if (mStName === "Unknown") throw new Error(`Cannot get address of unknown type`);
+            const mfIdx = this.getFieldIndex(mStName, me.member);
+            if (mfIdx === -1) throw new Error(`Field ${me.member} not found in ${mStName}`);
+            const t = this.newTemp();
+            const mStructInfo = this.structs.get(mStName);
+            const mfType = mStructInfo!.fields[mfIdx] ? mStructInfo!.fields[mfIdx].type : 'ptr';
+            this.emit(`${t} = getelementptr inbounds %${mStName}, ptr ${mObj}, i32 0, i32 ${mfIdx}`);
+            this.tempTypes.set(t, `rawPtr<${mfType}>`);
+            return t;
         }
     }
 
