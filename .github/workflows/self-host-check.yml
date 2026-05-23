@@ -20,7 +20,7 @@ on:
 jobs:
   self-host-compile:
     name: Compile Self-Hosted Compiler
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -30,107 +30,112 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Install Clang
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang
-
       # ── Step 1: Compile stdlib .tsn → .ll ──
       - name: Compile stdlib modules
+        shell: pwsh
         run: |
-          echo "=== Compiling stdlib ==="
-          STDLIB_FILES=(
-            "src/std/string.tsn"
-            "src/std/array.tsn"
-            "src/std/console.tsn"
-            "src/std/fs.tsn"
-            "src/std/hash.tsn"
-            "src/std/iterator.tsn"
-            "src/std/memory.tsn"
-            "src/std/option.tsn"
-            "src/std/os.tsn"
-            "src/std/process.tsn"
-            "src/std/ptr_instantiations.tsn"
-            "src/std/result.tsn"
+          Write-Host "=== Compiling stdlib ==="
+          $STDLIB_FILES = @(
+            "src/std/string.tsn",
+            "src/std/array.tsn",
+            "src/std/console.tsn",
+            "src/std/fs.tsn",
+            "src/std/hash.tsn",
+            "src/std/iterator.tsn",
+            "src/std/memory.tsn",
+            "src/std/option.tsn",
+            "src/std/os.tsn",
+            "src/std/process.tsn",
+            "src/std/ptr_instantiations.tsn",
+            "src/std/result.tsn",
             "src/std/time.tsn"
           )
-          for file in "${STDLIB_FILES[@]}"; do
-            echo "Compiling $file ..."
-            deno run -A src/src/main.ts "$file" || { echo "FAILED: $file"; exit 1; }
-          done
-          echo "=== stdlib compilation done ==="
+          foreach ($file in $STDLIB_FILES) {
+            Write-Host "Compiling $file ..."
+            deno run -A src/src/main.ts "$file"
+            if ($LASTEXITCODE -ne 0) { Write-Error "FAILED: $file"; exit 1 }
+          }
+          Write-Host "=== stdlib compilation done ==="
 
       # ── Step 2: Compile self-hosting .tsn → .ll ──
       - name: Compile self-hosting modules
+        shell: pwsh
         run: |
-          echo "=== Compiling self-hosting ==="
-          SELF_HOST_FILES=(
-            "self-hosting/ast.tsn"
-            "self-hosting/lexer.tsn"
-            "self-hosting/parser.tsn"
-            "self-hosting/ast-parser.tsn"
-            "self-hosting/semantics.tsn"
-            "self-hosting/mir.tsn"
-            "self-hosting/mir-builder.tsn"
-            "self-hosting/mir-codegen.tsn"
+          Write-Host "=== Compiling self-hosting ==="
+          $SELF_HOST_FILES = @(
+            "self-hosting/ast.tsn",
+            "self-hosting/lexer.tsn",
+            "self-hosting/parser.tsn",
+            "self-hosting/ast-parser.tsn",
+            "self-hosting/semantics.tsn",
+            "self-hosting/mir.tsn",
+            "self-hosting/mir-builder.tsn",
+            "self-hosting/mir-codegen.tsn",
             "self-hosting/main.tsn"
           )
-          for file in "${SELF_HOST_FILES[@]}"; do
-            echo "Compiling $file ..."
-            deno run -A src/src/main.ts "$file" || { echo "FAILED: $file"; exit 1; }
-          done
-          echo "=== self-hosting compilation done ==="
+          foreach ($file in $SELF_HOST_FILES) {
+            Write-Host "Compiling $file ..."
+            deno run -A src/src/main.ts "$file"
+            if ($LASTEXITCODE -ne 0) { Write-Error "FAILED: $file"; exit 1 }
+          }
+          Write-Host "=== self-hosting compilation done ==="
 
       # ── Step 3: Verify .ll files were generated ──
       - name: Verify generated .ll files
+        shell: pwsh
         run: |
-          echo "=== Checking generated .ll files ==="
-          echo "--- stdlib ---"
-          ls -la src/std/*.ll 2>/dev/null || echo "Warning: No stdlib .ll files found"
-          echo "--- self-hosting ---"
-          ls -la self-hosting/*.ll 2>/dev/null || echo "Warning: No self-hosting .ll files found"
+          Write-Host "=== Checking generated .ll files ==="
+          Write-Host "--- stdlib ---"
+          Get-ChildItem src/std/*.ll -ErrorAction SilentlyContinue | Select-Object Name, Length
+          
+          Write-Host "--- self-hosting ---"
+          Get-ChildItem self-hosting/*.ll -ErrorAction SilentlyContinue | Select-Object Name, Length
 
-          # Count .ll files
-          STDLIB_LL=$(find src/std -name "*.ll" 2>/dev/null | wc -l)
-          SELF_LL=$(find self-hosting -name "*.ll" 2>/dev/null | wc -l)
-          echo "stdlib .ll files: $STDLIB_LL"
-          echo "self-hosting .ll files: $SELF_LL"
+          $STDLIB_LL = (Get-ChildItem src/std/*.ll -ErrorAction SilentlyContinue).Count
+          $SELF_LL = (Get-ChildItem self-hosting/*.ll -ErrorAction SilentlyContinue).Count
+          
+          Write-Host "stdlib .ll files: $STDLIB_LL"
+          Write-Host "self-hosting .ll files: $SELF_LL"
 
-          if [ "$SELF_LL" -eq 0 ]; then
-            echo "ERROR: No self-hosting .ll files generated!"
+          if ($SELF_LL -eq 0) {
+            Write-Error "ERROR: No self-hosting .ll files generated!"
             exit 1
-          fi
+          }
 
       # ── Step 4: Link with clang ──
       - name: Link with Clang
+        shell: pwsh
         run: |
-          echo "=== Linking all .ll files with clang ==="
+          Write-Host "=== Linking all .ll files with clang ==="
 
-          # Collect all .ll files
-          LL_FILES=""
-          for f in $(find src/std -name "*.ll" 2>/dev/null); do
-            LL_FILES="$LL_FILES $f"
-          done
-          for f in $(find self-hosting -name "*.ll" 2>/dev/null); do
-            LL_FILES="$LL_FILES $f"
-          done
+          $LL_FILES = @()
+          $LL_FILES += Get-ChildItem src/std/*.ll -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          $LL_FILES += Get-ChildItem self-hosting/*.ll -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          $LL_FILES += Get-ChildItem *.ll -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
 
-          # Also include root-level .ll files if they exist
-          for f in *.ll; do
-            [ -f "$f" ] && LL_FILES="$LL_FILES $f"
-          done
+          if ($LL_FILES.Count -eq 0) {
+            Write-Error "No .ll files found to link"
+            exit 1
+          }
 
-          echo "Linking files: $LL_FILES"
-          clang -O0 -g $LL_FILES src/tsn_runtime.c -o tsnc -lm \
-            && echo "=== Link SUCCESS: tsnc binary created ===" \
-            || { echo "=== Link FAILED ==="; exit 1; }
+          Write-Host "Linking files: $($LL_FILES -join ' ')"
+          
+          # Clang is pre-installed on windows-latest
+          clang -O0 -g $LL_FILES src/tsn_runtime.c -o tsnc.exe
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "=== Link SUCCESS: tsnc.exe binary created ==="
+          } else {
+            Write-Error "=== Link FAILED ==="
+            exit 1
+          }
 
-          ls -la tsnc
-          file tsnc
+          Get-Item tsnc.exe
 
       # ── Step 5: Smoke test the binary ──
       - name: Smoke test
+        shell: pwsh
         run: |
-          echo "=== Running smoke test ==="
-          ./tsnc --help || true
-          echo "=== Smoke test done ==="
+          Write-Host "=== Running smoke test ==="
+          .\tsnc.exe --help
+          Write-Host "=== Smoke test done ==="
