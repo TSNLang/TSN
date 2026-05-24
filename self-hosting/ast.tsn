@@ -152,6 +152,7 @@ export class Declaration {
     public detailB: string;
     public detailC: string;
     public members: Array<ClassMemberDecl>;
+    public params: Array<ParameterInfo>;
     public body: Stmt;
 
     constructor(kind: string, name: string, detailA: string, detailB: string, detailC: string, members: Array<ClassMemberDecl>, body: Stmt) {
@@ -161,6 +162,7 @@ export class Declaration {
         this.detailB = detailB;
         this.detailC = detailC;
         this.members = members;
+        this.params = new Array<ParameterInfo>();
         this.body = body;
     }
 }

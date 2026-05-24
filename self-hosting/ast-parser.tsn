@@ -19,14 +19,12 @@ export class ASTParser {
 
     public parse(): Program {
         let declarations = new Array<Declaration>();
-        log("ASTParser.parse: start");
         while (!this.isAtEnd()) {
             let decl = this.parseDeclaration();
             if (decl != null) {
                 declarations.push(decl);
             }
         }
-        log("ASTParser.parse: complete");
         return new Program(declarations);
     }
 
@@ -194,7 +192,14 @@ export class ASTParser {
             this.matchKind(TokenKind.Semicolon);
         }
 
-        let kind = hasBody ? (isConstructor ? "ConstructorDecl" : "MethodDecl") : "FieldDecl";
+        let kind: string = "FieldDecl";
+        if (hasBody) {
+            if (isConstructor) {
+                kind = "ConstructorDecl";
+            } else {
+                kind = "MethodDecl";
+            }
+        }
         
         let m = new ClassMemberDecl(kind, name, "", isPublic, isPrivate, isProtected, isStatic, false, isConstructor, "", new Array<string>(), "", params, "", "", "", typeText, hasBody, 0, 0, 0, 0, 0, 0, 0, body);
         return m;
@@ -204,7 +209,15 @@ export class ASTParser {
         this.matchKind(TokenKind.LBrace);
         let statements = new Array<Stmt>();
         while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
+            let oldPos = this.pos;
             statements.push(this.parseStatement());
+            if (this.pos == oldPos) {
+                log("parseBlockStmt: ERROR - pos did not advance at token:");
+                log(this.peek().lexeme);
+                log("token kind:");
+                print_i32(this.peek().kind);
+                this.advance();
+            }
         }
         this.matchKind(TokenKind.RBrace);
         return new BlockStmt(statements);
@@ -235,6 +248,13 @@ export class ASTParser {
             this.matchKind(TokenKind.RParen);
             let body = this.parseStatement();
             return new WhileStmt(cond, body);
+        }
+        if (this.check(TokenKind.LBrace)) {
+            return this.parseBlockStmt();
+        }
+        
+        if (this.check(TokenKind.RBrace) || this.isAtEnd()) {
+            return new ExprStmt(null as Expr);
         }
         
         let expr = this.parseExpression();
@@ -382,7 +402,10 @@ export class ASTParser {
     }
 
     private isAtEnd(): bool {
-        return this.pos >= this.tokens.length || this.peek().kind == TokenKind.EOF;
+        if (this.pos >= this.tokens.length) {
+            return true;
+        }
+        return this.peek().kind == TokenKind.EOF;
     }
 
     private peek(): Token {
