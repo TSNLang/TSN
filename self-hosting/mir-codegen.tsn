@@ -140,6 +140,8 @@ export class MIRCodegen {
     private emitBinaryInst(inst: MIRBinaryInst): void {
         this.output.push(this.emitValue(inst.result));
         this.output.push(" = ");
+        
+        // Arithmetic operators
         if (inst.op == "+") {
             this.output.push("add ");
         } else if (inst.op == "-") {
@@ -148,9 +150,44 @@ export class MIRCodegen {
             this.output.push("mul ");
         } else if (inst.op == "/") {
             this.output.push("sdiv ");
+        } else if (inst.op == "%") {
+            this.output.push("srem ");
+        }
+        // Comparison operators
+        else if (inst.op == "==") {
+            this.output.push("icmp eq ");
+        } else if (inst.op == "!=") {
+            this.output.push("icmp ne ");
+        } else if (inst.op == "<") {
+            this.output.push("icmp slt ");
+        } else if (inst.op == ">") {
+            this.output.push("icmp sgt ");
+        } else if (inst.op == "<=") {
+            this.output.push("icmp sle ");
+        } else if (inst.op == ">=") {
+            this.output.push("icmp sge ");
+        }
+        // Logical operators
+        else if (inst.op == "&&") {
+            this.output.push("and ");
+        } else if (inst.op == "||") {
+            this.output.push("or ");
+        } else if (inst.op == "^") {
+            this.output.push("xor ");
+        }
+        // Bitwise operators
+        else if (inst.op == "&") {
+            this.output.push("and ");
+        } else if (inst.op == "|") {
+            this.output.push("or ");
+        } else if (inst.op == "<<") {
+            this.output.push("shl ");
+        } else if (inst.op == ">>") {
+            this.output.push("ashr ");
         } else {
             this.output.push("add "); // fallback
         }
+        
         this.output.push(this.emitType(inst.left.valueType));
         this.output.push(" ");
         this.output.push(this.emitValue(inst.left));
@@ -258,11 +295,23 @@ export class MIRCodegen {
         if (t.isPointer) {
             return "ptr";
         }
+        
+        // Primitive types
         if (t.name == "i32") return "i32";
+        if (t.name == "i64") return "i64";
+        if (t.name == "i8") return "i8";
+        if (t.name == "i16") return "i16";
+        if (t.name == "f32") return "float";
+        if (t.name == "f64") return "double";
         if (t.name == "bool") return "i1";
         if (t.name == "void") return "void";
+        
+        // Reference types (all pointers in LLVM)
         if (t.name == "string") return "ptr";
-        return t.name;
+        if (t.name == "Array") return "ptr";
+        
+        // Struct types - use %TypeName format
+        return "%" + t.name;
     }
 
     private emitValue(v: MIRValue): string {
@@ -282,19 +331,35 @@ export class MIRCodegen {
     }
 
     private idToStr(id: i32): string {
-        // Simple conversion since we don't have a library yet
+        // Convert integer to string
         if (id == 0) return "0";
-        if (id == 1) return "1";
-        if (id == 2) return "2";
-        if (id == 3) return "3";
-        if (id == 4) return "4";
-        if (id == 5) return "5";
-        if (id == 6) return "6";
-        if (id == 7) return "7";
-        if (id == 8) return "8";
-        if (id == 9) return "9";
-        // fallback for bigger IDs (could use a real int-to-string later)
-        return "x"; 
+        
+        let isNegative = false;
+        if (id < 0) {
+            isNegative = true;
+            id = 0 - id;
+        }
+        
+        let digits = "";
+        while (id > 0) {
+            let digit = id % 10;
+            if (digit == 0) digits = "0" + digits;
+            else if (digit == 1) digits = "1" + digits;
+            else if (digit == 2) digits = "2" + digits;
+            else if (digit == 3) digits = "3" + digits;
+            else if (digit == 4) digits = "4" + digits;
+            else if (digit == 5) digits = "5" + digits;
+            else if (digit == 6) digits = "6" + digits;
+            else if (digit == 7) digits = "7" + digits;
+            else if (digit == 8) digits = "8" + digits;
+            else if (digit == 9) digits = "9" + digits;
+            id = id / 10;
+        }
+        
+        if (isNegative) {
+            return "-" + digits;
+        }
+        return digits;
     }
 
     private joinOutput(): string {
