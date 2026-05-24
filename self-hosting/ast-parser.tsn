@@ -253,7 +253,10 @@ export class ASTParser {
             return this.parseBlockStmt();
         }
         
-        if (this.check(TokenKind.RBrace) || this.isAtEnd()) {
+        if (this.check(TokenKind.RBrace) || this.check(TokenKind.Semicolon) || this.isAtEnd()) {
+            if (this.matchKind(TokenKind.Semicolon)) {
+                return new ExprStmt(null as Expr);
+            }
             return new ExprStmt(null as Expr);
         }
         
@@ -368,6 +371,10 @@ export class ASTParser {
             let expr = this.parseExpression();
             this.matchKind(TokenKind.RParen);
             return expr;
+        }
+        
+        if (!this.isAtEnd() && !this.check(TokenKind.Semicolon) && !this.check(TokenKind.RBrace)) {
+            this.advance();
         }
         return null as Expr;
     }
