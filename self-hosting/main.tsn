@@ -17,13 +17,13 @@ function logBool(label: string, value: bool): void {
     log("false");
 }
 
-function parseFile(path: string): i32 {
+function parseFile(path: string): ASTProgram {
     log("--- parseFile: start reading");
     log(path);
     let fsResult = readText(path);
     if (!fsResult.isOk()) {
         log("parse FAILED: could not read file");
-        return 1;
+        return null as ASTProgram;
     }
 
     log("--- parseFile: read success, starting lexer");
@@ -33,29 +33,29 @@ function parseFile(path: string): i32 {
     log("--- parseFile: tokenize success");
     if (tokens.length == 0) {
         log("parse FAILED: no tokens generated");
-        return 1;
+        return null as ASTProgram;
     }
     log("--- parseFile: starting parser constructor");
     log("tokens length check before parser:");
     print_i32(tokens.length);
     let parser = new ASTParser(tokens);
-    let program: ASTProgram = parser.parse();
+    let astProgram: ASTProgram = parser.parse();
     log("--- parseFile: parse success");
 
-    let decls_count = program.declarations.length;
+    let decls_count = astProgram.declarations.length;
     log("--- declarations count:");
     print_i32(decls_count);
 
     if (decls_count == 0) {
         log("parse FAILED: no declarations found in file");
         log(path);
-        return 1;
+        return null as ASTProgram;
     }
 
     log("parsed file");
     log(path);
     
-    return 0;
+    return astProgram;
 }
 
 function main(): i32 {
@@ -77,12 +77,26 @@ function main(): i32 {
     log("Compiling file:");
     log(inputPath);
 
-    if (parseFile(inputPath) != 0) {
+    let astProgram = parseFile(inputPath);
+    if (astProgram == null) {
         log("Compilation failed during parsing.");
         return 1;
     }
 
     log("=== PARSED SUCCESSFULLY BY SELF-HOSTED COMPILER ===");
+
+    log("=== BUILDING MIR FROM AST ===");
+    let mirBuilder = new MIRBuilder(inputPath);
+    let mirModule = mirBuilder.build(astProgram);
+    log("=== MIR BUILD COMPLETE ===");
+
+    log("=== GENERATING LLVM IR FROM MIR ===");
+    let codegen = new MIRCodegen(mirModule);
+    let ir = codegen.generate();
+    log("=== LLVM IR GENERATION COMPLETE ===");
+    
+    log("Generated IR length:");
+    print_i32(ir.length);
 
     log("=== RUNNING SELF-HOSTED CODEGEN SMOKE TEST ===");
     let builder = new MIRBuilder("smoke_test");

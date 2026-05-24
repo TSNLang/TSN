@@ -8,11 +8,15 @@ export class MIRBuilder {
     private module: MIRModule;
     private currentFunction: MIRFunction;
     private currentBlockId: i32;
+    private locals: Array<string>;
+    private localAddrs: Array<MIRValue>;
 
     constructor(moduleName: string) {
         this.module = new MIRModule(moduleName);
         this.currentFunction = null;
         this.currentBlockId = -1;
+        this.locals = new Array<string>();
+        this.localAddrs = new Array<MIRValue>();
     }
 
     public build(program: Program): MIRModule {
@@ -34,15 +38,48 @@ export class MIRBuilder {
 
     private buildFunction(decl: Declaration): void {
         log("MIRBuilder.buildFunction: " + decl.name);
-        // Cast Declaration to access more fields if it's a FunctionDecl
-        // In ast.tsn, we have FunctionDecl class but buildDeclaration takes Declaration.
         
-        let func = this.createFunction(decl.name, new MIRType("i32", false, 4));
+        // Parse return type from detailA (e.g., "i32", "void")
+        let returnType = this.parseType(decl.detailA);
+        let func = this.createFunction(decl.name, returnType);
         
-        // In a real scenario, we'd have the AST body here.
-        // For self-hosting demonstration, we assume the structure is accessible.
+        // Add parameters
+        for (let i = 0; i < decl.params.length; i = i + 1) {
+            let param = decl.params.get(i);
+            let paramType = this.parseType(param.typeText);
+            let paramReg = func.createRegister(paramType);
+            func.params.push(paramReg);
+        }
+        
+        // Build function body if it exists
+        if (decl.body != null) {
+            this.analyzeStatement(decl.body);
+        } else {
+            // No body - create default return
+            if (returnType.name == "void") {
+                let voidVal = this.createConstant("0", new MIRType("void", false, 0));
+                this.createReturn(voidVal);
+            } else {
+                let defaultVal = this.createConstant("0", returnType);
+                this.createReturn(defaultVal);
+            }
+        }
         
         this.module.functions.push(func);
+    }
+    
+    private parseType(typeText: string): MIRType {
+        if (typeText == "i32") return new MIRType("i32", false, 4);
+        if (typeText == "i64") return new MIRType("i64", false, 8);
+        if (typeText == "i8") return new MIRType("i8", false, 1);
+        if (typeText == "i16") return new MIRType("i16", false, 2);
+        if (typeText == "f32") return new MIRType("f32", false, 4);
+        if (typeText == "f64") return new MIRType("f64", false, 8);
+        if (typeText == "bool") return new MIRType("bool", false, 1);
+        if (typeText == "void") return new MIRType("void", false, 0);
+        if (typeText == "string") return new MIRType("string", true, 8);
+        // Default to i32 for unknown types
+        return new MIRType("i32", false, 4);
     }
 
     public createFunction(name: string, returnType: MIRType): MIRFunction {
@@ -66,10 +103,11 @@ export class MIRBuilder {
         } else if (stmt.kind == "VarDeclStmt") {
             let varDecl = stmt as VarDeclStmt;
             let val = this.analyzeExpression(varDecl.init);
-            // In a real compiler, we would track this in a symbol table
-            // For now, we store it in an alloca if it's a local variable
+            // Allocate space for the variable
             let addr = this.createAlloca(val.valueType);
             this.createStore(val, addr);
+            // Add to symbol table
+            this.addLocal(varDecl.name, addr);
         } else if (stmt.kind == "ExprStmt") {
             let exprStmt = stmt as ExprStmt;
             this.analyzeExpression(exprStmt.expr);
@@ -120,6 +158,16 @@ export class MIRBuilder {
         if (expr.kind == "NumberLiteral") {
             let lit = expr as NumberLiteral;
             return this.createConstant(lit.value, new MIRType("i32", false, 4));
+        } else if (expr.kind == "StringLiteral") {
+            let lit = expr as StringLiteral;
+            return this.createConstant(lit.value, new MIRType("string", true, 8));
+        } else if (expr.kind == "BooleanLiteral") {
+            let lit = expr as BooleanLiteral;
+            let val = "0";
+            if (lit.value) {
+                val = "1";
+            }
+            return this.createConstant(val, new MIRType("bool", false, 1));
         } else if (expr.kind == "BinaryExpr") {
             let bin = expr as BinaryExpr;
             let left = this.analyzeExpression(bin.left);
@@ -127,7 +175,13 @@ export class MIRBuilder {
             return this.createBinary(bin.operator, left, right);
         } else if (expr.kind == "Identifier") {
             let id = expr as IdentifierExpr;
-            // Simplified: return a dummy or look up in locals
+            // Look up variable in symbol table
+            let addr = this.findLocal(id.name);
+            if (addr != null) {
+                // Load the value from the address
+                return this.createLoad(addr);
+            }
+            // If not found, return a dummy constant
             return this.createConstant("0", new MIRType("i32", false, 4));
         } else if (expr.kind == "CallExpr") {
             let call = expr as CallExpr;
@@ -135,8 +189,13 @@ export class MIRBuilder {
             for (let i = 0; i < call.args.length; i = i + 1) {
                 args.push(this.analyzeExpression(call.args.get(i)));
             }
-            // Simplified callee lookup
-            return this.createCall("unknown", args, new MIRType("i32", false, 4));
+            // Get callee name
+            let calleeName = "unknown";
+            if (call.callee.kind == "Identifier") {
+                let calleeId = call.callee as IdentifierExpr;
+                calleeName = calleeId.name;
+            }
+            return this.createCall(calleeName, args, new MIRType("i32", false, 4));
         }
         return this.createConstant("0", new MIRType("i32", false, 4));
     }
@@ -238,5 +297,26 @@ export class MIRBuilder {
 
     private getCurrentBlock(): MIRBasicBlock {
         return this.currentFunction.blocks.get(this.currentBlockId);
+    }
+    
+    private addLocal(name: string, addr: MIRValue): void {
+        this.locals.push(name);
+        this.localAddrs.push(addr);
+    }
+    
+    private findLocal(name: string): MIRValue {
+        let i = 0;
+        while (i < this.locals.length) {
+            if (this.locals.get(i) == name) {
+                return this.localAddrs.get(i);
+            }
+            i = i + 1;
+        }
+        return null as MIRValue;
+    }
+    
+    private clearLocals(): void {
+        this.locals = new Array<string>();
+        this.localAddrs = new Array<MIRValue>();
     }
 }
