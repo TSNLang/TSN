@@ -38,12 +38,19 @@ export class MIRBuilder {
 
     private buildFunction(decl: Declaration): void {
         log("MIRBuilder.buildFunction: " + decl.name);
+        log("MIRBuilder.buildFunction: reading detailA");
+        let detailA = decl.detailA;
+        log("MIRBuilder.buildFunction: detailA read = " + detailA);
         
         // Parse return type from detailA (e.g., "i32", "void")
         let returnType = this.parseType(decl.detailA);
+        log("MIRBuilder.buildFunction: returnType parsed");
         let func = this.createFunction(decl.name, returnType);
+        log("MIRBuilder.buildFunction: function created");
         
         // Add parameters
+        log("MIRBuilder.buildFunction: params.length = ");
+        print_i32(decl.params.length);
         for (let i = 0; i < decl.params.length; i = i + 1) {
             let param = decl.params.get(i);
             let paramType = this.parseType(param.typeText);
@@ -51,8 +58,10 @@ export class MIRBuilder {
             func.params.push(paramReg);
         }
         
+        log("MIRBuilder.buildFunction: checking body");
         // Build function body if it exists
         if (decl.body != null) {
+            log("MIRBuilder.buildFunction: body exists, analyzing");
             this.analyzeStatement(decl.body);
         } else {
             // No body - create default return
@@ -95,22 +104,38 @@ export class MIRBuilder {
     }
 
     private analyzeStatement(stmt: Stmt): void {
+        log("analyzeStatement: enter, kind = " + stmt.kind);
         if (stmt.kind == "BlockStmt") {
+            log("analyzeStatement: BlockStmt, casting");
             let block = stmt as BlockStmt;
+            log("analyzeStatement: cast done, reading statements");
+            let stmts = block.statements;
+            log("analyzeStatement: statements read, getting length");
+            let len = stmts.length;
+            log("analyzeStatement: BlockStmt, statements.length = ");
+            print_i32(len);
             for (let i = 0; i < block.statements.length; i = i + 1) {
+                log("analyzeStatement: processing statement index = ");
+                print_i32(i);
                 this.analyzeStatement(block.statements.get(i));
             }
         } else if (stmt.kind == "VarDeclStmt") {
+            log("analyzeStatement: VarDeclStmt, casting");
             let varDecl = stmt as VarDeclStmt;
+            log("analyzeStatement: VarDeclStmt, analyzing init expr");
             let val = this.analyzeExpression(varDecl.init);
+            log("analyzeStatement: VarDeclStmt, expr analyzed");
             // Allocate space for the variable
             let addr = this.createAlloca(val.valueType);
             this.createStore(val, addr);
             // Add to symbol table
             this.addLocal(varDecl.name, addr);
         } else if (stmt.kind == "ExprStmt") {
+            log("analyzeStatement: ExprStmt, casting");
             let exprStmt = stmt as ExprStmt;
+            log("analyzeStatement: ExprStmt, analyzing expr");
             this.analyzeExpression(exprStmt.expr);
+            log("analyzeStatement: ExprStmt, done");
         } else if (stmt.kind == "ReturnStmt") {
             let retStmt = stmt as ReturnStmt;
             let val = this.analyzeExpression(retStmt.value);

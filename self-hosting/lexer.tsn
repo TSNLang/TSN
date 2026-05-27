@@ -269,7 +269,7 @@ export class Lexer {
         while (this.pos < this.sourceLength) {
             let ch = this.current();
 
-            if (ch == 32 || ch == 9) { // ' ' or '\t'
+            if (ch == 32 || ch == 9 || ch == 13) { // ' ', '\t', '\r'
                 this.advance();
                 continue;
             }

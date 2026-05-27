@@ -12,23 +12,66 @@ export class ASTParser {
     private tokens: Array<Token>;
     private pos: i32;
 
-    constructor(tokens: Array<Token>) {
+    @unsafe private pushDecl(arr: Array<Declaration>, item: Declaration): void {
+        log("--- pushDecl: enter");
+        if (item != null) {
+            log("--- pushDecl: incref item");
+            class_incref(item);
+        }
+        log("--- pushDecl: calling arr.push");
+        arr.push(item);
+        log("--- pushDecl: done");
+    }
+
+    @unsafe private pushParam(arr: Array<ParameterInfo>, item: ParameterInfo): void {
+        if (item != null) class_incref(item);
+        arr.push(item);
+    }
+
+    @unsafe private pushMember(arr: Array<ClassMemberDecl>, item: ClassMemberDecl): void {
+        if (item != null) class_incref(item);
+        arr.push(item);
+    }
+
+    @unsafe private pushStmt(arr: Array<Stmt>, item: Stmt): void {
+        if (item != null) class_incref(item);
+        arr.push(item);
+    }
+
+    @unsafe private pushExpr(arr: Array<Expr>, item: Expr): void {
+        if (item != null) class_incref(item);
+        arr.push(item);
+    }
+
+    @unsafe constructor(tokens: Array<Token>) {
+        log("--- ASTParser.constructor: start");
         this.tokens = tokens;
         this.pos = 0;
+        log("--- ASTParser.constructor: end");
     }
 
     public parse(): Program {
         let declarations = new Array<Declaration>();
-        while (!this.isAtEnd()) {
+        
+        // Inline isAtEnd() to avoid vtable issues
+        while (this.pos < this.tokens.length) {
+            let t = this.tokens.get(this.pos);
+            if (t == null || t.kind == TokenKind.EOF) {
+                break;
+            }
             let decl = this.parseDeclaration();
             if (decl != null) {
                 declarations.push(decl);
             }
         }
-        return new Program(declarations);
+        
+        let prog = new Program(declarations);
+        class_incref(prog);
+        class_incref(prog);
+        return prog;
     }
 
-    private parseDeclaration(): Declaration {
+    @unsafe private parseDeclaration(): Declaration {
         let isExported = this.matchKind(TokenKind.Export);
         let isDeclare = this.matchKind(TokenKind.Declare);
         
@@ -50,41 +93,56 @@ export class ASTParser {
         return null as Declaration;
     }
 
-    private parseImportDecl(): Declaration {
+    @unsafe private parseImportDecl(): Declaration {
+        log("--- parseImportDecl: start");
         let defaultImport = "";
         let namespaceImport = "";
-        let namedImports = new Array<any>(); // Tạm thời
         
-        if (this.peek().kind == TokenKind.Identifier) {
-            defaultImport = this.advance().lexeme;
+        if (this.peekKind() == TokenKind.Identifier) {
+            log("--- parseImportDecl: default import branch");
+            let lex = this.advanceLexeme();
+            defaultImport = lex;
+            class_incref(defaultImport);
             this.matchKind(TokenKind.Comma);
         }
         
         if (this.matchKind(TokenKind.LBrace)) {
+            log("--- parseImportDecl: named import branch");
             while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
-                this.advance(); // Skip specifiers for now
+                this.advance();
                 if (!this.matchKind(TokenKind.Comma)) break;
             }
             this.matchKind(TokenKind.RBrace);
         } else if (this.matchKind(TokenKind.Star)) {
+            log("--- parseImportDecl: namespace import branch");
             this.matchKind(TokenKind.As);
-            namespaceImport = this.advance().lexeme;
+            log("--- parseImportDecl: about to advance for alias");
+            let lex = this.advanceLexeme();
+            namespaceImport = lex;
+            class_incref(namespaceImport);
+            log("--- parseImportDecl: assigned to namespaceImport");
         }
         
+        log("--- parseImportDecl: matching From");
         this.matchKind(TokenKind.From);
+        log("--- parseImportDecl: From matched, checking String token");
         let source = "";
-        if (this.peek().kind == TokenKind.String) {
-            source = this.advance().lexeme;
+        if (this.peekKind() == TokenKind.String) {
+            let lex = this.advanceLexeme();
+            source = lex;
+            class_incref(source);
         }
+        log("--- parseImportDecl: matching Semicolon");
         this.matchKind(TokenKind.Semicolon);
+        log("--- parseImportDecl: creating Declaration");
         
-        return new Declaration("ImportDecl", source, defaultImport, namespaceImport, "", new Array<ClassMemberDecl>());
+        return new Declaration("ImportDecl", source, defaultImport, namespaceImport, "", new Array<ClassMemberDecl>(), null as Stmt);
     }
 
-    private parseFunctionDecl(isExported: bool, isDeclare: bool): Declaration {
+    @unsafe private parseFunctionDecl(isExported: bool, isDeclare: bool): Declaration {
         let name = "";
-        if (this.peek().kind == TokenKind.Identifier) {
-            name = this.advance().lexeme;
+        if (this.peekKind() == TokenKind.Identifier) {
+            name = this.advanceLexeme();
         }
         
         if (this.matchKind(TokenKind.Less)) {
@@ -94,37 +152,43 @@ export class ASTParser {
         
         let params = new Array<ParameterInfo>();
         if (this.matchKind(TokenKind.LParen)) {
+            log("--- ASTParser.parseFunctionDecl: parsing params");
             while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
-                let pName = this.advance().lexeme;
+                let pName = this.advanceLexeme();
                 let pType = "";
                 if (this.matchKind(TokenKind.Colon)) pType = this.parseTypeText();
-                params.push(new ParameterInfo(pName, pType, false));
+                this.pushParam(params, new ParameterInfo(pName, pType, false));
                 if (!this.matchKind(TokenKind.Comma)) break;
             }
             this.matchKind(TokenKind.RParen);
         }
         
+        let retType = "void";
         if (this.matchKind(TokenKind.Colon)) {
-            this.parseTypeText();
+            retType = this.parseTypeText();
         }
+        log("--- ASTParser.parseFunctionDecl: retType =");
+        log(retType);
         
         let body: Stmt = null as Stmt;
         if (isDeclare) {
             this.matchKind(TokenKind.Semicolon);
         } else {
+            log("--- ASTParser.parseFunctionDecl: parsing block body");
             body = this.parseBlockStmt();
         }
         
-        let decl = new Declaration("FunctionDecl", name, "", "", "", new Array<ClassMemberDecl>());
+        let decl = new Declaration("FunctionDecl", name, retType, "", "", new Array<ClassMemberDecl>(), body);
+        class_incref(params);
         decl.params = params;
-        decl.body = body;
+        log("--- ASTParser.parseFunctionDecl: decl successfully created");
         return decl;
     }
 
-    private parseClassDecl(isExported: bool, isDeclare: bool): Declaration {
+    @unsafe private parseClassDecl(isExported: bool, isDeclare: bool): Declaration {
         let name = "";
-        if (this.peek().kind == TokenKind.Identifier) {
-            name = this.advance().lexeme;
+        if (this.peekKind() == TokenKind.Identifier) {
+            name = this.advanceLexeme();
         }
         
         if (this.matchKind(TokenKind.Less)) {
@@ -135,22 +199,22 @@ export class ASTParser {
         let members = new Array<ClassMemberDecl>();
         if (this.matchKind(TokenKind.LBrace)) {
             while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
-                members.push(this.parseClassMember());
+                this.pushMember(members, this.parseClassMember());
             }
             this.matchKind(TokenKind.RBrace);
         }
         
-        return new Declaration("ClassDecl", name, "", "", "", members);
+        return new Declaration("ClassDecl", name, "", "", "", members, null as Stmt);
     }
 
-    private parseClassMember(): ClassMemberDecl {
+    @unsafe private parseClassMember(): ClassMemberDecl {
         let isPublic = false;
         let isPrivate = false;
         let isProtected = false;
         let isStatic = false;
         
         while (true) {
-            let k = this.peek().kind;
+            let k = this.peekKind();
             if (k == TokenKind.Public) { isPublic = true; this.advance(); }
             else if (k == TokenKind.Private) { isPrivate = true; this.advance(); }
             else if (k == TokenKind.Protected) { isProtected = true; this.advance(); }
@@ -161,7 +225,7 @@ export class ASTParser {
         let isConstructor = this.matchKind(TokenKind.Constructor);
         let name = "";
         if (!isConstructor) {
-            name = this.advance().lexeme;
+            name = this.advanceLexeme();
         } else {
             name = "constructor";
         }
@@ -169,10 +233,10 @@ export class ASTParser {
         let params = new Array<ParameterInfo>();
         if (this.matchKind(TokenKind.LParen)) {
             while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
-                let pName = this.advance().lexeme;
+                let pName = this.advanceLexeme();
                 let pType = "";
                 if (this.matchKind(TokenKind.Colon)) pType = this.parseTypeText();
-                params.push(new ParameterInfo(pName, pType, false));
+                this.pushParam(params, new ParameterInfo(pName, pType, false));
                 if (!this.matchKind(TokenKind.Comma)) break;
             }
             this.matchKind(TokenKind.RParen);
@@ -185,7 +249,7 @@ export class ASTParser {
 
         let body: Stmt = null as Stmt;
         let hasBody = false;
-        if (this.peek().kind == TokenKind.LBrace) {
+        if (this.peekKind() == TokenKind.LBrace) {
             body = this.parseBlockStmt();
             hasBody = true;
         } else {
@@ -205,25 +269,34 @@ export class ASTParser {
         return m;
     }
 
-    private parseBlockStmt(): BlockStmt {
+    @unsafe private parseBlockStmt(): BlockStmt {
+        log("--- ASTParser.parseBlockStmt: entering");
         this.matchKind(TokenKind.LBrace);
+        log("--- ASTParser.parseBlockStmt: LBrace matched");
         let statements = new Array<Stmt>();
+        log("--- ASTParser.parseBlockStmt: statements array created");
         while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
             let oldPos = this.pos;
-            statements.push(this.parseStatement());
+            log("--- ASTParser.parseBlockStmt: parsing statement");
+            this.pushStmt(statements, this.parseStatement());
+            log("--- ASTParser.parseBlockStmt: statement parsed");
             if (this.pos == oldPos) {
-                log("parseBlockStmt: ERROR - pos did not advance at token:");
-                log(this.peek().lexeme);
-                log("token kind:");
-                print_i32(this.peek().kind);
+                log("parseBlockStmt: ERROR - pos did not advance, kind:");
+                print_i32(this.peekKind());
                 this.advance();
             }
         }
+        log("--- ASTParser.parseBlockStmt: loop ended");
         this.matchKind(TokenKind.RBrace);
-        return new BlockStmt(statements);
+        log("--- ASTParser.parseBlockStmt: RBrace matched");
+        let resBlock = new BlockStmt(statements);
+        log("--- ASTParser.parseBlockStmt: BlockStmt successfully created");
+        class_incref(resBlock);
+        class_incref(resBlock);
+        return resBlock;
     }
 
-    private parseStatement(): Stmt {
+    @unsafe private parseStatement(): Stmt {
         if (this.matchKind(TokenKind.Let) || this.matchKind(TokenKind.Const)) {
             return this.parseVarDeclStmt();
         }
@@ -265,8 +338,8 @@ export class ASTParser {
         return new ExprStmt(expr);
     }
 
-    private parseVarDeclStmt(): VarDeclStmt {
-        let name = this.advance().lexeme;
+    @unsafe private parseVarDeclStmt(): VarDeclStmt {
+        let name = this.advanceLexeme();
         let typeText = "";
         if (this.matchKind(TokenKind.Colon)) typeText = this.parseTypeText();
         let init: Expr = null as Expr;
@@ -275,11 +348,11 @@ export class ASTParser {
         return new VarDeclStmt(name, typeText, init, false);
     }
 
-    private parseExpression(): Expr {
+    @unsafe private parseExpression(): Expr {
         return this.parseAssignment();
     }
 
-    private parseAssignment(): Expr {
+    @unsafe private parseAssignment(): Expr {
         let left = this.parseEquality();
         if (this.matchKind(TokenKind.Equal)) {
             let right = this.parseAssignment();
@@ -288,58 +361,58 @@ export class ASTParser {
         return left;
     }
 
-    private parseEquality(): Expr {
+    @unsafe private parseEquality(): Expr {
         let left = this.parseAdditive();
-        while (this.peek().kind == TokenKind.EqualEqual || this.peek().kind == TokenKind.BangEqual) {
-            let op = this.advance().lexeme;
+        while (this.peekKind() == TokenKind.EqualEqual || this.peekKind() == TokenKind.BangEqual) {
+            let op = this.advanceLexeme();
             let right = this.parseAdditive();
             left = new BinaryExpr(op, left, right);
         }
         return left;
     }
 
-    private parseAdditive(): Expr {
+    @unsafe private parseAdditive(): Expr {
         let left = this.parseMultiplicative();
-        while (this.peek().kind == TokenKind.Plus || this.peek().kind == TokenKind.Minus) {
-            let op = this.advance().lexeme;
+        while (this.peekKind() == TokenKind.Plus || this.peekKind() == TokenKind.Minus) {
+            let op = this.advanceLexeme();
             let right = this.parseMultiplicative();
             left = new BinaryExpr(op, left, right);
         }
         return left;
     }
 
-    private parseMultiplicative(): Expr {
+    @unsafe private parseMultiplicative(): Expr {
         let left = this.parseUnary();
-        while (this.peek().kind == TokenKind.Star || this.peek().kind == TokenKind.Slash) {
-            let op = this.advance().lexeme;
+        while (this.peekKind() == TokenKind.Star || this.peekKind() == TokenKind.Slash) {
+            let op = this.advanceLexeme();
             let right = this.parseUnary();
             left = new BinaryExpr(op, left, right);
         }
         return left;
     }
 
-    private parseUnary(): Expr {
+    @unsafe private parseUnary(): Expr {
         if (this.matchKind(TokenKind.Bang) || this.matchKind(TokenKind.Minus)) {
-            let op = this.previous().lexeme;
+            let op = this.previousLexeme();
             let operand = this.parseUnary();
             return new UnaryExpr(op, operand, true);
         }
         return this.parsePostfix();
     }
 
-    private parsePostfix(): Expr {
+    @unsafe private parsePostfix(): Expr {
         let expr = this.parsePrimary();
         while (true) {
             if (this.matchKind(TokenKind.LParen)) {
                 let args = new Array<Expr>();
                 while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
-                    args.push(this.parseExpression());
+                    this.pushExpr(args, this.parseExpression());
                     if (!this.matchKind(TokenKind.Comma)) break;
                 }
                 this.matchKind(TokenKind.RParen);
                 expr = new CallExpr(expr, args, new Array<string>());
             } else if (this.matchKind(TokenKind.Dot)) {
-                let name = this.advance().lexeme;
+                let name = this.advanceLexeme();
                 expr = new MemberExpr(expr, name);
             } else if (this.matchKind(TokenKind.LBracket)) {
                 let index = this.parseExpression();
@@ -350,17 +423,17 @@ export class ASTParser {
         return expr;
     }
 
-    private parsePrimary(): Expr {
-        if (this.matchKind(TokenKind.Number)) return new NumberLiteral(this.previous().lexeme);
-        if (this.matchKind(TokenKind.String)) return new StringLiteral(this.previous().lexeme);
-        if (this.matchKind(TokenKind.Identifier)) return new IdentifierExpr(this.previous().lexeme);
+    @unsafe private parsePrimary(): Expr {
+        if (this.matchKind(TokenKind.Number)) return new NumberLiteral(this.previousLexeme());
+        if (this.matchKind(TokenKind.String)) return new StringLiteral(this.previousLexeme());
+        if (this.matchKind(TokenKind.Identifier)) return new IdentifierExpr(this.previousLexeme());
         if (this.matchKind(TokenKind.This)) return new ThisExpr();
         if (this.matchKind(TokenKind.New)) {
-            let name = this.advance().lexeme;
+            let name = this.advanceLexeme();
             let args = new Array<Expr>();
             if (this.matchKind(TokenKind.LParen)) {
                 while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
-                    args.push(this.parseExpression());
+                    this.pushExpr(args, this.parseExpression());
                     if (!this.matchKind(TokenKind.Comma)) break;
                 }
                 this.matchKind(TokenKind.RParen);
@@ -379,47 +452,116 @@ export class ASTParser {
         return null as Expr;
     }
 
-    private parseTypeText(): string {
+    @unsafe private parseTypeText(): string {
         let res = "";
         while (!this.isAtEnd()) {
-            let k = this.peek().kind;
+            let k = this.peekKind();
             if (k == TokenKind.RParen || k == TokenKind.Comma || k == TokenKind.RBrace || k == TokenKind.Semicolon || k == TokenKind.Equal || k == TokenKind.LBrace) break;
-            res = res + this.advance().lexeme;
+            let lex = this.advanceLexeme();
+            res = res + lex;
         }
+        // Double incref: one canceled by @unsafe cleanup, one stays for caller
+        class_incref(res);
+        class_incref(res);
         return res;
     }
 
-    private skipUntil(kind: i32): void {
+    @unsafe private skipUntil(kind: i32): void {
         while (!this.isAtEnd() && !this.check(kind)) this.advance();
     }
 
-    private matchKind(kind: i32): bool {
-        if (this.check(kind)) { this.advance(); return true; }
+    @unsafe private matchKind(kind: i32): bool {
+        if (this.check(kind)) { 
+            this.pos = this.pos + 1; 
+            return true; 
+        }
         return false;
     }
 
-    private check(kind: i32): bool {
+    @unsafe private check(kind: i32): bool {
+        if (this.tokens == null) { return false; }
         if (this.isAtEnd()) return kind == TokenKind.EOF;
-        return this.peek().kind == kind;
+        let t = this.tokens.get(this.pos);
+        if (t == null) { return false; }
+        return t.kind == kind;
     }
 
-    private advance(): Token {
-        if (!this.isAtEnd()) this.pos = this.pos + 1;
-        return this.previous();
+    @unsafe private advance(): Token {
+        if (this.tokens == null) {
+            log("--- ASTParser.advance: ERROR - tokens is NULL!");
+            return null as Token;
+        }
+        let t = this.tokens.get(this.pos);
+        if (this.pos < this.tokens.length) {
+            this.pos = this.pos + 1;
+        }
+        return t;
     }
 
-    private isAtEnd(): bool {
+    @unsafe private advanceLexeme(): string {
+        if (this.tokens == null) { return ""; }
+        let t = this.tokens.get(this.pos);
+        if (this.pos < this.tokens.length) {
+            this.pos = this.pos + 1;
+        }
+        if (t == null) { return ""; }
+        let lex = t.lexeme;
+        if (lex == null) { return ""; }
+        class_incref(lex);
+        class_incref(lex);
+        return lex;
+    }
+
+    @unsafe private previousLexeme(): string {
+        if (this.tokens == null) { return ""; }
+        let t = this.tokens.get(this.pos - 1);
+        if (t == null) { return ""; }
+        class_incref(t);
+        let lex = t.lexeme;
+        if (lex == null) { return ""; }
+        class_incref(lex);
+        class_incref(lex);
+        return lex;
+    }
+
+    @unsafe private previousLexeme(): string {
+        if (this.tokens == null) { return ""; }
+        let t = this.tokens.get(this.pos - 1);
+        if (t == null) { return ""; }
+        class_incref(t);
+        let lex = t.lexeme;
+        if (lex == null) { return ""; }
+        class_incref(lex);
+        class_incref(lex);
+        return lex;
+    }
+
+    @unsafe private peekKind(): i32 {
+        if (this.tokens == null) { return TokenKind.EOF; }
+        if (this.pos >= this.tokens.length) { return TokenKind.EOF; }
+        let t = this.tokens.get(this.pos);
+        if (t == null) { return TokenKind.EOF; }
+        return t.kind;
+    }
+
+    @unsafe private isAtEnd(): bool {
+        if (this.tokens == null) {
+            log("--- ASTParser.isAtEnd: ERROR - tokens is NULL!");
+            return true;
+        }
         if (this.pos >= this.tokens.length) {
             return true;
         }
-        return this.peek().kind == TokenKind.EOF;
+        let t = this.tokens.get(this.pos);
+        if (t == null) return true;
+        return t.kind == TokenKind.EOF;
     }
 
-    private peek(): Token {
+    @unsafe private peek(): Token {
         return this.tokens.get(this.pos);
     }
 
-    private previous(): Token {
+    @unsafe private previous(): Token {
         return this.tokens.get(this.pos - 1);
     }
 }

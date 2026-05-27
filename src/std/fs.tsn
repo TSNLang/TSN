@@ -243,15 +243,17 @@ export function readText(path: string): ReadTextResult {
 @target_os("windows")
 @unsafe
 export function writeText(path: string, content: string): WriteTextResult {
+    let pathData: rawPtr<i8> = memory.offset(path as ptr<void>, 8);
+    let contentData: rawPtr<i8> = memory.offset(content as ptr<void>, 8);
     // GENERIC_WRITE = 0x40000000, CREATE_ALWAYS = 2
-    let handle = tsn_CreateFileA(path, 1073741824, 0, null, 2, 128, null);
+    let handle = tsn_CreateFileA(pathData, 1073741824, 0, null, 2, 128, null);
     if (handle == (0 - 1) as ptr<void> || handle == null) {
         return new WriteTextResult(false, 0, FS_IO_ERROR);
     }
 
     let written: i32 = 0;
     let len = content.byteLength();
-    let ok = tsn_WriteFile(handle, content, len, addressof(written), null);
+    let ok = tsn_WriteFile(handle, contentData, len, addressof(written), null);
     tsn_CloseHandle(handle);
 
     if (ok == 0) {
@@ -280,7 +282,8 @@ export function writeText(path: string, data: string): WriteTextResult {
 @target_os("windows")
 @unsafe
 export function exists(path: string): ExistsResult {
-    let handle = tsn_CreateFileA(path, 0, 1, null, 3, 128, null);
+    let pathData: rawPtr<i8> = memory.offset(path as ptr<void>, 8);
+    let handle = tsn_CreateFileA(pathData, 0, 1, null, 3, 128, null);
     if (handle == (0 - 1) as ptr<void> || handle == null) {
         let err = tsn_GetLastError();
         if (err == 2) { // ERROR_FILE_NOT_FOUND

@@ -1,12 +1,23 @@
 import { log } from "std:console";
-import { readText } from "std:fs";
+import { readText, writeText } from "std:fs";
 import { args } from "std:os";
 import { Lexer } from "./lexer.tsn";
 import { ASTParser } from "./ast-parser.tsn";
-import { ASTProgram } from "./ast.tsn";
+import { Program, Token, TokenKind, Declaration } from "./ast.tsn";
+import { Array } from "std:array";
 import { MIRBuilder } from "./mir-builder.tsn";
 import { MIRCodegen } from "./mir-codegen.tsn";
 import { MIRType } from "./mir.tsn";
+
+export class CompilerState {
+    public source: string;
+    public tokens: Array<Token>;
+    
+    constructor() {
+        this.source = "";
+        this.tokens = null as Array<Token>;
+    }
+}
 
 function logBool(label: string, value: bool): void {
     log(label);
@@ -17,67 +28,90 @@ function logBool(label: string, value: bool): void {
     log("false");
 }
 
-function parseFile(path: string): ASTProgram {
-    log("--- parseFile: start reading");
-    log(path);
+@unsafe function parseFile(state: CompilerState, path: string): Program {
     let fsResult = readText(path);
     if (!fsResult.isOk()) {
-        log("parse FAILED: could not read file");
-        return null as ASTProgram;
-    }
-
-    log("--- parseFile: read success, starting lexer");
-    let source = fsResult.value();
-    let lexer = new Lexer(source);
-    let tokens = lexer.tokenize();
-    log("--- parseFile: tokenize success");
-    if (tokens.length == 0) {
-        log("parse FAILED: no tokens generated");
-        return null as ASTProgram;
-    }
-    log("--- parseFile: starting parser constructor");
-    log("tokens length check before parser:");
-    print_i32(tokens.length);
-    let parser = new ASTParser(tokens);
-    let astProgram: ASTProgram = parser.parse();
-    log("--- parseFile: parse success");
-
-    let decls_count = astProgram.declarations.length;
-    log("--- declarations count:");
-    print_i32(decls_count);
-
-    if (decls_count == 0) {
-        log("parse FAILED: no declarations found in file");
+        log("Error: could not read file: ");
         log(path);
-        return null as ASTProgram;
+        return null as Program;
     }
 
-    log("parsed file");
-    log(path);
+    state.source = fsResult.value();
+    class_incref(state.source);
+    let lexer = new Lexer(state.source);
+    state.tokens = lexer.tokenize();
+    if (state.tokens.length == 0) {
+        log("Error: no tokens generated from file");
+        return null as Program;
+    }
+    let parser = new ASTParser(state.tokens);
     
+    // Inline parse logic using parser.pos directly
+    let declarations = new Array<Declaration>();
+    while (parser.pos < state.tokens.length) {
+        let t = state.tokens.get(parser.pos);
+        if (t == null || t.kind == TokenKind.EOF) {
+            break;
+        }
+        let decl = parser.parseDeclaration();
+        if (decl != null) {
+            declarations.push(decl);
+        }
+    }
+    let astProgram = new Program(declarations);
+    class_incref(astProgram);
+    class_incref(astProgram);
+
+    let decls_count = declarations.length;
+    if (decls_count == 0) {
+        log("Error: no declarations found in file: ");
+        log(path);
+        return null as Program;
+    }
+
     return astProgram;
 }
 
-function main(): i32 {
+@unsafe function main(): i32 {
     let argIt = args();
     let argList = argIt.toArray();
 
     if (argList.length < 2) {
-        log("Usage: tsnc <input.tsn>");
+        log("Usage: tsnc <input.tsn> [-o <output.ll>]");
         return 1;
     }
 
     let inputPath = argList.get(1);
+    class_incref(inputPath);
     if (inputPath == "-h" || inputPath == "--help") {
-        log("Usage: tsnc <input.tsn>");
+        log("Usage: tsnc <input.tsn> [-o <output.ll>]");
         return 0;
+    }
+
+    let outputPath = "";
+    let i = 2;
+    while (i < argList.length) {
+        let arg = argList.get(i);
+        class_incref(arg);
+        if (arg == "-o" && i + 1 < argList.length) {
+            outputPath = argList.get(i + 1);
+            class_incref(outputPath);
+            i = i + 2;
+        } else {
+            i = i + 1;
+        }
     }
 
     log("=== TSN SELF-HOSTING COMPILER ===");
     log("Compiling file:");
     log(inputPath);
+    if (outputPath != "") {
+        log("Output path:");
+        log(outputPath);
+    }
 
-    let astProgram = parseFile(inputPath);
+    let state = new CompilerState();
+    let astProgram = parseFile(state, inputPath);
     if (astProgram == null) {
         log("Compilation failed during parsing.");
         return 1;
@@ -98,18 +132,15 @@ function main(): i32 {
     log("Generated IR length:");
     print_i32(ir.length);
 
-    log("=== RUNNING SELF-HOSTED CODEGEN SMOKE TEST ===");
-    let builder = new MIRBuilder("smoke_test");
-    builder.createFunction("test_func", new MIRType("i32", false, 4));
-    let entryBlock = builder.createBasicBlock("smoke_entry");
-    builder.setInsertPoint(entryBlock);
-    let c1 = builder.createConstant("42", new MIRType("i32", false, 4));
-    builder.createReturn(c1);
-
-    let codegen = new MIRCodegen(builder.getModule());
-    let ir = codegen.generate();
-    log("Generated LLVM IR:");
-    log(ir);
+    if (outputPath != "") {
+        log("Writing LLVM IR to file...");
+        let writeRes = writeText(outputPath, ir);
+        if (!writeRes.isOk()) {
+            log("FAILED to write output file!");
+            return 1;
+        }
+        log("✓ Successfully wrote output file!");
+    }
 
     return 0;
 }

@@ -156,6 +156,7 @@ export class Declaration {
     public body: Stmt;
 
     constructor(kind: string, name: string, detailA: string, detailB: string, detailC: string, members: Array<ClassMemberDecl>, body: Stmt) {
+        log("--- Declaration.constructor: start");
         this.kind = kind;
         this.name = name;
         this.detailA = detailA;
@@ -164,6 +165,7 @@ export class Declaration {
         this.members = members;
         this.params = new Array<ParameterInfo>();
         this.body = body;
+        log("--- Declaration.constructor: end");
     }
 }
 
