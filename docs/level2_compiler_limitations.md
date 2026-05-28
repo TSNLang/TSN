@@ -7,8 +7,13 @@ The Level 2 compiler (self-hosting/main.tsn) is a simplified TSN compiler writte
 ## Current Status
 
 - **Link Errors**: Reduced from 6 to 4 through extensive improvements
-- **Commit**: ea2197c
+- **Latest Commits**: 
+  - ea2197c: Comprehensive Level 2 compiler improvements
+  - 24ac02e: Fixed function parameter tracking bug
+  - b629fb5: Added conditionals test
+  - 23eb76b: Added loops test
 - **Compilation Success**: Can compile single-file programs without OOP features
+- **Verified Working**: Arithmetic operations, conditionals, loops with function parameters
 
 ## Implemented Features
 
@@ -33,6 +38,7 @@ The Level 2 compiler (self-hosting/main.tsn) is a simplified TSN compiler writte
    - MemberExpr callee handling for qualified calls (e.g., memory.offset())
    - Extensive function return type hints
    - Pointer arithmetic type coercion
+   - **Function parameter tracking** (fixed in 24ac02e) - parameters now properly tracked in locals table
 
 4. **Code Generation**
    - LLVM IR emission
