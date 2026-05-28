@@ -63,6 +63,25 @@ export class MIRBuilder {
         if (decl.body != null) {
             log("MIRBuilder.buildFunction: body exists, analyzing");
             this.analyzeStatement(decl.body);
+            
+            // Check if current block has a terminator
+            let currentBlock = this.getCurrentBlock();
+            let hasTerminator = false;
+            if (currentBlock.instructions.length > 0) {
+                let lastInst = currentBlock.instructions.get(currentBlock.instructions.length - 1);
+                if (lastInst.opcode == "Return" || lastInst.opcode == "Branch" || lastInst.opcode == "Jump") {
+                    hasTerminator = true;
+                }
+            }
+            if (!hasTerminator) {
+                if (returnType.name == "void") {
+                    let voidVal = this.createConstant("0", new MIRType("void", false, 0));
+                    this.createReturn(voidVal);
+                } else {
+                    let defaultVal = this.createConstant("0", returnType);
+                    this.createReturn(defaultVal);
+                }
+            }
         } else {
             // No body - create default return
             if (returnType.name == "void") {
@@ -138,7 +157,12 @@ export class MIRBuilder {
             log("analyzeStatement: ExprStmt, done");
         } else if (stmt.kind == "ReturnStmt") {
             let retStmt = stmt as ReturnStmt;
-            let val = this.analyzeExpression(retStmt.value);
+            let val: MIRValue = null;
+            if (retStmt.value == null) {
+                val = this.createConstant("0", this.currentFunction.returnType);
+            } else {
+                val = this.analyzeExpression(retStmt.value);
+            }
             this.createReturn(val);
         } else if (stmt.kind == "IfStmt") {
             let ifStmt = stmt as IfStmt;
@@ -180,6 +204,11 @@ export class MIRBuilder {
     }
 
     private analyzeExpression(expr: Expr): MIRValue {
+        if (expr == null) {
+            log("analyzeExpression: expr is NULL!");
+            return this.createConstant("0", new MIRType("i32", false, 4));
+        }
+        log("analyzeExpression: expr.kind = " + expr.kind);
         if (expr.kind == "NumberLiteral") {
             let lit = expr as NumberLiteral;
             return this.createConstant(lit.value, new MIRType("i32", false, 4));
@@ -209,17 +238,32 @@ export class MIRBuilder {
             // If not found, return a dummy constant
             return this.createConstant("0", new MIRType("i32", false, 4));
         } else if (expr.kind == "CallExpr") {
+            log("analyzeExpression: processing CallExpr");
             let call = expr as CallExpr;
+            if (call.args == null) {
+                log("CallExpr error: args is NULL!");
+            } else {
+                log("CallExpr args length =");
+                print_i32(call.args.length);
+            }
             let args = new Array<MIRValue>();
             for (let i = 0; i < call.args.length; i = i + 1) {
+                log("CallExpr: analyzing arg index =");
+                print_i32(i);
                 args.push(this.analyzeExpression(call.args.get(i)));
             }
-            // Get callee name
+            log("CallExpr: args analyzed");
             let calleeName = "unknown";
-            if (call.callee.kind == "Identifier") {
-                let calleeId = call.callee as IdentifierExpr;
-                calleeName = calleeId.name;
+            if (call.callee == null) {
+                log("CallExpr error: callee is NULL!");
+            } else {
+                log("CallExpr: callee.kind = " + call.callee.kind);
+                if (call.callee.kind == "Identifier") {
+                    let calleeId = call.callee as IdentifierExpr;
+                    calleeName = calleeId.name;
+                }
             }
+            log("CallExpr: calling createCall for " + calleeName);
             return this.createCall(calleeName, args, new MIRType("i32", false, 4));
         }
         return this.createConstant("0", new MIRType("i32", false, 4));

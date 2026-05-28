@@ -211,35 +211,6 @@ export function readText(path: string): ReadTextResult {
     return res;
 }
 
-@target_os("linux")
-@unsafe
-export function readText(path: string): ReadTextResult {
-    let fd = open(path, 0, 0);
-    if (fd < 0) {
-        let empty: string;
-        return new ReadTextResult(false, empty, FS_NOT_FOUND);
-    }
-
-    let capacity: i32 = 1024 * 1024; // 1MB
-    let buffer: ptr<void> = malloc(capacity + 1);
-    if (buffer == null) {
-        close(fd);
-        let empty: string;
-        return new ReadTextResult(false, empty, FS_IO_ERROR);
-    }
-
-    let bytesRead = read(fd, buffer, capacity);
-    close(fd);
-    if (bytesRead < 0) {
-        free(buffer);
-        let empty: string;
-        return new ReadTextResult(false, empty, FS_IO_ERROR);
-    }
-
-    let out: string = buffer;
-    return new ReadTextResult(true, out, FS_OK);
-}
-
 @target_os("windows")
 @unsafe
 export function writeText(path: string, content: string): WriteTextResult {
@@ -262,23 +233,6 @@ export function writeText(path: string, content: string): WriteTextResult {
     return new WriteTextResult(true, written, FS_OK);
 }
 
-@target_os("linux")
-@unsafe
-export function writeText(path: string, data: string): WriteTextResult {
-    let fd = open(path, 577, 420); // 0644
-    if (fd < 0) {
-        return new WriteTextResult(false, 0, FS_IO_ERROR);
-    }
-
-    let written = write(fd, data, data.byteLength);
-    close(fd);
-
-    if (written < 0) {
-        return new WriteTextResult(false, 0, FS_IO_ERROR);
-    }
-    return new WriteTextResult(true, written, FS_OK);
-}
-
 @target_os("windows")
 @unsafe
 export function exists(path: string): ExistsResult {
@@ -293,14 +247,4 @@ export function exists(path: string): ExistsResult {
     }
     tsn_CloseHandle(handle);
     return new ExistsResult(true, true, FS_OK);
-}
-
-@target_os("linux")
-@unsafe
-export function exists(path: string): ExistsResult {
-    let res = access(path, 0); // F_OK
-    if (res == 0) {
-        return new ExistsResult(true, true, FS_OK);
-    }
-    return new ExistsResult(true, false, FS_OK);
 }

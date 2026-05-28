@@ -524,18 +524,6 @@ export class ASTParser {
         return lex;
     }
 
-    @unsafe private previousLexeme(): string {
-        if (this.tokens == null) { return ""; }
-        let t = this.tokens.get(this.pos - 1);
-        if (t == null) { return ""; }
-        class_incref(t);
-        let lex = t.lexeme;
-        if (lex == null) { return ""; }
-        class_incref(lex);
-        class_incref(lex);
-        return lex;
-    }
-
     @unsafe private peekKind(): i32 {
         if (this.tokens == null) { return TokenKind.EOF; }
         if (this.pos >= this.tokens.length) { return TokenKind.EOF; }

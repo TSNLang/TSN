@@ -3,6 +3,7 @@ declare function print_i32(n: i32): void;
 // A simplified IR that bridges AST and LLVM IR
 
 import { Array } from "std:array";
+import { log } from "std:console";
 
 // MIR Types
 
@@ -108,8 +109,9 @@ export class MIRCallInst extends MIRInst {
     public callee: string;
     public args: Array<MIRValue>;
 
-    constructor(result: MIRValue, callee: string, args: Array<MIRValue>) {
+    @unsafe constructor(result: MIRValue, callee: string, args: Array<MIRValue>) {
         super("Call", result);
+        class_incref(args);
         this.callee = callee;
         this.args = args;
     }

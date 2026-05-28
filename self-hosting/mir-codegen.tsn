@@ -8,24 +8,36 @@ import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, 
 export class MIRCodegen {
     private output: Array<string>;
     private module: MIRModule;
+    private stringLiterals: Array<string>;
 
     constructor(module: MIRModule) {
         this.module = module;
         this.output = new Array<string>();
+        this.stringLiterals = new Array<string>();
     }
 
     public generate(): string {
+        this.collectStringLiterals();
+
         this.emitHeader();
+        
+        let i = 0;
+        while (i < this.stringLiterals.length) {
+            let strVal = this.getString(this.stringLiterals, i);
+            this.emitStringLiteralDefinition(i, strVal);
+            i = i + 1;
+        }
+
         this.emitGlobals();
         this.emitFunctions();
         return this.joinOutput();
     }
 
     private emitHeader(): void {
-        this.output.push("; Generated LLVM IR from MIR");
+        this.output.push("; Generated LLVM IR from MIR\n");
         this.output.push("; Module: ");
         this.output.push(this.module.name);
-        this.output.push("");
+        this.output.push("\n\n");
     }
 
     private emitGlobals(): void {
@@ -42,7 +54,7 @@ export class MIRCodegen {
         this.output.push(global.name);
         this.output.push(" = global ");
         this.output.push(this.emitType(global.valueType));
-        this.output.push(" zeroinitializer");
+        this.output.push(" zeroinitializer\n");
     }
 
     private emitFunctions(): void {
@@ -55,18 +67,18 @@ export class MIRCodegen {
     }
 
     private emitFunction(func: MIRFunction): void {
-        this.output.push("");
+        this.output.push("\n");
         this.output.push("define ");
         this.output.push(this.emitType(func.returnType));
         this.output.push(" @");
         this.output.push(func.name);
         this.output.push("(");
         this.emitParams(func);
-        this.output.push(") {");
+        this.output.push(") {\n");
         
         this.emitBlocks(func);
         
-        this.output.push("}");
+        this.output.push("}\n");
     }
 
     private emitParams(func: MIRFunction): void {
@@ -317,6 +329,10 @@ export class MIRCodegen {
     private emitValue(v: MIRValue): string {
         if (v.kind == "Constant") {
             let c = v as MIRConstant;
+            if (c.valueType.name == "string") {
+                let idx = this.findStringLiteral(c.value);
+                return "@.str." + this.idToStr(idx);
+            }
             return c.value;
         }
         if (v.kind == "Register") {
@@ -360,6 +376,182 @@ export class MIRCodegen {
             return "-" + digits;
         }
         return digits;
+    }
+
+    @unsafe private pushString(arr: Array<string>, item: string): void {
+        class_incref(item);
+        arr.push(item);
+    }
+
+    @unsafe private getString(arr: Array<string>, index: i32): string {
+        let res = arr.get(index);
+        class_incref(res);
+        return res;
+    }
+
+    @unsafe private findStringLiteral(s: string): i32 {
+        let i = 0;
+        while (i < this.stringLiterals.length) {
+            let item = this.getString(this.stringLiterals, i);
+            if (item == s) {
+                return i;
+            }
+            i = i + 1;
+        }
+        return 0 - 1;
+    }
+
+    private collectStringLiterals(): void {
+        log("--- collectStringLiterals: start");
+        log("--- functions.length: " + this.idToStr(this.module.functions.length));
+        let i = 0;
+        while (i < this.module.functions.length) {
+            log("--- functions get index " + this.idToStr(i));
+            let func = this.module.functions.get(i);
+            log("--- functions got " + func.name);
+            this.collectFuncStrings(func);
+            i = i + 1;
+        }
+        log("--- collectStringLiterals: end");
+    }
+
+    private collectFuncStrings(func: MIRFunction): void {
+        log("--- collectFuncStrings: start for " + func.name);
+        log("--- blocks.length: " + this.idToStr(func.blocks.length));
+        let i = 0;
+        while (i < func.blocks.length) {
+            log("--- blocks get index " + this.idToStr(i));
+            let block = func.blocks.get(i);
+            log("--- block instructions length: " + this.idToStr(block.instructions.length));
+            this.collectBlockStrings(block);
+            i = i + 1;
+        }
+        log("--- collectFuncStrings: end");
+    }
+
+    private collectBlockStrings(block: MIRBasicBlock): void {
+        let i = 0;
+        while (i < block.instructions.length) {
+            log("--- inst get index " + this.idToStr(i));
+            let inst = block.instructions.get(i);
+            log("--- inst opcode: " + inst.opcode);
+            this.collectInstStrings(inst);
+            i = i + 1;
+        }
+    }
+
+    private collectInstStrings(inst: MIRInst): void {
+        if (inst.opcode == "Binary") {
+            let bin = inst as MIRBinaryInst;
+            this.checkAndAddString(bin.left);
+            this.checkAndAddString(bin.right);
+        } else if (inst.opcode == "Store") {
+            let st = inst as MIRStoreInst;
+            this.checkAndAddString(st.value);
+        } else if (inst.opcode == "Call") {
+            let cl = inst as MIRCallInst;
+            if (cl.args != null) {
+                let i = 0;
+                while (i < cl.args.length) {
+                    this.checkAndAddString(cl.args.get(i));
+                    i = i + 1;
+                }
+            }
+        } else if (inst.opcode == "Return") {
+            let rt = inst as MIRReturnInst;
+            this.checkAndAddString(rt.value);
+        } else if (inst.opcode == "Branch") {
+            let br = inst as MIRBranchInst;
+            this.checkAndAddString(br.condition);
+        } else if (inst.opcode == "Incref") {
+            let inc = inst as MIRIncrefInst;
+            this.checkAndAddString(inc.value);
+        } else if (inst.opcode == "Decref") {
+            let dec = inst as MIRDecrefInst;
+            this.checkAndAddString(dec.value);
+        }
+    }
+
+    private checkAndAddString(v: MIRValue): void {
+        if (v == null) return;
+        if (v.kind == "Constant") {
+            let c = v as MIRConstant;
+            if (c.valueType.name == "string") {
+                let idx = this.findStringLiteral(c.value);
+                if (idx < 0) {
+                    this.pushString(this.stringLiterals, c.value);
+                }
+            }
+        }
+    }
+
+    private escapeString(s: string): string {
+        let res = "";
+        let i = 0;
+        while (i < s.length) {
+            let ch = s.charCodeAt(i);
+            if (ch == 10) {
+                res = res + "\\0A";
+            } else if (ch == 13) {
+                res = res + "\\0D";
+            } else if (ch == 9) {
+                res = res + "\\09";
+            } else if (ch == 34) {
+                res = res + "\\22";
+            } else if (ch == 92) {
+                res = res + "\\5C";
+            } else if (ch >= 32 && ch <= 126) {
+                res = res + s.slice(i, i + 1);
+            } else {
+                res = res + "\\" + this.byteToHex(ch);
+            }
+            i = i + 1;
+        }
+        return res;
+    }
+
+    private byteToHex(b: i32): string {
+        let high = (b / 16) % 16;
+        let low = b % 16;
+        return this.hexDigit(high) + this.hexDigit(low);
+    }
+
+    private hexDigit(d: i32): string {
+        if (d == 0) return "0";
+        if (d == 1) return "1";
+        if (d == 2) return "2";
+        if (d == 3) return "3";
+        if (d == 4) return "4";
+        if (d == 5) return "5";
+        if (d == 6) return "6";
+        if (d == 7) return "7";
+        if (d == 8) return "8";
+        if (d == 9) return "9";
+        if (d == 10) return "A";
+        if (d == 11) return "B";
+        if (d == 12) return "C";
+        if (d == 13) return "D";
+        if (d == 14) return "E";
+        if (d == 15) return "F";
+        return "0";
+    }
+
+    private emitStringLiteralDefinition(idx: i32, s: string): void {
+        let len = s.length;
+        let lenPlusOne = len + 1;
+        let escaped = this.escapeString(s);
+        
+        this.output.push("@.str.");
+        this.output.push(this.idToStr(idx));
+        this.output.push(" = private unnamed_addr constant { i32, i32, [");
+        this.output.push(this.idToStr(lenPlusOne));
+        this.output.push(" x i8] } { i32 -1, i32 ");
+        this.output.push(this.idToStr(len));
+        this.output.push(", [");
+        this.output.push(this.idToStr(lenPlusOne));
+        this.output.push(" x i8] c\"");
+        this.output.push(escaped);
+        this.output.push("\\00\" }, align 8\n");
     }
 
     private joinOutput(): string {
