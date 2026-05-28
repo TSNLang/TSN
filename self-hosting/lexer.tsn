@@ -217,18 +217,37 @@ export class Lexer {
         let start = this.pos;
         this.advance();
 
+        let text = "";
         while (this.pos < this.sourceLength && this.current() != quote) {
             if (this.current() == 92) { // '\\'
                 this.advance();
                 if (this.pos < this.sourceLength) {
+                    let esc = this.current();
+                    if (esc == 110) { // 'n'
+                        text = text + "\n";
+                    } else if (esc == 114) { // 'r'
+                        text = text + "\r";
+                    } else if (esc == 116) { // 't'
+                        text = text + "\t";
+                    } else if (esc == 48) { // '0'
+                        text = text + "\0";
+                    } else if (esc == 92) { // '\\'
+                        text = text + "\\";
+                    } else if (esc == 34) { // '"'
+                        text = text + "\"";
+                    } else if (esc == 39) { // '\''
+                        text = text + "'";
+                    } else {
+                        text = text + "\\";
+                        text = text + this.source.slice(this.pos, this.pos + 1);
+                    }
                     this.advance();
                 }
             } else {
+                text = text + this.source.slice(this.pos, this.pos + 1);
                 this.advance();
             }
         }
-
-        let text = this.source.slice(start + 1, this.pos);
 
         if (this.current() == quote) {
             this.advance();

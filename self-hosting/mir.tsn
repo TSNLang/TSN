@@ -186,6 +186,15 @@ export class MIRDecrefInst extends MIRInst {
     }
 }
 
+export class MIRIntToPtrInst extends MIRInst {
+    public value: MIRValue;
+
+    constructor(result: MIRRegister, value: MIRValue) {
+        super("IntToPtr", result);
+        this.value = value;
+    }
+}
+
 // MIR Basic Block
 
 export class MIRBasicBlock {

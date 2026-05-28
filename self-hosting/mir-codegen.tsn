@@ -38,6 +38,47 @@ export class MIRCodegen {
         this.output.push("; Module: ");
         this.output.push(this.module.name);
         this.output.push("\n\n");
+        // External declarations needed by all modules
+        // Only declare log, print_i32, and offset if not defined in this module
+        let hasLog = false;
+        let hasPrintI32 = false;
+        let hasOffset = false;
+        let i = 0;
+        while (i < this.module.functions.length) {
+            let fname = this.module.functions.get(i).name;
+            if (fname == "log") hasLog = true;
+            if (fname == "print_i32") hasPrintI32 = true;
+            if (fname == "offset") hasOffset = true;
+            i = i + 1;
+        }
+        if (!hasLog) {
+            this.output.push("declare i32 @log(ptr)\n");
+        }
+        if (!hasPrintI32) {
+            this.output.push("declare void @print_i32(i32)\n");
+        }
+        this.output.push("declare ptr @addressof(ptr)\n");
+        this.output.push("declare ptr @_T.alloc$P.i64(i64)\n");
+        this.output.push("declare void @_T.free$P.void(ptr)\n");
+        this.output.push("declare ptr @_T.string_concat$P.ptr.ptr(ptr, ptr)\n");
+        this.output.push("declare i32 @_T.string_equals$P.ptr.ptr(ptr, ptr)\n");
+        this.output.push("declare void @tsn_incref(ptr)\n");
+        this.output.push("declare void @tsn_decref(ptr)\n");
+        if (!hasOffset) {
+            this.output.push("declare ptr @offset(ptr, i32)\n");
+        }
+        // Windows API functions
+        this.output.push("declare ptr @GetStdHandle(i32)\n");
+        this.output.push("declare ptr @GetProcessHeap()\n");
+        this.output.push("declare ptr @HeapAlloc(ptr, i32, i64)\n");
+        this.output.push("declare ptr @tsn_HeapAlloc(ptr, i32, i64)\n");
+        this.output.push("declare ptr @tsn_HeapReAlloc(ptr, i32, ptr, i64)\n");
+        this.output.push("declare ptr @CreateFileA(ptr, i32, i32, ptr, i32, i32, ptr)\n");
+        this.output.push("declare ptr @ArgsIterator()\n");
+        this.output.push("declare i32 @WriteFile(ptr, ptr, i32, ptr, ptr)\n");
+        this.output.push("declare i32 @ReadFile(ptr, ptr, i32, ptr, ptr)\n");
+        this.output.push("declare i32 @CloseHandle(ptr)\n");
+        this.output.push("\n");
     }
 
     private emitGlobals(): void {
@@ -146,12 +187,21 @@ export class MIRCodegen {
             this.emitIncrefInst(inst as MIRIncrefInst);
         } else if (inst.opcode == "Decref") {
             this.emitDecrefInst(inst as MIRDecrefInst);
+        } else if (inst.opcode == "IntToPtr") {
+            this.emitIntToPtrInst(inst as MIRIntToPtrInst);
         }
     }
 
     private emitBinaryInst(inst: MIRBinaryInst): void {
         this.output.push(this.emitValue(inst.result));
         this.output.push(" = ");
+        
+        // Determine the operand type (not result type for comparisons)
+        let operandType = inst.left.valueType;
+        // If right operand is string/ptr, use ptr as operand type
+        if (inst.right.valueType.isPointer) {
+            operandType = inst.right.valueType;
+        }
         
         // Arithmetic operators
         if (inst.op == "+") {
@@ -200,7 +250,7 @@ export class MIRCodegen {
             this.output.push("add "); // fallback
         }
         
-        this.output.push(this.emitType(inst.left.valueType));
+        this.output.push(this.emitType(operandType));
         this.output.push(" ");
         this.output.push(this.emitValue(inst.left));
         this.output.push(", ");
@@ -258,8 +308,21 @@ export class MIRCodegen {
     }
 
     private emitBranchInst(inst: MIRBranchInst): void {
+        let condType = inst.condition.valueType;
+        let condStr = this.emitValue(inst.condition);
+        // If condition is not bool/i1, emit trunc to i1 first
+        if (condType.name != "bool" && !condType.isPointer) {
+            let truncReg = "%cond_trunc_" + this.idToStr(inst.trueBlock);
+            this.output.push(truncReg);
+            this.output.push(" = trunc ");
+            this.output.push(this.emitType(condType));
+            this.output.push(" ");
+            this.output.push(condStr);
+            this.output.push(" to i1\n");
+            condStr = truncReg;
+        }
         this.output.push("br i1 ");
-        this.output.push(this.emitValue(inst.condition));
+        this.output.push(condStr);
         this.output.push(", label %bb");
         this.output.push(this.idToStr(inst.trueBlock));
         this.output.push(", label %bb");
@@ -303,6 +366,15 @@ export class MIRCodegen {
         this.output.push(")\n");
     }
 
+    private emitIntToPtrInst(inst: MIRIntToPtrInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = inttoptr ");
+        this.output.push(this.emitType(inst.value.valueType));
+        this.output.push(" ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(" to ptr\n");
+    }
+
     private emitType(t: MIRType): string {
         if (t.isPointer) {
             return "ptr";
@@ -332,6 +404,9 @@ export class MIRCodegen {
             if (c.valueType.name == "string") {
                 let idx = this.findStringLiteral(c.value);
                 return "@.str." + this.idToStr(idx);
+            }
+            if (c.valueType.isPointer && c.value == "0") {
+                return "null";
             }
             return c.value;
         }
