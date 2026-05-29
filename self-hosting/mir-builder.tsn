@@ -172,7 +172,11 @@ export class MIRBuilder {
                 if (val.valueType.name != this.currentFunction.returnType.name) {
                     // If function returns bool but value is i32, truncate to i1
                     if (this.currentFunction.returnType.name == "bool" && val.valueType.name == "i32") {
-                        val = this.createConstant(val.kind == "Constant" ? (val as MIRConstant).value : "0", this.currentFunction.returnType);
+                        let constValue = "0";
+                        if (val.kind == "Constant") {
+                            constValue = (val as MIRConstant).value;
+                        }
+                        val = this.createConstant(constValue, this.currentFunction.returnType);
                     }
                 }
             }
