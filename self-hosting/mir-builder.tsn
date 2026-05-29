@@ -168,6 +168,13 @@ export class MIRBuilder {
                 val = this.createConstant("0", this.currentFunction.returnType);
             } else {
                 val = this.analyzeExpression(retStmt.value);
+                // Type coercion: if return value type doesn't match function return type, cast it
+                if (val.valueType.name != this.currentFunction.returnType.name) {
+                    // If function returns bool but value is i32, truncate to i1
+                    if (this.currentFunction.returnType.name == "bool" && val.valueType.name == "i32") {
+                        val = this.createConstant(val.kind == "Constant" ? (val as MIRConstant).value : "0", this.currentFunction.returnType);
+                    }
+                }
             }
             this.createReturn(val);
         } else if (stmt.kind == "IfStmt") {
@@ -380,6 +387,15 @@ export class MIRBuilder {
                 return result;
             }
         } else if (op == "+" || op == "-") {
+            // String concatenation: if both operands are pointers and op is +, use string_concat
+            if (op == "+" && left.valueType.isPointer && right.valueType.isPointer) {
+                // Call _T.string_concat$P.ptr.ptr(left, right)
+                let args = new Array<MIRValue>();
+                args.push(left);
+                args.push(right);
+                let ptrType = new MIRType("ptr", true, 8);
+                return this.createCall("_T.concat$P.ptr.ptr", args, ptrType);
+            }
             // Pointer arithmetic: if one operand is ptr and other is int, cast int to ptr
             if (left.valueType.isPointer && !right.valueType.isPointer) {
                 let rightCasted = this.createIntToPtr(right);
