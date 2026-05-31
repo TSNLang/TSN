@@ -58,9 +58,11 @@ export class MIRBuilder {
             let param = decl.params.get(i);
             let paramType = this.parseType(param.typeText);
             let paramReg = func.createRegister(paramType);
-            func.params.push(paramReg);
-            // BUGFIX: Add parameter to locals table so it can be found by analyzeExpression
+            // BUGFIX: Add parameter to locals table BEFORE pushing (ownership transfer)
             this.addLocal(param.name, paramReg);
+            let paramType2 = this.parseType(param.typeText);
+            let paramReg2 = func.createRegister(paramType2);
+            func.params.push(paramReg2);
         }
         
         log("MIRBuilder.buildFunction: checking body");
