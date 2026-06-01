@@ -3,7 +3,7 @@ declare function print_i32(n: i32): void;
 
 import { Array } from "std:array";
 import { log } from "std:console";
-import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, MIRConstant, MIRGlobal, MIRInst, MIRBinaryInst, MIRLoadInst, MIRStoreInst, MIRCallInst, MIRReturnInst, MIRBranchInst, MIRJumpInst, MIRAllocaInst, MIRGetElementPtrInst } from "./mir.tsn";
+import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, MIRConstant, MIRGlobal, MIRInst, MIRBinaryInst, MIRLoadInst, MIRStoreInst, MIRCallInst, MIRReturnInst, MIRBranchInst, MIRJumpInst, MIRAllocaInst, MIRGetElementPtrInst, MIRIntToPtrInst, MIRPtrToIntInst } from "./mir.tsn";
 
 export class MIRCodegen {
     private output: Array<string>;
@@ -38,25 +38,73 @@ export class MIRCodegen {
         this.output.push("; Module: ");
         this.output.push(this.module.name);
         this.output.push("\n\n");
-        // External declarations needed by all modules
-        // Only declare log, print_i32, and offset if not defined in this module
-        let hasLog = false;
-        let hasPrintI32 = false;
-        let hasOffset = false;
+
+        // Dynamic scanner for external call instructions
+        let definedFuncs = new Array<string>();
         let i = 0;
         while (i < this.module.functions.length) {
-            let fname = this.module.functions.get(i).name;
-            if (fname == "log") hasLog = true;
-            if (fname == "print_i32") hasPrintI32 = true;
-            if (fname == "offset") hasOffset = true;
+            definedFuncs.push(this.module.functions.get(i).name);
             i = i + 1;
         }
-        if (!hasLog) {
-            this.output.push("declare i32 @log(ptr)\n");
+
+        let extCallees = new Array<string>();
+        let extDecls = new Array<string>();
+
+        let fIdx = 0;
+        while (fIdx < this.module.functions.length) {
+            let f = this.module.functions.get(fIdx);
+            let bIdx = 0;
+            while (bIdx < f.blocks.length) {
+                let b = f.blocks.get(bIdx);
+                let instIdx = 0;
+                while (instIdx < b.instructions.length) {
+                    let inst = b.instructions.get(instIdx);
+                    if (inst.opcode == "Call") {
+                        let callInst = inst as MIRCallInst;
+                        let callee = callInst.callee;
+                        // Check if it is external
+                        let isDefined = false;
+                        let k = 0;
+                        while (k < definedFuncs.length) {
+                            if (definedFuncs.get(k) == callee) {
+                                isDefined = true;
+                            }
+                            k = k + 1;
+                        }
+                        if (!isDefined) {
+                            // Check if already in extCallees
+                            let alreadyAdded = false;
+                            let m = 0;
+                            while (m < extCallees.length) {
+                                if (extCallees.get(m) == callee) {
+                                    alreadyAdded = true;
+                                }
+                                m = m + 1;
+                            }
+                            if (!alreadyAdded) {
+                                extCallees.push(callee);
+                                let declStr = "declare " + this.emitType(callInst.result.valueType) + " @" + callee + "(";
+                                let argIdx = 0;
+                                while (argIdx < callInst.args.length) {
+                                    if (argIdx > 0) {
+                                        declStr = declStr + ", ";
+                                    }
+                                    declStr = declStr + this.emitType(callInst.args.get(argIdx).valueType);
+                                    argIdx = argIdx + 1;
+                                }
+                                declStr = declStr + ")\n";
+                                extDecls.push(declStr);
+                            }
+                        }
+                    }
+                    instIdx = instIdx + 1;
+                }
+                bIdx = bIdx + 1;
+            }
+            fIdx = fIdx + 1;
         }
-        if (!hasPrintI32) {
-            this.output.push("declare void @print_i32(i32)\n");
-        }
+
+        // Hardcoded external runtime declarations
         this.output.push("declare ptr @addressof(ptr)\n");
         this.output.push("declare ptr @_T.alloc$P.i64(i64)\n");
         this.output.push("declare void @_T.free$P.void(ptr)\n");
@@ -64,20 +112,27 @@ export class MIRCodegen {
         this.output.push("declare i32 @_T.string_equals$P.ptr.ptr(ptr, ptr)\n");
         this.output.push("declare void @tsn_incref(ptr)\n");
         this.output.push("declare void @tsn_decref(ptr)\n");
-        if (!hasOffset) {
-            this.output.push("declare ptr @offset(ptr, i32)\n");
+
+        // Output all scanned external declarations
+        let extIdx = 0;
+        while (extIdx < extDecls.length) {
+            let callee = extCallees.get(extIdx);
+            let isBuiltIn = false;
+            if (callee == "addressof" || callee == "tsn_incref" || callee == "tsn_decref") {
+                isBuiltIn = true;
+            }
+            if (callee == "_T.alloc$P.i64" || callee == "_T.free$P.void") {
+                isBuiltIn = true;
+            }
+            if (callee == "_T.string_concat$P.ptr.ptr" || callee == "_T.string_equals$P.ptr.ptr") {
+                isBuiltIn = true;
+            }
+
+            if (!isBuiltIn) {
+                this.output.push(extDecls.get(extIdx));
+            }
+            extIdx = extIdx + 1;
         }
-        // Windows API functions
-        this.output.push("declare ptr @GetStdHandle(i32)\n");
-        this.output.push("declare ptr @GetProcessHeap()\n");
-        this.output.push("declare ptr @HeapAlloc(ptr, i32, i64)\n");
-        this.output.push("declare ptr @tsn_HeapAlloc(ptr, i32, i64)\n");
-        this.output.push("declare ptr @tsn_HeapReAlloc(ptr, i32, ptr, i64)\n");
-        this.output.push("declare ptr @CreateFileA(ptr, i32, i32, ptr, i32, i32, ptr)\n");
-        this.output.push("declare ptr @ArgsIterator()\n");
-        this.output.push("declare i32 @WriteFile(ptr, ptr, i32, ptr, ptr)\n");
-        this.output.push("declare i32 @ReadFile(ptr, ptr, i32, ptr, ptr)\n");
-        this.output.push("declare i32 @CloseHandle(ptr)\n");
         this.output.push("\n");
     }
 
@@ -189,19 +244,70 @@ export class MIRCodegen {
             this.emitDecrefInst(inst as MIRDecrefInst);
         } else if (inst.opcode == "IntToPtr") {
             this.emitIntToPtrInst(inst as MIRIntToPtrInst);
+        } else if (inst.opcode == "PtrToInt") {
+            this.emitPtrToIntInst(inst as MIRPtrToIntInst);
         }
     }
 
     private emitBinaryInst(inst: MIRBinaryInst): void {
-        this.output.push(this.emitValue(inst.result));
-        this.output.push(" = ");
-        
-        // Determine the operand type (not result type for comparisons)
+        let leftVal = this.emitValue(inst.left);
+        let rightVal = this.emitValue(inst.right);
         let operandType = inst.left.valueType;
-        // If right operand is string/ptr, use ptr as operand type
         if (inst.right.valueType.isPointer) {
             operandType = inst.right.valueType;
         }
+
+        let isArithmetic = inst.op == "+" || inst.op == "-" || inst.op == "*" || inst.op == "/" || inst.op == "%" || inst.op == "&" || inst.op == "|" || inst.op == "^" || inst.op == "<<" || inst.op == ">>";
+        
+        if (operandType.isPointer && isArithmetic) {
+            // Fix: LLVM add/sub etc do not support pointers directly.
+            // If operandType is pointer and it's an arithmetic operation, use ptrtoint.
+            let leftI64 = leftVal;
+            if (inst.left.valueType.isPointer) {
+                leftI64 = leftVal + "_i64";
+                this.output.push(leftI64);
+                this.output.push(" = ptrtoint ptr ");
+                this.output.push(leftVal);
+                this.output.push(" to i64\n  ");
+            }
+            let rightI64 = rightVal;
+            if (inst.right.valueType.isPointer) {
+                rightI64 = rightVal + "_i64";
+                this.output.push(rightI64);
+                this.output.push(" = ptrtoint ptr ");
+                this.output.push(rightVal);
+                this.output.push(" to i64\n  ");
+            }
+
+            let resI64 = this.emitValue(inst.result) + "_i64";
+            this.output.push(resI64);
+            this.output.push(" = ");
+            if (inst.op == "+") this.output.push("add ");
+            else if (inst.op == "-") this.output.push("sub ");
+            else if (inst.op == "*") this.output.push("mul ");
+            else if (inst.op == "/") this.output.push("sdiv ");
+            else if (inst.op == "%") this.output.push("srem ");
+            else if (inst.op == "&") this.output.push("and ");
+            else if (inst.op == "|") this.output.push("or ");
+            else if (inst.op == "^") this.output.push("xor ");
+            else if (inst.op == "<<") this.output.push("shl ");
+            else if (inst.op == ">>") this.output.push("ashr ");
+            
+            this.output.push("i64 ");
+            this.output.push(leftI64);
+            this.output.push(", ");
+            this.output.push(rightI64);
+            this.output.push("\n  ");
+            
+            this.output.push(this.emitValue(inst.result));
+            this.output.push(" = inttoptr i64 ");
+            this.output.push(resI64);
+            this.output.push(" to ptr\n");
+            return;
+        }
+
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = ");
         
         // Arithmetic operators
         if (inst.op == "+") {
@@ -252,9 +358,9 @@ export class MIRCodegen {
         
         this.output.push(this.emitType(operandType));
         this.output.push(" ");
-        this.output.push(this.emitValue(inst.left));
+        this.output.push(leftVal);
         this.output.push(", ");
-        this.output.push(this.emitValue(inst.right));
+        this.output.push(rightVal);
         this.output.push("\n");
     }
 
@@ -310,8 +416,17 @@ export class MIRCodegen {
     private emitBranchInst(inst: MIRBranchInst): void {
         let condType = inst.condition.valueType;
         let condStr = this.emitValue(inst.condition);
-        // If condition is not bool/i1, emit trunc to i1 first
-        if (condType.name != "bool" && !condType.isPointer) {
+        // If condition is pointer or null, coerce it to i1 properly
+        if (condStr == "null") {
+            condStr = "false";
+        } else if (condType.isPointer) {
+            let boolReg = "%cond_ptr_bool_" + this.idToStr(inst.trueBlock);
+            this.output.push(boolReg);
+            this.output.push(" = icmp ne ptr ");
+            this.output.push(condStr);
+            this.output.push(", null\n");
+            condStr = boolReg;
+        } else if (condType.name != "bool") {
             let truncReg = "%cond_trunc_" + this.idToStr(inst.trueBlock);
             this.output.push(truncReg);
             this.output.push(" = trunc ");
@@ -373,6 +488,13 @@ export class MIRCodegen {
         this.output.push(" ");
         this.output.push(this.emitValue(inst.value));
         this.output.push(" to ptr\n");
+    }
+
+    private emitPtrToIntInst(inst: MIRPtrToIntInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = ptrtoint ptr ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(" to i64\n");
     }
 
     private emitType(t: MIRType): string {

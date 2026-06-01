@@ -224,7 +224,7 @@ export class CodeGenerator {
   private currentProgram: Program | null = null;
   generate(program: Program, moduleNamespace?: string): string {
     this.currentProgram = program;
-    // Deno.writeTextFileSync("codegen_debug.txt", `--- generate start: program declarations=${program.declarations.length}\n`, { append: true });
+    // // Deno.writeTextFileSync("codegen_debug.txt", `--- generate start: program declarations=${program.declarations.length}\n`, { append: true });
     this.output = []; this.tempCounter = 0; this.labelCounter = 0; this.stringCounter = 0;
     this.externalDecls = []; this.externalDeclarations.clear(); this.exportedSymbols = [];
     this.emittedVTables.clear();
@@ -301,9 +301,9 @@ export class CodeGenerator {
     this.emit('');
 
     // Phase 4: Function definitions
-    Deno.writeTextFileSync("codegen_debug.txt", `--- Phase 4: Function definitions start, count=${program.declarations.length}\n`, { append: true });
+    // Deno.writeTextFileSync("codegen_debug.txt", `--- Phase 4: Function definitions start, count=${program.declarations.length}\n`, { append: true });
     for (const decl of program.declarations) {
-        Deno.writeTextFileSync("codegen_debug.txt", `--- generateFunctionsRecursive entry: kind=${decl.kind}\n`, { append: true });
+        // Deno.writeTextFileSync("codegen_debug.txt", `--- generateFunctionsRecursive entry: kind=${decl.kind}\n`, { append: true });
         this.generateFunctionsRecursive(decl);
     }
 
@@ -370,7 +370,7 @@ export class CodeGenerator {
 
   private preScanDeclaration(decl: Declaration): void {
     if (decl.kind === ASTKind.ImportDecl) {
-        Deno.writeTextFileSync("codegen_debug.txt", `--- preScan: processing import from ${(decl as ImportDecl).source}\n`, { append: true });
+        // Deno.writeTextFileSync("codegen_debug.txt", `--- preScan: processing import from ${(decl as ImportDecl).source}\n`, { append: true });
         this.processImport(decl as ImportDecl);
     } else if (decl.kind === ASTKind.TypeAliasDecl) this.typeAliases.set((decl as TypeAliasDecl).name, (decl as TypeAliasDecl).type);
     else if (decl.kind === ASTKind.VarDecl) {
@@ -503,7 +503,7 @@ export class CodeGenerator {
     if (decl.kind === ASTKind.ExportDecl) {
         const inner = (decl as ExportDecl).declaration;
         if (inner.kind === ASTKind.ClassDecl) {
-            Deno.writeTextFileSync("codegen_debug.txt", `--- generateFunctionsRecursive: ExportDecl(ClassDecl name=${(inner as ClassDecl).name}) isLocal=${isLocal}\n`, { append: true });
+            // Deno.writeTextFileSync("codegen_debug.txt", `--- generateFunctionsRecursive: ExportDecl(ClassDecl name=${(inner as ClassDecl).name}) isLocal=${isLocal}\n`, { append: true });
         }
     }
     
@@ -1560,7 +1560,7 @@ export class CodeGenerator {
   }
 
   private generateVarDecl(s: VarDecl): void {
-    Deno.writeTextFileSync("codegen_debug.txt", `--- generateVarDecl: s.name=${s.name}\n`, { append: true });
+    // Deno.writeTextFileSync("codegen_debug.txt", `--- generateVarDecl: s.name=${s.name}\n`, { append: true });
     let t = this.localVarTypes.get(s.name);
     if (!t) {
         if (s.type) {
@@ -1590,7 +1590,7 @@ export class CodeGenerator {
     const allocaType = (isClass || isManaged || isRaw || isString || isArray) ? 'ptr' : t;
 
     if (!this.hoistedVars.has(s.name)) {
-        Deno.writeTextFileSync("gen_log.txt", `--- generateVarDecl: s.name=${s.name}, t=${t}, allocaType=${allocaType}\n`, { append: true });
+        // Deno.writeTextFileSync("gen_log.txt", `--- generateVarDecl: s.name=${s.name}, t=${t}, allocaType=${allocaType}\n`, { append: true });
         this.emit(`%${s.name} = alloca ${this.toLLVMType(allocaType)}, align ${this.getAlignment(allocaType)}`);
         if (isOwningManaged || isClass) {
             this.emit(`store ptr null, ptr %${s.name}, align 8`);
@@ -2139,7 +2139,7 @@ export class CodeGenerator {
         className = this.instantiateClass(e.className, e.genericArgs);
     }
 
-    Deno.writeTextFileSync("codegen_debug.txt", `--- generateNew: className=${className} structs.has=${this.structs.has(className)} importedSymbols.has=${this.importedSymbols.has(className)}\n`, { append: true });
+    // Deno.writeTextFileSync("codegen_debug.txt", `--- generateNew: className=${className} structs.has=${this.structs.has(className)} importedSymbols.has=${this.importedSymbols.has(className)}\n`, { append: true });
 
     // Lazy instantiate imported classes
     if (!this.structs.has(className) && this.importedSymbols.has(className)) {
@@ -2398,6 +2398,18 @@ export class CodeGenerator {
 
     let finalRt = llvm_lt;
     if (llvm_lt === 'ptr' || llvm_rt === 'ptr' || r === 'null') {
+        const isArithmetic = e.operator === '+' || e.operator === '-' || e.operator === '*' || e.operator === '/' || e.operator === '%';
+        if (isArithmetic) {
+              const l64 = this.coerceToType(l, lt, 'i64');
+              const r64 = this.coerceToType(r, rt_raw, 'i64');
+              const res64 = this.newTemp();
+              this.emit(`${res64} = ${op} i64 ${l64}, ${r64}`);
+              const resPtr = this.newTemp();
+              this.emit(`${resPtr} = inttoptr i64 ${res64} to ptr`);
+              this.tempTypes.set(res64, 'i64');
+              this.tempTypes.set(resPtr, 'ptr');
+              return resPtr;
+        }
         // If it's a comparison and one side is not a pointer (and not null), 
         // we might be trying to compare a result code (i32) with a pointer.
         // In TSN, pointers can be compared with null.
@@ -4301,7 +4313,7 @@ export class CodeGenerator {
       return className;
     }
 
-    Deno.writeTextFileSync("codegen_debug.txt", `--- instantiateClass: ${className} as ${mangledName}\n`, { append: true });
+    // Deno.writeTextFileSync("codegen_debug.txt", `--- instantiateClass: ${className} as ${mangledName}\n`, { append: true });
     this.instantiatedNames.add(mangledName);
 
     const oldOutput = this.currentOutput;
@@ -4525,15 +4537,15 @@ export class CodeGenerator {
 
   private scanAndInstantiateNewExpr(stmts: Statement[]): void {
     if (!stmts) return;
-    Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: scanning ${stmts.length} statements\n`, { append: true });
+    // Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: scanning ${stmts.length} statements\n`, { append: true });
     const scanExpr = (expr: Expression): void => {
       if (!expr) return;
-      // Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: expr.kind=${expr.kind}\n`, { append: true });
+      // // Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: expr.kind=${expr.kind}\n`, { append: true });
       
       if (expr.kind === ASTKind.NewExpr) {
         const newExpr = expr as NewExpr;
         let className = newExpr.className;
-        Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: NewExpr className=${className}, genericArgs=${newExpr.genericArgs?.length}\n`, { append: true });
+        // Deno.writeTextFileSync("codegen_debug.txt", `--- scanAndInstantiateNewExpr: NewExpr className=${className}, genericArgs=${newExpr.genericArgs?.length}\n`, { append: true });
         if (newExpr.genericArgs && newExpr.genericArgs.length > 0) {
           className = this.instantiateClass(newExpr.className, newExpr.genericArgs);
         }

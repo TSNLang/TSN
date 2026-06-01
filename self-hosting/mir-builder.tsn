@@ -1,7 +1,7 @@
 declare function print_i32(n: i32): void;
 import { Array } from "std:array";
 import { log } from "std:console";
-import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, MIRConstant, MIRGlobal, MIRInst, MIRBinaryInst, MIRLoadInst, MIRStoreInst, MIRCallInst, MIRReturnInst, MIRBranchInst, MIRJumpInst, MIRAllocaInst, MIRGetElementPtrInst, MIRIncrefInst, MIRDecrefInst } from "./mir.tsn";
+import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, MIRConstant, MIRGlobal, MIRInst, MIRBinaryInst, MIRLoadInst, MIRStoreInst, MIRCallInst, MIRReturnInst, MIRBranchInst, MIRJumpInst, MIRAllocaInst, MIRGetElementPtrInst, MIRIncrefInst, MIRDecrefInst, MIRIntToPtrInst, MIRPtrToIntInst } from "./mir.tsn";
 import { Program, Declaration, ClassMemberDecl, Stmt, BlockStmt, VarDeclStmt, ExprStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, CallExpr, BinaryExpr } from "./ast.tsn";
 
 export class MIRBuilder {
@@ -10,6 +10,8 @@ export class MIRBuilder {
     private currentBlockId: i32;
     private locals: Array<string>;
     private localAddrs: Array<MIRValue>;
+    private paramNames: Array<string>;
+    private paramTypeTexts: Array<string>;
 
     constructor(moduleName: string) {
         this.module = new MIRModule(moduleName);
@@ -17,6 +19,8 @@ export class MIRBuilder {
         this.currentBlockId = -1;
         this.locals = new Array<string>();
         this.localAddrs = new Array<MIRValue>();
+        this.paramNames = new Array<string>();
+        this.paramTypeTexts = new Array<string>();
     }
 
     public build(program: Program): MIRModule {
@@ -45,6 +49,9 @@ export class MIRBuilder {
         let detailA = decl.detailA;
         log("MIRBuilder.buildFunction: detailA read = " + detailA);
         
+        // Clear locals from previous function
+        this.clearLocals();
+        
         // Parse return type from detailA (e.g., "i32", "void")
         let returnType = this.parseType(decl.detailA);
         log("MIRBuilder.buildFunction: returnType parsed");
@@ -54,15 +61,17 @@ export class MIRBuilder {
         // Add parameters
         log("MIRBuilder.buildFunction: params.length = ");
         print_i32(decl.params.length);
+        // Reset param names for this function
+        this.paramNames = new Array<string>();
+        this.paramTypeTexts = new Array<string>();
         for (let i = 0; i < decl.params.length; i = i + 1) {
             let param = decl.params.get(i);
             let paramType = this.parseType(param.typeText);
             let paramReg = func.createRegister(paramType);
-            // BUGFIX: Add parameter to locals table BEFORE pushing (ownership transfer)
-            this.addLocal(param.name, paramReg);
-            let paramType2 = this.parseType(param.typeText);
-            let paramReg2 = func.createRegister(paramType2);
-            func.params.push(paramReg2);
+            // Track param name and type text; func.params gets ownership of paramReg
+            this.paramNames.push(param.name);
+            this.paramTypeTexts.push(param.typeText);
+            func.params.push(paramReg);
         }
         
         log("MIRBuilder.buildFunction: checking body");
@@ -256,6 +265,14 @@ export class MIRBuilder {
                 return this.createConstant("0", new MIRType("ptr", true, 8));
             }
             // Look up variable in symbol table
+            // First check if it's a function parameter (accessed by register id directly, no load needed)
+            let paramIdx = this.findParamIndex(id.name);
+            if (paramIdx >= 0) {
+                // Re-create the param register by index (same id as when it was created: params are r0, r1, ...)
+                let typeText = this.paramTypeTexts.get(paramIdx);
+                let paramType = this.parseType(typeText);
+                return new MIRRegister(paramType, paramIdx);
+            }
             let addr = this.findLocal(id.name);
             if (addr != null) {
                 // Load the value from the address
@@ -359,6 +376,8 @@ export class MIRBuilder {
     private buildMethod(className: string, member: ClassMemberDecl): void {
         let fullName = className + "." + member.name;
         log("MIRBuilder.buildMethod: " + fullName);
+        // Clear locals from previous function
+        this.clearLocals();
         let func = new MIRFunction(fullName, new MIRType("i32", false, 4));
         
         let entryId = func.createBlock("entry");
@@ -402,20 +421,35 @@ export class MIRBuilder {
                 let ptrType = new MIRType("ptr", true, 8);
                 return this.createCall("_T.concat$P.ptr.ptr", args, ptrType);
             }
-            // Pointer arithmetic: if one operand is ptr and other is int, cast int to ptr
+            // Pointer arithmetic: if one operand is ptr and other is int, perform i64-based pointer arithmetic
             if (left.valueType.isPointer && !right.valueType.isPointer) {
-                let rightCasted = this.createIntToPtr(right);
-                let result = this.currentFunction.createRegister(left.valueType);
-                let inst = new MIRBinaryInst(op, result, left, rightCasted);
+                let baseInt = this.createPtrToInt(left);
+                let resultInt = this.currentFunction.createRegister(new MIRType("i64", false, 8));
+                let inst = new MIRBinaryInst(op, resultInt, baseInt, right);
                 this.getCurrentBlock().instructions.push(inst);
-                return result;
+                return this.createIntToPtr(resultInt);
             } else if (!left.valueType.isPointer && right.valueType.isPointer) {
-                let leftCasted = this.createIntToPtr(left);
-                let result = this.currentFunction.createRegister(right.valueType);
-                let inst = new MIRBinaryInst(op, result, leftCasted, right);
-                this.getCurrentBlock().instructions.push(inst);
-                return result;
+                if (op == "+") {
+                    let baseInt = this.createPtrToInt(right);
+                    let resultInt = this.currentFunction.createRegister(new MIRType("i64", false, 8));
+                    let inst = new MIRBinaryInst(op, resultInt, left, baseInt);
+                    this.getCurrentBlock().instructions.push(inst);
+                    return this.createIntToPtr(resultInt);
+                }
             }
+        } else if (left.valueType.isPointer || right.valueType.isPointer) {
+            let leftInt = left;
+            if (left.valueType.isPointer) {
+                leftInt = this.createPtrToInt(left);
+            }
+            let rightInt = right;
+            if (right.valueType.isPointer) {
+                rightInt = this.createPtrToInt(right);
+            }
+            let resultInt = this.currentFunction.createRegister(new MIRType("i64", false, 8));
+            let inst = new MIRBinaryInst(op, resultInt, leftInt, rightInt);
+            this.getCurrentBlock().instructions.push(inst);
+            return this.createIntToPtr(resultInt);
         }
         let result = this.currentFunction.createRegister(resultType);
         let inst = new MIRBinaryInst(op, result, left, right);
@@ -504,6 +538,14 @@ export class MIRBuilder {
         return result;
     }
 
+    public createPtrToInt(value: MIRValue): MIRRegister {
+        // Cast pointer to integer using ptrtoint instruction
+        let result = this.currentFunction.createRegister(new MIRType("i64", false, 8));
+        let inst = new MIRPtrToIntInst(result, value);
+        this.getCurrentBlock().instructions.push(inst);
+        return result;
+    }
+
     private getCurrentBlock(): MIRBasicBlock {
         return this.currentFunction.blocks.get(this.currentBlockId);
     }
@@ -523,9 +565,27 @@ export class MIRBuilder {
         }
         return null as MIRValue;
     }
+
+    private findParamIndex(name: string): i32 {
+        let i = 0;
+        while (i < this.paramNames.length) {
+            if (this.paramNames.get(i) == name) {
+                return i;
+            }
+            i = i + 1;
+        }
+        return -1;
+    }
     
     private clearLocals(): void {
+        log("MIRBuilder.clearLocals: start");
         this.locals = new Array<string>();
+        log("MIRBuilder.clearLocals: locals reset");
         this.localAddrs = new Array<MIRValue>();
+        log("MIRBuilder.clearLocals: localAddrs reset");
+        this.paramNames = new Array<string>();
+        log("MIRBuilder.clearLocals: paramNames reset");
+        this.paramTypeTexts = new Array<string>();
+        log("MIRBuilder.clearLocals: done");
     }
 }
