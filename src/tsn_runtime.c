@@ -119,3 +119,19 @@ int32_t HEAP_ZERO_MEMORY = 8;
 int32_t FS_IO_ERROR = -1;
 int32_t FS_NOT_FOUND = -2;
 int32_t FS_OK = 0;
+
+// Debug logging functions
+void debug_log_i32(int32_t val) {
+    printf("DEBUG_I32: %d\n", val);
+    fflush(stdout);
+}
+
+void debug_log_i64(int64_t val) {
+    printf("DEBUG_I64: %lld\n", val);
+    fflush(stdout);
+}
+
+void debug_log_ptr(void* ptr) {
+    printf("DEBUG_PTR: %p\n", ptr);
+    fflush(stdout);
+}

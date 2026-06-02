@@ -80,6 +80,11 @@ declare function tsn_strlen(s: ptr): i32;
 declare function tsn_write_i32(addr: ptr, val: i32): void;
 declare function tsn_memcpy(dest: ptr, src: ptr, n: i32): void;
 
+// Debug logging functions
+declare function debug_log_i32(val: i32): void;
+declare function debug_log_i64(val: i64): void;
+declare function debug_log_ptr(ptr: ptr): void;
+
 // Helper to convert C string (char*) to TSN string
 @unsafe function cstringToString(cstr: ptr): string {
     if (cstr == null as ptr) {
@@ -93,21 +98,21 @@ declare function tsn_memcpy(dest: ptr, src: ptr, n: i32): void;
         return "";
     }
     
-    // Allocate TSN string: 8 bytes refcount + 8 bytes length + data
-    let totalSize = 16 + len;
+    // Allocate TSN string: 4 bytes refcount + 4 bytes length + data + null terminator
+    // Need null terminator for C API compatibility (e.g., file operations)
+    let totalSize = 8 + len + 1;
     let buf = tsn_alloc(totalSize as i64);
     
-    // Set refcount = 1
-    let pRefCount = buf as ptr;
-    tsn_write_i32(pRefCount, 1);
+    // Set refcount = 1 at offset 0
+    tsn_write_i32(buf, 1);
     
-    // Set length
-    let pLength = (buf as i64 + 8 as i64) as ptr;
+    // Set length at offset 4
+    let pLength = (buf as i64 + 4 as i64) as ptr;
     tsn_write_i32(pLength, len);
     
-    // Copy data
-    let dataDest = (buf as i64 + 16 as i64) as ptr;
-    tsn_memcpy(dataDest, cstr, len);
+    // Copy data at offset 8, including null terminator
+    let dataDest = (buf as i64 + 8 as i64) as ptr;
+    tsn_memcpy(dataDest, cstr, len + 1);
     
     return buf as string;
 }
@@ -115,15 +120,15 @@ declare function tsn_memcpy(dest: ptr, src: ptr, n: i32): void;
 @unsafe function main(): i32 {
     log("=== TSN Compiler Starting ===");
     
-    let argc = tsn_get_argc();
-    if (argc < 2) {
+    let argCount = tsn_get_argc();
+    if (argCount < 2) {
         log("Usage: tsn <input.tsn> [output.ll]");
         return 1;
     }
 
     let inputPath = cstringToString(tsn_get_argv(1));
     let outputPath = "";
-    if (argc > 2) {
+    if (argCount > 2) {
         outputPath = cstringToString(tsn_get_argv(2));
     } else {
         outputPath = "output.ll";
