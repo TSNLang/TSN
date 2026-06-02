@@ -115,13 +115,20 @@ declare function tsn_memcpy(dest: ptr, src: ptr, n: i32): void;
 @unsafe function main(): i32 {
     log("=== TSN Compiler Starting ===");
     
-    // TEMPORARY WORKAROUND: Hardcode path until args() and string conversion are fixed
-    // TODO: Fix ArgsIterator.toArray() crash and cstringToString implementation
-    let inputPath = "test-minimal.tsn";
-    let outputPath = "test-minimal.ll";
-    
-    log("=== Using hardcoded paths (TODO: fix argument parsing) ===");
+    let argc = tsn_get_argc();
+    if (argc < 2) {
+        log("Usage: tsn <input.tsn> [output.ll]");
+        return 1;
+    }
 
+    let inputPath = cstringToString(tsn_get_argv(1));
+    let outputPath = "";
+    if (argc > 2) {
+        outputPath = cstringToString(tsn_get_argv(2));
+    } else {
+        outputPath = "output.ll";
+    }
+    
     log("=== TSN SELF-HOSTING COMPILER ===");
     log("Compiling file:");
     log(inputPath);
@@ -154,6 +161,8 @@ declare function tsn_memcpy(dest: ptr, src: ptr, n: i32): void;
 
     if (outputPath != "") {
         log("Writing LLVM IR to file...");
+        log("Actual output path: ");
+        log(outputPath);
         let writeRes = writeText(outputPath, ir);
         if (!writeRes.isOk()) {
             log("FAILED to write output file!");

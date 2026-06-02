@@ -362,8 +362,18 @@ export class ASTParser {
     }
 
     @unsafe private parseEquality(): Expr {
-        let left = this.parseAdditive();
+        let left = this.parseComparison();
         while (this.peekKind() == TokenKind.EqualEqual || this.peekKind() == TokenKind.BangEqual) {
+            let op = this.advanceLexeme();
+            let right = this.parseComparison();
+            left = new BinaryExpr(op, left, right);
+        }
+        return left;
+    }
+
+    @unsafe private parseComparison(): Expr {
+        let left = this.parseAdditive();
+        while (this.peekKind() == TokenKind.Less || this.peekKind() == TokenKind.Greater || this.peekKind() == TokenKind.LessEqual || this.peekKind() == TokenKind.GreaterEqual) {
             let op = this.advanceLexeme();
             let right = this.parseAdditive();
             left = new BinaryExpr(op, left, right);
@@ -454,15 +464,21 @@ export class ASTParser {
 
     @unsafe private parseTypeText(): string {
         let res = "";
+        let parenDepth = 0;
+        let angleDepth = 0;
         while (!this.isAtEnd()) {
             let k = this.peekKind();
-            if (k == TokenKind.RParen || k == TokenKind.Comma || k == TokenKind.RBrace || k == TokenKind.Semicolon || k == TokenKind.Equal || k == TokenKind.LBrace) break;
+            if (parenDepth == 0 && angleDepth == 0) {
+                if (k == TokenKind.RParen || k == TokenKind.Comma || k == TokenKind.RBrace || k == TokenKind.Semicolon || k == TokenKind.Equal || k == TokenKind.LBrace) break;
+            }
+            if (k == TokenKind.LParen) parenDepth = parenDepth + 1;
+            if (k == TokenKind.RParen) parenDepth = parenDepth - 1;
+            if (k == TokenKind.Less) angleDepth = angleDepth + 1;
+            if (k == TokenKind.Greater) angleDepth = angleDepth - 1;
+            
             let lex = this.advanceLexeme();
             res = res + lex;
         }
-        // Double incref: one canceled by @unsafe cleanup, one stays for caller
-        class_incref(res);
-        class_incref(res);
         return res;
     }
 

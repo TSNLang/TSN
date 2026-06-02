@@ -239,6 +239,10 @@ export class MIRBuilder {
         log("analyzeExpression: expr.kind = " + expr.kind);
         if (expr.kind == "NumberLiteral") {
             let lit = expr as NumberLiteral;
+            // Check if it's a float
+            if (lit.value.indexOf(".") != -1) {
+                return this.createConstant(lit.value, new MIRType("f32", false, 4));
+            }
             return this.createConstant(lit.value, new MIRType("i32", false, 4));
         } else if (expr.kind == "StringLiteral") {
             let lit = expr as StringLiteral;
@@ -255,6 +259,21 @@ export class MIRBuilder {
             return this.createConstant("0", new MIRType("ptr", true, 8));
         } else if (expr.kind == "BinaryExpr") {
             let bin = expr as BinaryExpr;
+            // Handle assignment separately
+            if (bin.operator == "=") {
+                // Left side must be an identifier (variable name)
+                if (bin.left.kind == "Identifier") {
+                    let id = bin.left as IdentifierExpr;
+                    let addr = this.findLocal(id.name);
+                    if (addr != null) {
+                        let right = this.analyzeExpression(bin.right);
+                        this.createStore(right, addr);
+                        return right;
+                    }
+                }
+                // Fallback: just evaluate right side
+                return this.analyzeExpression(bin.right);
+            }
             let left = this.analyzeExpression(bin.left);
             let right = this.analyzeExpression(bin.right);
             return this.createBinary(bin.operator, left, right);
@@ -327,24 +346,24 @@ export class MIRBuilder {
             // Hardcode return types for known functions
             let returnType = new MIRType("i32", false, 4);
             // FFI functions that return pointers
-            if (calleeName == "GetProcessHeap") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "tsn_HeapAlloc") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "tsn_HeapReAlloc") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "HeapAlloc") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "GetStdHandle") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "CreateFileA") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "ArgsIterator") returnType = new MIRType("ptr", true, 8);
+            if (calleeName == "GetProcessHeap") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "tsn_HeapAlloc") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "tsn_HeapReAlloc") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "HeapAlloc") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "GetStdHandle") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "CreateFileA") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "ArgsIterator") { returnType = new MIRType("ptr", true, 8); }
             // Memory allocation functions
-            else if (calleeName == "alloc") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "allocate") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "allocOwned") returnType = new MIRType("ptr", true, 8);
-            else if (calleeName == "offset") returnType = new MIRType("ptr", true, 8);
+            else if (calleeName == "alloc") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "allocate") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "allocOwned") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "offset") { returnType = new MIRType("ptr", true, 8); }
             // Array/collection methods that return elements (assume ptr for objects)
-            else if (calleeName == "get") returnType = new MIRType("ptr", true, 8);
+            else if (calleeName == "get") { returnType = new MIRType("ptr", true, 8); }
             // Result/Option methods
-            else if (calleeName == "value") returnType = new MIRType("ptr", true, 8);
+            else if (calleeName == "value") { returnType = new MIRType("ptr", true, 8); }
             // Lexer methods
-            else if (calleeName == "tokenize") returnType = new MIRType("ptr", true, 8);
+            else if (calleeName == "tokenize") { returnType = new MIRType("ptr", true, 8); }
             return this.createCall(calleeName, args, returnType);
         } else if (expr.kind == "NewExpr") {
             // new ClassName(...) returns a pointer to the object

@@ -752,13 +752,19 @@ export class MIRCodegen {
     }
 
     private joinOutput(): string {
-        let result = "";
-        let i = 0;
-        while (i < this.output.length) {
-            result = result + this.output.get(i);
-            i = i + 1;
-        }
-        return result;
+        if (this.output.length == 0) return "";
+        return this.recursiveJoin(0, this.output.length);
+    }
+
+    private recursiveJoin(start: i32, end: i32): string {
+        let count = end - start;
+        if (count == 0) return "";
+        if (count == 1) return this.output.get(start);
+        
+        let mid = start + (count / 2);
+        let left = this.recursiveJoin(start, mid);
+        let right = this.recursiveJoin(mid, end);
+        return left + right;
     }
 }
 
