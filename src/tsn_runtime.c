@@ -91,3 +91,13 @@ char* tsn_get_argv(int32_t index) {
     if (index < 0 || index >= __tsn_argc) return NULL;
     return __tsn_argv[index];
 }
+
+// Stdlib constants - exported for multi-module linking
+// Undefine Windows macros so we can define them as globals for LLVM IR
+#ifdef HEAP_ZERO_MEMORY
+#undef HEAP_ZERO_MEMORY
+#endif
+int32_t HEAP_ZERO_MEMORY = 8;
+int32_t FS_IO_ERROR = -1;
+int32_t FS_NOT_FOUND = -2;
+int32_t FS_OK = 0;

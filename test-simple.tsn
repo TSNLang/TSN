@@ -1,0 +1,5 @@
+import "std/console.tsn";
+
+fn main() {
+    console.println("Hello from TSN!");
+}

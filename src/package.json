@@ -9,5 +9,9 @@
     "compile:bun": "bun src/main.ts",
     "compile:deno": "deno run --allow-read --allow-write --allow-run src/main.ts"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@types/node": "^25.9.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
 }
