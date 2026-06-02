@@ -37,6 +37,24 @@ void tsn_exit(int32_t code) {
     exit(code);
 }
 
+// Simple memory allocator for TSN - just wraps malloc
+void* tsn_alloc(int64_t size) {
+    return malloc((size_t)size);
+}
+
+// Helper functions for string conversion
+int32_t tsn_strlen(const char* s) {
+    return (int32_t)strlen(s);
+}
+
+void tsn_write_i32(void* addr, int32_t val) {
+    *((int32_t*)addr) = val;
+}
+
+void tsn_memcpy(void* dest, const void* src, int32_t n) {
+    memcpy(dest, src, (size_t)n);
+}
+
 void print_i32(int32_t n) { printf("%d\n", n); }
 void print_ptr(void* p) { printf("%p\n", p); }
 void print_f32(float f) { printf("%f\n", f); }

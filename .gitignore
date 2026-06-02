@@ -27,6 +27,7 @@ build/
 # Temporary test files
 test_*.ts
 test_*.tsn
+test*
 !test_class.ts
 !test_struct_vs_class.ts
 !test_namespace.ts
