@@ -307,10 +307,20 @@ export class MIRBuilder {
                 } else if (call.callee.kind == "MemberExpr") {
                     // Handle qualified calls like memory.offset()
                     let memberExpr = call.callee as MemberExpr;
-                    // For now, just use the member name (function name)
-                    // In a real compiler, we'd resolve the module and check exports
                     calleeName = memberExpr.member;
                     log("CallExpr: MemberExpr callee, member = " + calleeName);
+                    
+                    // Special case: ptr.get() with no args = pointer dereference
+                    if (calleeName == "get" && call.args.length == 0) {
+                        log("CallExpr: detected ptr.get() dereference pattern");
+                        let ptrValue = this.analyzeExpression(memberExpr.object);
+                        // Determine result type from context - default to i32
+                        let resultType = new MIRType("i32", false, 4);
+                        let resultReg = this.currentFunction.createRegister(resultType);
+                        let loadInst = new MIRLoadInst(resultReg, ptrValue);
+                        this.getCurrentBlock().instructions.push(loadInst);
+                        return resultReg;
+                    }
                 }
             }
             log("CallExpr: calling createCall for " + calleeName);
