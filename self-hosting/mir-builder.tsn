@@ -4,6 +4,117 @@ import { log } from "std:console";
 import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, MIRConstant, MIRGlobal, MIRInst, MIRBinaryInst, MIRLoadInst, MIRStoreInst, MIRCallInst, MIRReturnInst, MIRBranchInst, MIRJumpInst, MIRAllocaInst, MIRGetElementPtrInst, MIRIncrefInst, MIRDecrefInst, MIRIntToPtrInst, MIRPtrToIntInst } from "./mir.tsn";
 import { Program, Declaration, ClassMemberDecl, Stmt, BlockStmt, VarDeclStmt, ExprStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, CallExpr, BinaryExpr } from "./ast.tsn";
 
+// Class Registry: Lưu thông tin metadata của các class
+export class ClassFieldInfo {
+    public name: string;
+    public typeText: string;
+    public offset: i32;
+    public index: i32;
+
+    constructor(name: string, typeText: string, index: i32) {
+        this.name = name;
+        this.typeText = typeText;
+        this.index = index;
+        this.offset = 0; // Sẽ được tính toán sau
+    }
+}
+
+export class ClassMethodInfo {
+    public name: string;
+    public index: i32;
+
+    constructor(name: string, index: i32) {
+        this.name = name;
+        this.index = index;
+    }
+}
+
+export class ClassInfo {
+    public name: string;
+    public fields: Array<ClassFieldInfo>;
+    public methods: Array<ClassMethodInfo>;
+    public size: i32;
+
+    constructor(name: string) {
+        this.name = name;
+        this.fields = new Array<ClassFieldInfo>();
+        this.methods = new Array<ClassMethodInfo>();
+        this.size = 8; // Bắt đầu với 8 bytes cho vtable pointer
+    }
+
+    public addField(field: ClassFieldInfo): void {
+        this.fields.push(field);
+    }
+
+    public addMethod(method: ClassMethodInfo): void {
+        this.methods.push(method);
+    }
+
+    public getFieldByName(name: string): ClassFieldInfo {
+        for (let i = 0; i < this.fields.length; i = i + 1) {
+            let f = this.fields.get(i);
+            if (f.name == name) {
+                return f;
+            }
+        }
+        return null as ClassFieldInfo;
+    }
+
+    public getFieldIndex(fieldName: string): i32 {
+        for (let i = 0; i < this.fields.length; i = i + 1) {
+            let f = this.fields.get(i);
+            if (f.name == fieldName) {
+                return f.index;
+            }
+        }
+        return -1;
+    }
+
+    public getFieldOffset(fieldName: string): i32 {
+        for (let i = 0; i < this.fields.length; i = i + 1) {
+            let f = this.fields.get(i);
+            if (f.name == fieldName) {
+                return f.offset;
+            }
+        }
+        return -1;
+    }
+
+    public getMethodIndex(methodName: string): i32 {
+        for (let i = 0; i < this.methods.length; i = i + 1) {
+            let m = this.methods.get(i);
+            if (m.name == methodName) {
+                return m.index;
+            }
+        }
+        return -1;
+    }
+
+    public computeFieldOffsets(): void {
+        log("ClassInfo.computeFieldOffsets for " + this.name);
+        let currentOffset = 8; // Offset 0 là vtable pointer
+        for (let i = 0; i < this.fields.length; i = i + 1) {
+            let field = this.fields.get(i);
+            field.offset = currentOffset;
+            
+            // Tính kích thước của field dựa trên type
+            let fieldSize = 8; // Mặc định là 8 bytes (pointer hoặc i64)
+            if (field.typeText == "i32") fieldSize = 4;
+            else if (field.typeText == "i16") fieldSize = 2;
+            else if (field.typeText == "i8") fieldSize = 1;
+            else if (field.typeText == "bool") fieldSize = 1;
+            else if (field.typeText == "f32") fieldSize = 4;
+            else if (field.typeText == "f64") fieldSize = 8;
+            else if (field.typeText == "i64") fieldSize = 8;
+            
+            currentOffset = currentOffset + fieldSize;
+        }
+        this.size = currentOffset;
+        log("ClassInfo: total size = ");
+        print_i32(this.size);
+    }
+}
+
 export class MIRBuilder {
     private module: MIRModule;
     private currentFunction: MIRFunction;
@@ -12,6 +123,8 @@ export class MIRBuilder {
     private localAddrs: Array<MIRValue>;
     private paramNames: Array<string>;
     private paramTypeTexts: Array<string>;
+    private classRegistry: Array<ClassInfo>;
+    private classNames: Array<string>;
 
     constructor(moduleName: string) {
         this.module = new MIRModule(moduleName);
@@ -21,13 +134,35 @@ export class MIRBuilder {
         this.localAddrs = new Array<MIRValue>();
         this.paramNames = new Array<string>();
         this.paramTypeTexts = new Array<string>();
+        this.classRegistry = new Array<ClassInfo>();
+        this.classNames = new Array<string>();
     }
 
     public build(program: Program): MIRModule {
         log("MIRBuilder.build: start");
+        
+        // Phase 1: Collect class metadata
+        log("MIRBuilder.build: Phase 1 - Collecting class metadata");
+        for (let i = 0; i < program.declarations.length; i = i + 1) {
+            let decl = program.declarations.get(i);
+            if (decl.kind == "ClassDecl") {
+                this.collectClassMetadata(decl);
+            }
+        }
+        
+        // Phase 2: Compute field offsets for all classes
+        log("MIRBuilder.build: Phase 2 - Computing field offsets");
+        for (let i = 0; i < this.classRegistry.length; i = i + 1) {
+            let classInfo = this.classRegistry.get(i);
+            classInfo.computeFieldOffsets();
+        }
+        
+        // Phase 3: Build functions and methods
+        log("MIRBuilder.build: Phase 3 - Building functions");
         for (let i = 0; i < program.declarations.length; i = i + 1) {
             this.buildDeclaration(program.declarations.get(i));
         }
+        
         log("MIRBuilder.build: complete");
         return this.module;
     }
@@ -41,6 +176,47 @@ export class MIRBuilder {
         } else if (decl.kind == "ClassDecl") {
             this.buildClass(decl);
         }
+    }
+
+    private collectClassMetadata(decl: Declaration): void {
+        log("MIRBuilder.collectClassMetadata: " + decl.name);
+        
+        let classInfo = new ClassInfo(decl.name);
+        
+        // Collect fields and methods from class members
+        if (decl.members != null) {
+            let fieldIndex = 0;
+            for (let i = 0; i < decl.members.length; i = i + 1) {
+                let member = decl.members.get(i);
+                
+                if (member.kind == "FieldDecl") {
+                    // Thu thập thông tin field
+                    let fieldInfo = new ClassFieldInfo(member.name, member.typeText, fieldIndex);
+                    classInfo.addField(fieldInfo);
+                    log("  Field: " + member.name + " : " + member.typeText);
+                    fieldIndex = fieldIndex + 1;
+                } else if (member.kind == "MethodDecl" || member.kind == "ConstructorDecl") {
+                    // Thu thập tên method
+                    let methodInfo = new ClassMethodInfo(member.name, classInfo.methods.length);
+                    classInfo.addMethod(methodInfo);
+                    log("  Method: " + member.name);
+                }
+            }
+        }
+        
+        // Lưu vào registry
+        this.classRegistry.push(classInfo);
+        this.classNames.push(decl.name);
+        log("MIRBuilder: Registered class " + decl.name);
+    }
+
+    private getClassInfo(className: string): ClassInfo {
+        for (let i = 0; i < this.classNames.length; i = i + 1) {
+            if (this.classNames.get(i) == className) {
+                return this.classRegistry.get(i);
+            }
+        }
+        return null as ClassInfo;
     }
 
     private buildFunction(decl: Declaration): void {
