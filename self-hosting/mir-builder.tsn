@@ -584,20 +584,17 @@ export class MIRBuilder {
         
         // Clear locals from previous function
         this.clearLocals();
-        
-        // Get ClassInfo for return type parsing and 'this' parameter
-        let classInfo = this.getClassInfo(className);
+
+        // Parse return type
         let returnType = this.parseType(member.returnTypeText);
-        
-        // Create function and add 'this' as the first parameter
         let func = this.createFunction(fullName, returnType);
         
         // Add 'this' parameter
-        let thisParamType = new MIRType(className, true, 8); // 'this' is a pointer to the class
-        let thisParamReg = func.createRegister(thisParamType);
-        this.paramNames.push("this");
-        this.paramTypeTexts.push(className); // Use class name as typeText for 'this'
-        func.params.push(thisParamReg);
+        let thisType = new MIRType(className, true, 8); // 'this' is a pointer to the class instance
+        let thisReg = func.createRegister(thisType);
+        func.params.push(thisReg);
+        this.paramNames.push("this"); // Track 'this' as a parameter
+        this.paramTypeTexts.push(className);
 
         // Add other parameters
         if (member.params != null) {
@@ -610,10 +607,9 @@ export class MIRBuilder {
                 func.params.push(paramReg);
             }
         }
-        
-        // Build function body if it exists
-        if (member.hasBody) {
-            log("MIRBuilder.buildMethod: body exists, analyzing");
+
+        // Build method body if it exists
+        if (member.body != null) {
             this.analyzeStatement(member.body);
             
             // Check if current block has a terminator
@@ -644,6 +640,7 @@ export class MIRBuilder {
                 this.createReturn(defaultVal);
             }
         }
+
         this.module.functions.push(func);
     }
 
