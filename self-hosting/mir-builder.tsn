@@ -581,15 +581,69 @@ export class MIRBuilder {
     private buildMethod(className: string, member: ClassMemberDecl): void {
         let fullName = className + "." + member.name;
         log("MIRBuilder.buildMethod: " + fullName);
+        
         // Clear locals from previous function
         this.clearLocals();
-        let func = new MIRFunction(fullName, new MIRType("i32", false, 4));
         
-        let entryId = func.createBlock("entry");
-        this.currentFunction = func;
-        this.currentBlockId = entryId;
+        // Get ClassInfo for return type parsing and 'this' parameter
+        let classInfo = this.getClassInfo(className);
+        let returnType = this.parseType(member.returnTypeText);
         
-        this.createReturn(this.createConstant("0", new MIRType("i32", false, 4)));
+        // Create function and add 'this' as the first parameter
+        let func = this.createFunction(fullName, returnType);
+        
+        // Add 'this' parameter
+        let thisParamType = new MIRType(className, true, 8); // 'this' is a pointer to the class
+        let thisParamReg = func.createRegister(thisParamType);
+        this.paramNames.push("this");
+        this.paramTypeTexts.push(className); // Use class name as typeText for 'this'
+        func.params.push(thisParamReg);
+
+        // Add other parameters
+        if (member.params != null) {
+            for (let i = 0; i < member.params.length; i = i + 1) {
+                let param = member.params.get(i);
+                let paramType = this.parseType(param.typeText);
+                let paramReg = func.createRegister(paramType);
+                this.paramNames.push(param.name);
+                this.paramTypeTexts.push(param.typeText);
+                func.params.push(paramReg);
+            }
+        }
+        
+        // Build function body if it exists
+        if (member.hasBody) {
+            log("MIRBuilder.buildMethod: body exists, analyzing");
+            this.analyzeStatement(member.body);
+            
+            // Check if current block has a terminator
+            let currentBlock = this.getCurrentBlock();
+            let hasTerminator = false;
+            if (currentBlock.instructions.length > 0) {
+                let lastInst = currentBlock.instructions.get(currentBlock.instructions.length - 1);
+                if (lastInst.opcode == "Return" || lastInst.opcode == "Branch" || lastInst.opcode == "Jump") {
+                    hasTerminator = true;
+                }
+            }
+            if (!hasTerminator) {
+                if (returnType.name == "void") {
+                    let voidVal = this.createConstant("0", new MIRType("void", false, 0));
+                    this.createReturn(voidVal);
+                } else {
+                    let defaultVal = this.createConstant("0", returnType);
+                    this.createReturn(defaultVal);
+                }
+            }
+        } else {
+            // No body - create default return
+            if (returnType.name == "void") {
+                let voidVal = this.createConstant("0", new MIRType("void", false, 0));
+                this.createReturn(voidVal);
+            } else {
+                let defaultVal = this.createConstant("0", returnType);
+                this.createReturn(defaultVal);
+            }
+        }
         this.module.functions.push(func);
     }
 
