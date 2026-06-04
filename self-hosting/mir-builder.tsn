@@ -581,22 +581,21 @@ export class MIRBuilder {
     private buildMethod(className: string, member: ClassMemberDecl): void {
         let fullName = className + "." + member.name;
         log("MIRBuilder.buildMethod: " + fullName);
-        
         // Clear locals from previous function
         this.clearLocals();
 
-        // Parse return type
         let returnType = this.parseType(member.returnTypeText);
         let func = this.createFunction(fullName, returnType);
         
-        // Add 'this' parameter
-        let thisType = new MIRType(className, true, 8); // 'this' is a pointer to the class instance
+        // Add implicit 'this' parameter as the first parameter
+        log("MIRBuilder.buildMethod: adding implicit 'this'");
+        let thisType = new MIRType("ptr", true, 8);
         let thisReg = func.createRegister(thisType);
+        this.paramNames.push("this");
+        this.paramTypeTexts.push(className); // Store class name as type text for 'this'
         func.params.push(thisReg);
-        this.paramNames.push("this"); // Track 'this' as a parameter
-        this.paramTypeTexts.push(className);
 
-        // Add other parameters
+        // Add regular parameters
         if (member.params != null) {
             for (let i = 0; i < member.params.length; i = i + 1) {
                 let param = member.params.get(i);
@@ -607,12 +606,13 @@ export class MIRBuilder {
                 func.params.push(paramReg);
             }
         }
-
-        // Build method body if it exists
-        if (member.body != null) {
+        
+        // Build method body
+        if (member.hasBody) {
+            log("MIRBuilder.buildMethod: building body");
             this.analyzeStatement(member.body);
             
-            // Check if current block has a terminator
+            // Default return if no terminator
             let currentBlock = this.getCurrentBlock();
             let hasTerminator = false;
             if (currentBlock.instructions.length > 0) {
@@ -623,24 +623,20 @@ export class MIRBuilder {
             }
             if (!hasTerminator) {
                 if (returnType.name == "void") {
-                    let voidVal = this.createConstant("0", new MIRType("void", false, 0));
-                    this.createReturn(voidVal);
+                    this.createReturn(this.createConstant("0", new MIRType("void", false, 0)));
                 } else {
-                    let defaultVal = this.createConstant("0", returnType);
-                    this.createReturn(defaultVal);
+                    this.createReturn(this.createConstant("0", returnType));
                 }
             }
         } else {
-            // No body - create default return
+            // Default return for empty methods
             if (returnType.name == "void") {
-                let voidVal = this.createConstant("0", new MIRType("void", false, 0));
-                this.createReturn(voidVal);
+                this.createReturn(this.createConstant("0", new MIRType("void", false, 0)));
             } else {
-                let defaultVal = this.createConstant("0", returnType);
-                this.createReturn(defaultVal);
+                this.createReturn(this.createConstant("0", returnType));
             }
         }
-
+        
         this.module.functions.push(func);
     }
 
