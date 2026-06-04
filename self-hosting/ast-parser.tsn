@@ -222,6 +222,8 @@ export class ASTParser {
             else break;
         }
 
+        // Skip 'function' keyword if present (for method declarations inside class)
+        let isFunctionKeyword = this.matchKind(TokenKind.Function);
         let isConstructor = this.matchKind(TokenKind.Constructor);
         let name = "";
         if (!isConstructor) {
@@ -265,7 +267,7 @@ export class ASTParser {
             }
         }
         
-        let m = new ClassMemberDecl(kind, name, "", isPublic, isPrivate, isProtected, isStatic, false, isConstructor, "", new Array<string>(), "", params, "", "", "", typeText, hasBody, 0, 0, 0, 0, 0, 0, 0, body);
+        let m = new ClassMemberDecl(kind, name, "", isPublic, isPrivate, isProtected, isStatic, false, isConstructor, "", new Array<string>(), "", params, "", typeText, "", typeText, hasBody, 0, 0, 0, 0, 0, 0, 0, body);
         return m;
     }
 

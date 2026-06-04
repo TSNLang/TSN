@@ -2,13 +2,14 @@ declare function print_i32(n: i32): void;
 import { Array } from "std:array";
 import { log } from "std:console";
 import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRRegister, MIRConstant, MIRGlobal, MIRInst, MIRBinaryInst, MIRLoadInst, MIRStoreInst, MIRCallInst, MIRReturnInst, MIRBranchInst, MIRJumpInst, MIRAllocaInst, MIRGetElementPtrInst, MIRIncrefInst, MIRDecrefInst, MIRIntToPtrInst, MIRPtrToIntInst } from "./mir.tsn";
-import { Program, Declaration, ClassMemberDecl, Stmt, BlockStmt, VarDeclStmt, ExprStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, CallExpr, BinaryExpr } from "./ast.tsn";
+import { Program, Declaration, ClassMemberDecl, Stmt, BlockStmt, VarDeclStmt, ExprStmt, ReturnStmt, IfStmt, WhileStmt, ForStmt, Expr, IdentifierExpr, NumberLiteral, StringLiteral, BooleanLiteral, CallExpr, BinaryExpr, MemberExpr, NewExpr, ThisExpr } from "./ast.tsn";
 
 // Class Registry: Lưu thông tin metadata của các class
 export class ClassFieldInfo {
     public name: string;
     public typeText: string;
     public offset: i32;
+    public offsetStr: string;
     public index: i32;
 
     constructor(name: string, typeText: string, index: i32) {
@@ -16,6 +17,7 @@ export class ClassFieldInfo {
         this.typeText = typeText;
         this.index = index;
         this.offset = 0; // Sẽ được tính toán sau
+        this.offsetStr = "0";
     }
 }
 
@@ -93,9 +95,11 @@ export class ClassInfo {
     public computeFieldOffsets(): void {
         log("ClassInfo.computeFieldOffsets for " + this.name);
         let currentOffset = 8; // Offset 0 là vtable pointer
+        let currentOffsetStr = "8";
         for (let i = 0; i < this.fields.length; i = i + 1) {
             let field = this.fields.get(i);
             field.offset = currentOffset;
+            field.offsetStr = currentOffsetStr;
             
             // Tính kích thước của field dựa trên type
             let fieldSize = 8; // Mặc định là 8 bytes (pointer hoặc i64)
@@ -108,6 +112,30 @@ export class ClassInfo {
             else if (field.typeText == "i64") fieldSize = 8;
             
             currentOffset = currentOffset + fieldSize;
+            // Update offset string using lookup
+            if (currentOffset == 9) currentOffsetStr = "9";
+            else if (currentOffset == 10) currentOffsetStr = "10";
+            else if (currentOffset == 12) currentOffsetStr = "12";
+            else if (currentOffset == 16) currentOffsetStr = "16";
+            else if (currentOffset == 20) currentOffsetStr = "20";
+            else if (currentOffset == 24) currentOffsetStr = "24";
+            else if (currentOffset == 28) currentOffsetStr = "28";
+            else if (currentOffset == 32) currentOffsetStr = "32";
+            else if (currentOffset == 36) currentOffsetStr = "36";
+            else if (currentOffset == 40) currentOffsetStr = "40";
+            else if (currentOffset == 44) currentOffsetStr = "44";
+            else if (currentOffset == 48) currentOffsetStr = "48";
+            else if (currentOffset == 56) currentOffsetStr = "56";
+            else if (currentOffset == 64) currentOffsetStr = "64";
+            else if (currentOffset == 72) currentOffsetStr = "72";
+            else if (currentOffset == 80) currentOffsetStr = "80";
+            else if (currentOffset == 88) currentOffsetStr = "88";
+            else if (currentOffset == 96) currentOffsetStr = "96";
+            else if (currentOffset == 104) currentOffsetStr = "104";
+            else if (currentOffset == 112) currentOffsetStr = "112";
+            else if (currentOffset == 120) currentOffsetStr = "120";
+            else if (currentOffset == 128) currentOffsetStr = "128";
+            else currentOffsetStr = "256"; // fallback for very large structs
         }
         this.size = currentOffset;
         log("ClassInfo: total size = ");
@@ -125,6 +153,7 @@ export class MIRBuilder {
     private paramTypeTexts: Array<string>;
     private classRegistry: Array<ClassInfo>;
     private classNames: Array<string>;
+    private currentClassName: string;
 
     constructor(moduleName: string) {
         this.module = new MIRModule(moduleName);
@@ -136,6 +165,7 @@ export class MIRBuilder {
         this.paramTypeTexts = new Array<string>();
         this.classRegistry = new Array<ClassInfo>();
         this.classNames = new Array<string>();
+        this.currentClassName = "";
     }
 
     public build(program: Program): MIRModule {
@@ -437,7 +467,7 @@ export class MIRBuilder {
             let bin = expr as BinaryExpr;
             // Handle assignment separately
             if (bin.operator == "=") {
-                // Left side must be an identifier (variable name)
+                // Left side: identifier (local variable)
                 if (bin.left.kind == "Identifier") {
                     let id = bin.left as IdentifierExpr;
                     let addr = this.findLocal(id.name);
@@ -445,6 +475,22 @@ export class MIRBuilder {
                         let right = this.analyzeExpression(bin.right);
                         this.createStore(right, addr);
                         return right;
+                    }
+                }
+                // Left side: MemberExpr (this.field = value)
+                if (bin.left.kind == "MemberExpr") {
+                    let mem = bin.left as MemberExpr;
+                    let objVal = this.analyzeExpression(mem.object);
+                    let classInfo = this.getClassInfo(this.currentClassName);
+                    if (classInfo != null) {
+                        let fieldInfo = classInfo.getFieldByName(mem.member);
+                        if (fieldInfo != null) {
+                            let right = this.analyzeExpression(bin.right);
+                            let fieldType = this.parseType(fieldInfo.typeText);
+                            let fieldPtr = this.createFieldPtr(objVal, fieldInfo.offsetStr, fieldType);
+                            this.createStore(right, fieldPtr);
+                            return right;
+                        }
                     }
                 }
                 // Fallback: just evaluate right side
@@ -552,13 +598,30 @@ export class MIRBuilder {
             // Call constructor (treated as regular function call)
             // Constructor returns ptr to allocated object
             return this.createCall(newExpr.className, args, new MIRType("ptr", true, 8));
+        } else if (expr.kind == "ThisExpr") {
+            // 'this' -> register %r0 (first param of method)
+            log("analyzeExpression: ThisExpr -> r0");
+            return new MIRRegister(new MIRType("ptr", true, 8), 0);
         } else if (expr.kind == "MemberExpr") {
-            // Field access: obj.field
-            // Level 2 compiler limitation: we don't have class definitions,
-            // so we can't properly compile field access
-            // For now, just return a dummy ptr value
-            // This will cause runtime errors but allows compilation to proceed
-            log("analyzeExpression: MemberExpr not fully supported in Level 2");
+            // Field access: obj.field -> load from field pointer
+            log("analyzeExpression: MemberExpr");
+            let mem = expr as MemberExpr;
+            let objVal = this.analyzeExpression(mem.object);
+            // Look up field in class registry using currentClassName
+            let classInfo = this.getClassInfo(this.currentClassName);
+            if (classInfo != null) {
+                let fieldInfo = classInfo.getFieldByName(mem.member);
+                if (fieldInfo != null) {
+                    log("analyzeExpression: MemberExpr field found: " + mem.member);
+                    // Compute field type for load
+                    let fieldType = this.parseType(fieldInfo.typeText);
+                    // Get field pointer via ptrtoint + add + inttoptr
+                    let fieldPtr = this.createFieldPtr(objVal, fieldInfo.offsetStr, fieldType);
+                    // Load value from field pointer
+                    return this.createLoadTyped(fieldPtr, fieldType);
+                }
+            }
+            log("analyzeExpression: MemberExpr field not found: " + mem.member);
             return this.createConstant("0", new MIRType("ptr", true, 8));
         }
         return this.createConstant("0", new MIRType("i32", false, 4));
@@ -581,9 +644,14 @@ export class MIRBuilder {
     private buildMethod(className: string, member: ClassMemberDecl): void {
         let fullName = className + "." + member.name;
         log("MIRBuilder.buildMethod: " + fullName);
+        // Set current class context for 'this' access
+        log("MIRBuilder.buildMethod: setting currentClassName");
+        this.currentClassName = className;
+        log("MIRBuilder.buildMethod: clearing locals");
         // Clear locals from previous function
         this.clearLocals();
 
+        log("MIRBuilder.buildMethod: parsing returnType, typeText = " + member.returnTypeText);
         let returnType = this.parseType(member.returnTypeText);
         let func = this.createFunction(fullName, returnType);
         
@@ -734,9 +802,31 @@ export class MIRBuilder {
         return result;
     }
 
+    public createLoadTyped(address: MIRValue, loadType: MIRType): MIRRegister {
+        // Load with explicit type (used for field access where we know the field type)
+        let result = this.currentFunction.createRegister(loadType);
+        let inst = new MIRLoadInst(result, address);
+        this.getCurrentBlock().instructions.push(inst);
+        return result;
+    }
+
     public createStore(value: MIRValue, address: MIRValue): void {
         let inst = new MIRStoreInst(value, address);
         this.getCurrentBlock().instructions.push(inst);
+    }
+
+    public createFieldPtr(thisVal: MIRValue, offsetStr: string, fieldType: MIRType): MIRRegister {
+        // Generate field pointer via ptrtoint + add + inttoptr
+        // %base_int = ptrtoint ptr %this to i64
+        let baseInt = this.createPtrToInt(thisVal);
+        // %field_int = add i64 %base_int, <offsetStr>
+        let offsetConst = this.createConstant(offsetStr, new MIRType("i64", false, 8));
+        let fieldIntReg = this.currentFunction.createRegister(new MIRType("i64", false, 8));
+        let addInst = new MIRBinaryInst("+", fieldIntReg, baseInt, offsetConst);
+        this.getCurrentBlock().instructions.push(addInst);
+        // %field_ptr = inttoptr i64 %field_int to ptr
+        let fieldPtr = this.createIntToPtr(fieldIntReg);
+        return fieldPtr;
     }
 
     public createCall(callee: string, args: Array<MIRValue>, returnType: MIRType): MIRRegister {

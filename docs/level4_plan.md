@@ -39,12 +39,12 @@ Hiện tại, `tsn_level3.exe` chỉ có thể biên dịch thành công các ch
 - **Tính toán Offset:** Đã xây dựng hàm computeFieldOffsets() để tính toán offset của từng thuộc tính trong struct, sử dụng cho lệnh GEP.
 - **Khai báo Struct trong Codegen:** (Sẽ được thực hiện trong giai đoạn MIRCodegen)
 
-### Giai đoạn 2: Hoàn thiện Method & Constructor Compilation ✅ HOÀN THÀNH
+### Giai đoạn 2: Hoàn thiện Method & Constructor Compilation (Đang tiến hành)
 - **Sửa `buildMethod`:** 
   - Đọc và phân tích toàn bộ danh sách tham số của phương thức.
   - Chèn tham số ẩn `this: ptr` vào đầu danh sách tham số.
   - Biên dịch toàn bộ các câu lệnh bên trong thân phương thức (`body`).
-- **Sửa `NewExpr` (Constructor):** (Sẽ thực hiện trong giai đoạn này)
+- **Sửa `NewExpr` (Constructor):**
   - Cấp phát bộ nhớ cho class qua `class_alloc`.
   - Khởi tạo con trỏ VTable.
   - Gọi hàm constructor với tham số `this` và các tham số khác.
