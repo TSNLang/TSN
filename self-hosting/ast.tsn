@@ -64,6 +64,7 @@ export enum TokenKind {
     As,
     From,
     Declare,
+    Extends,
 }
 
 export class Token {
@@ -151,6 +152,7 @@ export class Declaration {
     public detailA: string;
     public detailB: string;
     public detailC: string;
+    public baseClass: string;
     public members: Array<ClassMemberDecl>;
     public params: Array<ParameterInfo>;
     public body: Stmt;
@@ -162,6 +164,7 @@ export class Declaration {
         this.detailA = detailA;
         this.detailB = detailB;
         this.detailC = detailC;
+        this.baseClass = "";
         this.members = members;
         this.params = new Array<ParameterInfo>();
         this.body = body;

@@ -196,6 +196,13 @@ export class ASTParser {
             this.matchKind(TokenKind.Greater);
         }
         
+        let baseClass = "";
+        if (this.matchKind(TokenKind.Extends)) {
+            if (this.peekKind() == TokenKind.Identifier) {
+                baseClass = this.advanceLexeme();
+            }
+        }
+        
         let members = new Array<ClassMemberDecl>();
         if (this.matchKind(TokenKind.LBrace)) {
             while (!this.check(TokenKind.RBrace) && !this.isAtEnd()) {
@@ -204,7 +211,9 @@ export class ASTParser {
             this.matchKind(TokenKind.RBrace);
         }
         
-        return new Declaration("ClassDecl", name, "", "", "", members, null as Stmt);
+        let decl = new Declaration("ClassDecl", name, "", "", "", members, null as Stmt);
+        decl.baseClass = baseClass;
+        return decl;
     }
 
     @unsafe private parseClassMember(): ClassMemberDecl {
