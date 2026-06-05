@@ -36,12 +36,14 @@ export class ClassInfo {
     public fields: Array<ClassFieldInfo>;
     public methods: Array<ClassMethodInfo>;
     public size: i32;
+    public sizeStr: string;
 
     constructor(name: string) {
         this.name = name;
         this.fields = new Array<ClassFieldInfo>();
         this.methods = new Array<ClassMethodInfo>();
         this.size = 8; // Bắt đầu với 8 bytes cho vtable pointer
+        this.sizeStr = "8";
     }
 
     public addField(field: ClassFieldInfo): void {
@@ -138,6 +140,26 @@ export class ClassInfo {
             else currentOffsetStr = "256"; // fallback for very large structs
         }
         this.size = currentOffset;
+        // Update size string using lookup
+        if (currentOffset == 8) this.sizeStr = "8";
+        else if (currentOffset == 9) this.sizeStr = "9";
+        else if (currentOffset == 10) this.sizeStr = "10";
+        else if (currentOffset == 12) this.sizeStr = "12";
+        else if (currentOffset == 16) this.sizeStr = "16";
+        else if (currentOffset == 20) this.sizeStr = "20";
+        else if (currentOffset == 24) this.sizeStr = "24";
+        else if (currentOffset == 28) this.sizeStr = "28";
+        else if (currentOffset == 32) this.sizeStr = "32";
+        else if (currentOffset == 36) this.sizeStr = "36";
+        else if (currentOffset == 40) this.sizeStr = "40";
+        else if (currentOffset == 48) this.sizeStr = "48";
+        else if (currentOffset == 56) this.sizeStr = "56";
+        else if (currentOffset == 64) this.sizeStr = "64";
+        else if (currentOffset == 72) this.sizeStr = "72";
+        else if (currentOffset == 80) this.sizeStr = "80";
+        else if (currentOffset == 96) this.sizeStr = "96";
+        else if (currentOffset == 128) this.sizeStr = "128";
+        else this.sizeStr = "256"; // fallback for very large structs
         log("ClassInfo: total size = ");
         print_i32(this.size);
     }
@@ -546,10 +568,51 @@ export class MIRBuilder {
                     let calleeId = call.callee as IdentifierExpr;
                     calleeName = calleeId.name;
                 } else if (call.callee.kind == "MemberExpr") {
-                    // Handle qualified calls like memory.offset()
+                    // Handle qualified calls like memory.offset() or method calls like obj.method()
                     let memberExpr = call.callee as MemberExpr;
                     calleeName = memberExpr.member;
                     log("CallExpr: MemberExpr callee, member = " + calleeName);
+                    
+                    // Check if this is a method call on an object (obj.method())
+                    if (memberExpr.object.kind == "Identifier") {
+                        let objId = memberExpr.object as IdentifierExpr;
+                        let objAddr = this.findLocal(objId.name);
+                        if (objAddr != null) {
+                            // This is a local variable, likely an object instance
+                            // Look up which class has this method
+                            log("CallExpr: checking if " + objId.name + " is an object with method " + calleeName);
+                            let foundClassName = "";
+                            for (let i = 0; i < this.classNames.length; i = i + 1) {
+                                let className = this.classNames.get(i);
+                                let classInfo = this.getClassInfo(className);
+                                if (classInfo != null) {
+                                    let methodIdx = classInfo.getMethodIndex(calleeName);
+                                    if (methodIdx >= 0) {
+                                        foundClassName = className;
+                                    }
+                                }
+                            }
+                            if (foundClassName != "") {
+                                // This is a method call: obj.method(args) -> ClassName.method(obj, args)
+                                log("CallExpr: detected method call, class = " + foundClassName);
+                                let fullMethodName = foundClassName + "." + calleeName;
+                                // Load the object from local variable
+                                let objPtr = this.createLoad(objAddr);
+                                // Insert objPtr as first argument (this)
+                                let methodArgs = new Array<MIRValue>();
+                                methodArgs.push(objPtr);
+                                for (let i = 0; i < args.length; i = i + 1) {
+                                    methodArgs.push(args.get(i));
+                                }
+                                // Determine return type (heuristic for now)
+                                let methodReturnType = new MIRType("void", false, 0);
+                                if (calleeName == "getCount" || calleeName == "get") {
+                                    methodReturnType = new MIRType("i32", false, 4);
+                                }
+                                return this.createCall(fullMethodName, methodArgs, methodReturnType);
+                            }
+                        }
+                    }
                     
                     // Special case: ptr.get() with no args = pointer dereference
                     if (calleeName == "get" && call.args.length == 0) {
@@ -588,16 +651,38 @@ export class MIRBuilder {
             else if (calleeName == "tokenize") { returnType = new MIRType("ptr", true, 8); }
             return this.createCall(calleeName, args, returnType);
         } else if (expr.kind == "NewExpr") {
-            // new ClassName(...) returns a pointer to the object
             log("analyzeExpression: processing NewExpr");
             let newExpr = expr as NewExpr;
-            let args = new Array<MIRValue>();
-            for (let i = 0; i < newExpr.args.length; i = i + 1) {
-                args.push(this.analyzeExpression(newExpr.args.get(i)));
+            
+            // Look up class info to get size
+            let classInfo = this.getClassInfo(newExpr.className);
+            if (classInfo == null) {
+                log("analyzeExpression: NewExpr class not found: " + newExpr.className);
+                return this.createConstant("0", new MIRType("ptr", true, 8));
             }
-            // Call constructor (treated as regular function call)
-            // Constructor returns ptr to allocated object
-            return this.createCall(newExpr.className, args, new MIRType("ptr", true, 8));
+            
+            // Allocate object: call _T.alloc$P.i64(size)
+            log("analyzeExpression: NewExpr allocating size = " + classInfo.sizeStr);
+            let sizeVal = this.createConstant(classInfo.sizeStr, new MIRType("i64", false, 8));
+            let allocArgs = new Array<MIRValue>();
+            allocArgs.push(sizeVal);
+            let objPtr = this.createCall("_T.alloc$P.i64", allocArgs, new MIRType("ptr", true, 8));
+            
+            // TODO: Initialize VTable pointer at offset 0 (skip for now)
+            
+            // Call constructor if it exists: ClassName.init(objPtr, ...args)
+            let constructorName = newExpr.className + ".init";
+            log("analyzeExpression: NewExpr calling constructor " + constructorName);
+            let ctorArgs = new Array<MIRValue>();
+            ctorArgs.push(objPtr); // 'this' parameter (ownership transferred to array)
+            for (let i = 0; i < newExpr.args.length; i = i + 1) {
+                ctorArgs.push(this.analyzeExpression(newExpr.args.get(i)));
+            }
+            // Call constructor (returns void, we ignore result)
+            this.createCall(constructorName, ctorArgs, new MIRType("void", false, 0));
+            
+            // Return the allocated object pointer (get from array since objPtr was moved)
+            return ctorArgs.get(0);
         } else if (expr.kind == "ThisExpr") {
             // 'this' -> register %r0 (first param of method)
             log("analyzeExpression: ThisExpr -> r0");
