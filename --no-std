@@ -1,0 +1,68 @@
+; Generated LLVM IR from MIR
+; Module: self-hosting/mir.tsn
+
+declare ptr @addressof(ptr)
+declare ptr @_T.alloc$P.i64(i64)
+declare void @_T.free$P.void(ptr)
+declare ptr @_T.string_concat$P.ptr.ptr(ptr, ptr)
+declare i32 @_T.string_equals$P.ptr.ptr(ptr, ptr)
+declare void @tsn_incref(ptr)
+declare void @tsn_decref(ptr)
+declare void @MIRBasicBlock.init(ptr, i32, ptr)
+declare i32 @push(ptr)
+declare void @MIRRegister.init(ptr, ptr, i32)
+
+
+define i32 @MIRFunction.createBlock(ptr %r0, ptr %r1) {
+bb0: ; entry
+  %r2 = call ptr @_T.alloc$P.i64(i64 28)
+  %r3 = ptrtoint ptr %r0 to i64
+  %r4 = add i64 %r3, 44
+  %r5 = inttoptr i64 %r4 to ptr
+  %r6 = load i32, ptr %r5
+  call void @MIRBasicBlock.init(ptr %r2, i32 %r6, ptr %r1)
+  %r8 = alloca ptr
+  store ptr %r2, ptr %r8
+  %r9 = ptrtoint ptr %r0 to i64
+  %r10 = add i64 %r9, 44
+  %r11 = inttoptr i64 %r10 to ptr
+  %r12 = load i32, ptr %r11
+  %r13 = alloca i32
+  store i32 %r12, ptr %r13
+  %r14 = ptrtoint ptr %r0 to i64
+  %r15 = add i64 %r14, 44
+  %r16 = inttoptr i64 %r15 to ptr
+  %r17 = load i32, ptr %r16
+  %r18 = add i32 %r17, 1
+  %r19 = ptrtoint ptr %r0 to i64
+  %r20 = add i64 %r19, 44
+  %r21 = inttoptr i64 %r20 to ptr
+  store i32 %r18, ptr %r21
+  %r22 = load ptr, ptr %r8
+  %r23 = call i32 @push(ptr %r22)
+  %r24 = load i32, ptr %r13
+  ret i32 %r24
+}
+
+define ptr @MIRFunction.createRegister(ptr %r0, ptr %r1) {
+bb0: ; entry
+  %r2 = call ptr @_T.alloc$P.i64(i64 12)
+  %r3 = ptrtoint ptr %r0 to i64
+  %r4 = add i64 %r3, 40
+  %r5 = inttoptr i64 %r4 to ptr
+  %r6 = load i32, ptr %r5
+  call void @MIRRegister.init(ptr %r2, ptr %r1, i32 %r6)
+  %r8 = alloca ptr
+  store ptr %r2, ptr %r8
+  %r9 = ptrtoint ptr %r0 to i64
+  %r10 = add i64 %r9, 40
+  %r11 = inttoptr i64 %r10 to ptr
+  %r12 = load i32, ptr %r11
+  %r13 = add i32 %r12, 1
+  %r14 = ptrtoint ptr %r0 to i64
+  %r15 = add i64 %r14, 40
+  %r16 = inttoptr i64 %r15 to ptr
+  store i32 %r13, ptr %r16
+  %r17 = load ptr, ptr %r8
+  ret ptr %r17
+}

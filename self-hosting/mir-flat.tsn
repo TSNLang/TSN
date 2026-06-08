@@ -1,0 +1,281 @@
+declare function print_i32(n: i32): void;
+// MIR (Mid-level Intermediate Representation) for TSN
+// A simplified IR that bridges AST and LLVM IR
+// REFACTORED: No inheritance - flat class structures
+
+import { Array } from "std:array";
+import { log } from "std:console";
+
+// MIR Types
+
+export class MIRType {
+    public name: string;
+    public isPointer: bool;
+    public size: i32;
+
+    constructor(name: string, isPointer: bool, size: i32) {
+        this.name = name;
+        this.isPointer = isPointer;
+        this.size = size;
+    }
+}
+
+// MIR Values - FLATTENED (was MIRValue + 3 derived classes)
+
+export class MIRValue {
+    public kind: string;  // "Constant", "Register", "Global"
+    public valueType: MIRType;
+    public name: string;
+    
+    // From MIRConstant:
+    public constantValue: string;
+    
+    // From MIRRegister:
+    public registerId: i32;
+    
+    // From MIRGlobal:
+    public globalName: string;
+
+    constructor(kind: string, valueType: MIRType, name: string) {
+        this.kind = kind;
+        this.valueType = valueType;
+        this.name = name;
+        this.constantValue = "";
+        this.registerId = 0;
+        this.globalName = "";
+    }
+}
+
+// Factory functions for MIRValue variants
+export function createConstant(valueType: MIRType, value: string): MIRValue {
+    let v = new MIRValue("Constant", valueType, "");
+    v.constantValue = value;
+    return v;
+}
+
+export function createRegister(valueType: MIRType, id: i32): MIRValue {
+    let v = new MIRValue("Register", valueType, "");
+    v.registerId = id;
+    return v;
+}
+
+export function createGlobal(valueType: MIRType, globalName: string): MIRValue {
+    let v = new MIRValue("Global", valueType, globalName);
+    v.globalName = globalName;
+    return v;
+}
+
+// MIR Instructions - FLATTENED (was MIRInst + 13 derived classes)
+
+export class MIRInst {
+    public opcode: string;  // "Binary", "Load", "Store", "Call", "Return", etc.
+    public result: MIRValue;
+    
+    // Fields from all derived instruction types:
+    // From MIRBinaryInst:
+    public binaryOp: string;
+    public leftOperand: MIRValue;
+    public rightOperand: MIRValue;
+    
+    // From MIRLoadInst, MIRStoreInst, MIRGetElementPtrInst:
+    public address: MIRValue;
+    
+    // From MIRStoreInst, MIRReturnInst, MIRIncrefInst, MIRDecrefInst, MIRIntToPtrInst, MIRPtrToIntInst:
+    public value: MIRValue;
+    
+    // From MIRCallInst:
+    public callee: string;
+    public callArgs: Array<MIRValue>;
+    
+    // From MIRBranchInst:
+    public condition: MIRValue;
+    public trueBlock: i32;
+    public falseBlock: i32;
+    
+    // From MIRJumpInst:
+    public targetBlock: i32;
+    
+    // From MIRAllocaInst:
+    public allocType: MIRType;
+    
+    // From MIRGetElementPtrInst:
+    public basePtr: MIRValue;
+    public indexValue: MIRValue;
+
+    constructor(opcode: string, result: MIRValue) {
+        this.opcode = opcode;
+        this.result = result;
+        
+        // Initialize all fields to defaults:
+        this.binaryOp = "";
+        this.leftOperand = result;  // dummy
+        this.rightOperand = result;  // dummy
+        this.address = result;  // dummy
+        this.value = result;  // dummy
+        this.callee = "";
+        this.callArgs = new Array<MIRValue>();
+        this.condition = result;  // dummy
+        this.trueBlock = 0;
+        this.falseBlock = 0;
+        this.targetBlock = 0;
+        this.allocType = new MIRType("void", false, 0);
+        this.basePtr = result;  // dummy
+        this.indexValue = result;  // dummy
+    }
+}
+
+// Factory functions for MIRInst variants
+
+export function createBinaryInst(op: string, result: MIRValue, left: MIRValue, right: MIRValue): MIRInst {
+    let inst = new MIRInst("Binary", result);
+    inst.binaryOp = op;
+    inst.leftOperand = left;
+    inst.rightOperand = right;
+    return inst;
+}
+
+export function createLoadInst(result: MIRValue, address: MIRValue): MIRInst {
+    let inst = new MIRInst("Load", result);
+    inst.address = address;
+    return inst;
+}
+
+export function createStoreInst(value: MIRValue, address: MIRValue): MIRInst {
+    let voidReg = createRegister(new MIRType("void", false, 0), 0);
+    let inst = new MIRInst("Store", voidReg);
+    inst.value = value;
+    inst.address = address;
+    return inst;
+}
+
+@unsafe export function createCallInst(result: MIRValue, callee: string, args: Array<MIRValue>): MIRInst {
+    let inst = new MIRInst("Call", result);
+    class_incref(args);
+    inst.callee = callee;
+    inst.callArgs = args;
+    return inst;
+}
+
+export function createReturnInst(value: MIRValue): MIRInst {
+    let voidReg = createRegister(new MIRType("void", false, 0), 0);
+    let inst = new MIRInst("Return", voidReg);
+    inst.value = value;
+    return inst;
+}
+
+export function createBranchInst(condition: MIRValue, trueBlock: i32, falseBlock: i32): MIRInst {
+    let voidReg = createRegister(new MIRType("void", false, 0), 0);
+    let inst = new MIRInst("Branch", voidReg);
+    inst.condition = condition;
+    inst.trueBlock = trueBlock;
+    inst.falseBlock = falseBlock;
+    return inst;
+}
+
+export function createJumpInst(targetBlock: i32): MIRInst {
+    let voidReg = createRegister(new MIRType("void", false, 0), 0);
+    let inst = new MIRInst("Jump", voidReg);
+    inst.targetBlock = targetBlock;
+    return inst;
+}
+
+export function createAllocaInst(result: MIRValue, allocType: MIRType): MIRInst {
+    let inst = new MIRInst("Alloca", result);
+    inst.allocType = allocType;
+    return inst;
+}
+
+export function createGetElementPtrInst(result: MIRValue, base: MIRValue, index: MIRValue): MIRInst {
+    let inst = new MIRInst("GetElementPtr", result);
+    inst.basePtr = base;
+    inst.indexValue = index;
+    return inst;
+}
+
+export function createIncrefInst(value: MIRValue): MIRInst {
+    let voidReg = createRegister(new MIRType("void", false, 0), 0);
+    let inst = new MIRInst("Incref", voidReg);
+    inst.value = value;
+    return inst;
+}
+
+export function createDecrefInst(value: MIRValue): MIRInst {
+    let voidReg = createRegister(new MIRType("void", false, 0), 0);
+    let inst = new MIRInst("Decref", voidReg);
+    inst.value = value;
+    return inst;
+}
+
+export function createIntToPtrInst(result: MIRValue, value: MIRValue): MIRInst {
+    let inst = new MIRInst("IntToPtr", result);
+    inst.value = value;
+    return inst;
+}
+
+export function createPtrToIntInst(result: MIRValue, value: MIRValue): MIRInst {
+    let inst = new MIRInst("PtrToInt", result);
+    inst.value = value;
+    return inst;
+}
+
+// MIR Basic Block
+
+export class MIRBasicBlock {
+    public id: i32;
+    public label: string;
+    public instructions: Array<MIRInst>;
+
+    constructor(id: i32, label: string) {
+        this.id = id;
+        this.label = label;
+        this.instructions = new Array<MIRInst>();
+    }
+}
+
+// MIR Function
+
+export class MIRFunction {
+    public name: string;
+    public returnType: MIRType;
+    public params: Array<MIRValue>;
+    public blocks: Array<MIRBasicBlock>;
+    public nextRegId: i32;
+    public nextBlockId: i32;
+
+    constructor(name: string, returnType: MIRType) {
+        this.name = name;
+        this.returnType = returnType;
+        this.params = new Array<MIRValue>();
+        this.blocks = new Array<MIRBasicBlock>();
+        this.nextRegId = 0;
+        this.nextBlockId = 0;
+    }
+
+    public createBlock(label: string): i32 {
+        let block = new MIRBasicBlock(this.nextBlockId, label);
+        let blockId = this.nextBlockId;
+        this.nextBlockId = this.nextBlockId + 1;
+        this.blocks.push(block);
+        return blockId;
+    }
+
+    public createRegister(valueType: MIRType): MIRValue {
+        let reg = createRegister(valueType, this.nextRegId);
+        this.nextRegId = this.nextRegId + 1;
+        return reg;
+    }
+}
+
+// MIR Module
+
+export class MIRModule {
+    public name: string;
+    public functions: Array<MIRFunction>;
+    public globals: Array<MIRValue>;
+
+    constructor(name: string) {
+        this.name = name;
+        this.functions = new Array<MIRFunction>();
+        this.globals = new Array<MIRValue>();
+    }
+}

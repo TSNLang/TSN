@@ -5,7 +5,7 @@ import { log } from "std:console";
 import { Lexer } from "./lexer.tsn";
 import { ASTParser } from "./ast-parser.tsn";
 import { MIRBuilder } from "./mir-builder.tsn";
-import { MIRModule } from "./mir.tsn";
+import { MIRModule } from "./mir-flat.tsn";
 import { MIRCodegen } from "./mir-codegen.tsn";
 
 function main(): i32 {

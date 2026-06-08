@@ -5,9 +5,9 @@ import { Lexer } from "./lexer.tsn";
 import { ASTParser } from "./ast-parser.tsn";
 import { Program, Token, TokenKind, Declaration } from "./ast.tsn";
 import { Array } from "std:array";
-import { MIRBuilder } from "./mir-builder.tsn";
-import { MIRCodegen } from "./mir-codegen.tsn";
-import { MIRType } from "./mir.tsn";
+import { MIRBuilder } from "./mir-builder-flat.tsn";
+import { MIRCodegen } from "./mir-codegen-flat.tsn";
+import { MIRType } from "./mir-flat.tsn";
 
 export class CompilerState {
     public source: string;

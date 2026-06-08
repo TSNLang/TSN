@@ -1,0 +1,788 @@
+declare function print_i32(n: i32): void;
+// LLVM IR Codegen from MIR
+
+import { Array } from "std:array";
+import { log } from "std:console";
+import { MIRModule, MIRFunction, MIRBasicBlock, MIRType, MIRValue, MIRInst } from "./mir-flat.tsn";
+
+export class MIRCodegen {
+    private output: Array<string>;
+    private module: MIRModule;
+    private stringLiterals: Array<string>;
+
+    constructor(module: MIRModule) {
+        this.module = module;
+        this.output = new Array<string>();
+        this.stringLiterals = new Array<string>();
+    }
+
+    public generate(): string {
+        this.collectStringLiterals();
+
+        this.emitHeader();
+        
+        let i = 0;
+        while (i < this.stringLiterals.length) {
+            let strVal = this.getString(this.stringLiterals, i);
+            this.emitStringLiteralDefinition(i, strVal);
+            i = i + 1;
+        }
+
+        this.emitGlobals();
+        this.emitFunctions();
+        return this.joinOutput();
+    }
+
+    private emitHeader(): void {
+        this.output.push("; Generated LLVM IR from MIR\n");
+        this.output.push("; Module: ");
+        this.output.push(this.module.name);
+        this.output.push("\n\n");
+
+        // Dynamic scanner for external call instructions
+        let definedFuncs = new Array<string>();
+        let i = 0;
+        while (i < this.module.functions.length) {
+            definedFuncs.push(this.module.functions.get(i).name);
+            i = i + 1;
+        }
+
+        let extCallees = new Array<string>();
+        let extDecls = new Array<string>();
+
+        let fIdx = 0;
+        while (fIdx < this.module.functions.length) {
+            let f = this.module.functions.get(fIdx);
+            let bIdx = 0;
+            while (bIdx < f.blocks.length) {
+                let b = f.blocks.get(bIdx);
+                let instIdx = 0;
+                while (instIdx < b.instructions.length) {
+                    let inst = b.instructions.get(instIdx);
+                    if (inst.opcode == "Call") {
+                        let callInst = inst;
+                        let callee = callInst.callee;
+                        // Check if it is external
+                        let isDefined = false;
+                        let k = 0;
+                        while (k < definedFuncs.length) {
+                            if (definedFuncs.get(k) == callee) {
+                                isDefined = true;
+                            }
+                            k = k + 1;
+                        }
+                        if (!isDefined) {
+                            // Check if already in extCallees
+                            let alreadyAdded = false;
+                            let m = 0;
+                            while (m < extCallees.length) {
+                                if (extCallees.get(m) == callee) {
+                                    alreadyAdded = true;
+                                }
+                                m = m + 1;
+                            }
+                            if (!alreadyAdded) {
+                                extCallees.push(callee);
+                                let declStr = "declare " + this.emitType(callInst.result.valueType) + " @" + callee + "(";
+                                let argIdx = 0;
+                                while (argIdx < callInst.callArgs.length) {
+                                    if (argIdx > 0) {
+                                        declStr = declStr + ", ";
+                                    }
+                                    declStr = declStr + this.emitType(callInst.callArgs.get(argIdx).valueType);
+                                    argIdx = argIdx + 1;
+                                }
+                                declStr = declStr + ")\n";
+                                extDecls.push(declStr);
+                            }
+                        }
+                    }
+                    instIdx = instIdx + 1;
+                }
+                bIdx = bIdx + 1;
+            }
+            fIdx = fIdx + 1;
+        }
+
+        // Hardcoded external runtime declarations
+        this.output.push("declare ptr @addressof(ptr)\n");
+        this.output.push("declare ptr @_T.alloc$P.i64(i64)\n");
+        this.output.push("declare void @_T.free$P.void(ptr)\n");
+        this.output.push("declare ptr @_T.string_concat$P.ptr.ptr(ptr, ptr)\n");
+        this.output.push("declare i32 @_T.string_equals$P.ptr.ptr(ptr, ptr)\n");
+        this.output.push("declare void @tsn_incref(ptr)\n");
+        this.output.push("declare void @tsn_decref(ptr)\n");
+
+        // Output all scanned external declarations
+        let extIdx = 0;
+        while (extIdx < extDecls.length) {
+            let callee = extCallees.get(extIdx);
+            let isBuiltIn = false;
+            if (callee == "addressof" || callee == "tsn_incref" || callee == "tsn_decref") {
+                isBuiltIn = true;
+            }
+            if (callee == "_T.alloc$P.i64" || callee == "_T.free$P.void") {
+                isBuiltIn = true;
+            }
+            if (callee == "_T.string_concat$P.ptr.ptr" || callee == "_T.string_equals$P.ptr.ptr") {
+                isBuiltIn = true;
+            }
+
+            if (!isBuiltIn) {
+                this.output.push(extDecls.get(extIdx));
+            }
+            extIdx = extIdx + 1;
+        }
+        this.output.push("\n");
+    }
+
+    private emitGlobals(): void {
+        let i = 0;
+        while (i < this.module.globals.length) {
+            let global = this.module.globals.get(i);
+            this.emitGlobal(global);
+            i = i + 1;
+        }
+    }
+
+    private emitGlobal(global: MIRValue): void {
+        this.output.push("@");
+        this.output.push(global.name);
+        this.output.push(" = global ");
+        this.output.push(this.emitType(global.valueType));
+        this.output.push(" zeroinitializer\n");
+    }
+
+    private emitFunctions(): void {
+        let i = 0;
+        while (i < this.module.functions.length) {
+            let func = this.module.functions.get(i);
+            this.emitFunction(func);
+            i = i + 1;
+        }
+    }
+
+    private emitFunction(func: MIRFunction): void {
+        this.output.push("\n");
+        this.output.push("define ");
+        this.output.push(this.emitType(func.returnType));
+        this.output.push(" @");
+        this.output.push(func.name);
+        this.output.push("(");
+        this.emitParams(func);
+        this.output.push(") {\n");
+        
+        this.emitBlocks(func);
+        
+        this.output.push("}\n");
+    }
+
+    private emitParams(func: MIRFunction): void {
+        let i = 0;
+        while (i < func.params.length) {
+            if (i > 0) {
+                this.output.push(", ");
+            }
+            let param = func.params.get(i);
+            this.output.push(this.emitType(param.valueType));
+            this.output.push(" ");
+            this.output.push(this.emitValue(param));
+            i = i + 1;
+        }
+    }
+
+    private emitBlocks(func: MIRFunction): void {
+        let i = 0;
+        while (i < func.blocks.length) {
+            let block = func.blocks.get(i);
+            this.emitBlock(block);
+            i = i + 1;
+        }
+    }
+
+    private emitBlock(block: MIRBasicBlock): void {
+        this.output.push("bb");
+        this.output.push(this.idToStr(block.id));
+        this.output.push(":");
+        if (block.label != "") {
+            this.output.push(" ; ");
+            this.output.push(block.label);
+        }
+        this.output.push("\n");
+        
+        let i = 0;
+        while (i < block.instructions.length) {
+            let inst = block.instructions.get(i);
+            this.output.push("  ");
+            this.emitInstruction(inst);
+            i = i + 1;
+        }
+    }
+
+    private emitInstruction(inst: MIRInst): void {
+        if (inst.opcode == "Binary") {
+            this.emitBinaryInst(inst);
+        } else if (inst.opcode == "Load") {
+            this.emitLoadInst(inst);
+        } else if (inst.opcode == "Store") {
+            this.emitStoreInst(inst);
+        } else if (inst.opcode == "Call") {
+            this.emitCallInst(inst);
+        } else if (inst.opcode == "Return") {
+            this.emitReturnInst(inst);
+        } else if (inst.opcode == "Branch") {
+            this.emitBranchInst(inst);
+        } else if (inst.opcode == "Jump") {
+            this.emitJumpInst(inst);
+        } else if (inst.opcode == "Alloca") {
+            this.emitAllocaInst(inst);
+        } else if (inst.opcode == "GetElementPtr") {
+            this.emitGetElementPtrInst(inst);
+        } else if (inst.opcode == "Incref") {
+            this.emitIncrefInst(inst);
+        } else if (inst.opcode == "Decref") {
+            this.emitDecrefInst(inst);
+        } else if (inst.opcode == "IntToPtr") {
+            this.emitIntToPtrInst(inst);
+        } else if (inst.opcode == "PtrToInt") {
+            this.emitPtrToIntInst(inst);
+        }
+    }
+
+    private emitBinaryInst(inst: MIRInst): void {
+        // Special case: sext_hack for sign-extending i32 to i64
+        if (inst.binaryOp == "sext_hack") {
+            this.output.push(this.emitValue(inst.result));
+            this.output.push(" = sext ");
+            this.output.push(this.emitType(inst.leftOperand.valueType));
+            this.output.push(" ");
+            this.output.push(this.emitValue(inst.leftOperand));
+            this.output.push(" to ");
+            this.output.push(this.emitType(inst.result.valueType));
+            this.output.push("\n");
+            return;
+        }
+
+        let leftVal = this.emitValue(inst.leftOperand);
+        let rightVal = this.emitValue(inst.rightOperand);
+        let operandType = inst.leftOperand.valueType;
+        if (inst.rightOperand.valueType.isPointer) {
+            operandType = inst.rightOperand.valueType;
+        }
+
+        let isArithmetic = inst.binaryOp == "+" || inst.binaryOp == "-" || inst.binaryOp == "*" || inst.binaryOp == "/" || inst.binaryOp == "%" || inst.binaryOp == "&" || inst.binaryOp == "|" || inst.binaryOp == "^" || inst.binaryOp == "<<" || inst.binaryOp == ">>";
+        
+        if (operandType.isPointer && isArithmetic) {
+            // Fix: LLVM add/sub etc do not support pointers directly.
+            // If operandType is pointer and it's an arithmetic operation, use ptrtoint.
+            let leftI64 = leftVal;
+            if (inst.leftOperand.valueType.isPointer) {
+                leftI64 = leftVal + "_i64";
+                this.output.push(leftI64);
+                this.output.push(" = ptrtoint ptr ");
+                this.output.push(leftVal);
+                this.output.push(" to i64\n  ");
+            }
+            let rightI64 = rightVal;
+            if (inst.rightOperand.valueType.isPointer) {
+                rightI64 = rightVal + "_i64";
+                this.output.push(rightI64);
+                this.output.push(" = ptrtoint ptr ");
+                this.output.push(rightVal);
+                this.output.push(" to i64\n  ");
+            }
+
+            let resI64 = this.emitValue(inst.result) + "_i64";
+            this.output.push(resI64);
+            this.output.push(" = ");
+            if (inst.binaryOp == "+") this.output.push("add ");
+            else if (inst.binaryOp == "-") this.output.push("sub ");
+            else if (inst.binaryOp == "*") this.output.push("mul ");
+            else if (inst.binaryOp == "/") this.output.push("sdiv ");
+            else if (inst.binaryOp == "%") this.output.push("srem ");
+            else if (inst.binaryOp == "&") this.output.push("and ");
+            else if (inst.binaryOp == "|") this.output.push("or ");
+            else if (inst.binaryOp == "^") this.output.push("xor ");
+            else if (inst.binaryOp == "<<") this.output.push("shl ");
+            else if (inst.binaryOp == ">>") this.output.push("ashr ");
+            
+            this.output.push("i64 ");
+            this.output.push(leftI64);
+            this.output.push(", ");
+            this.output.push(rightI64);
+            this.output.push("\n  ");
+            
+            this.output.push(this.emitValue(inst.result));
+            this.output.push(" = inttoptr i64 ");
+            this.output.push(resI64);
+            this.output.push(" to ptr\n");
+            return;
+        }
+
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = ");
+        
+        // Arithmetic operators
+        if (inst.binaryOp == "+") {
+            this.output.push("add ");
+        } else if (inst.binaryOp == "-") {
+            this.output.push("sub ");
+        } else if (inst.binaryOp == "*") {
+            this.output.push("mul ");
+        } else if (inst.binaryOp == "/") {
+            this.output.push("sdiv ");
+        } else if (inst.binaryOp == "%") {
+            this.output.push("srem ");
+        }
+        // Comparison operators
+        else if (inst.binaryOp == "==") {
+            this.output.push("icmp eq ");
+        } else if (inst.binaryOp == "!=") {
+            this.output.push("icmp ne ");
+        } else if (inst.binaryOp == "<") {
+            this.output.push("icmp slt ");
+        } else if (inst.binaryOp == ">") {
+            this.output.push("icmp sgt ");
+        } else if (inst.binaryOp == "<=") {
+            this.output.push("icmp sle ");
+        } else if (inst.binaryOp == ">=") {
+            this.output.push("icmp sge ");
+        }
+        // Logical operators
+        else if (inst.binaryOp == "&&") {
+            this.output.push("and ");
+        } else if (inst.binaryOp == "||") {
+            this.output.push("or ");
+        } else if (inst.binaryOp == "^") {
+            this.output.push("xor ");
+        }
+        // Bitwise operators
+        else if (inst.binaryOp == "&") {
+            this.output.push("and ");
+        } else if (inst.binaryOp == "|") {
+            this.output.push("or ");
+        } else if (inst.binaryOp == "<<") {
+            this.output.push("shl ");
+        } else if (inst.binaryOp == ">>") {
+            this.output.push("ashr ");
+        } else {
+            this.output.push("add "); // fallback
+        }
+        
+        this.output.push(this.emitType(operandType));
+        this.output.push(" ");
+        this.output.push(leftVal);
+        this.output.push(", ");
+        this.output.push(rightVal);
+        this.output.push("\n");
+    }
+
+    private emitLoadInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = load ");
+        this.output.push(this.emitType(inst.result.valueType));
+        this.output.push(", ptr ");
+        this.output.push(this.emitValue(inst.address));
+        this.output.push("\n");
+    }
+
+    private emitStoreInst(inst: MIRInst): void {
+        this.output.push("store ");
+        this.output.push(this.emitType(inst.value.valueType));
+        this.output.push(" ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(", ptr ");
+        this.output.push(this.emitValue(inst.address));
+        this.output.push("\n");
+    }
+
+    private emitCallInst(inst: MIRInst): void {
+        if (inst.result.valueType.name != "void") {
+            this.output.push(this.emitValue(inst.result));
+            this.output.push(" = ");
+        }
+        this.output.push("call ");
+        this.output.push(this.emitType(inst.result.valueType));
+        this.output.push(" @");
+        this.output.push(inst.callee);
+        this.output.push("(");
+        for (let i = 0; i < inst.callArgs.length; i = i + 1) {
+            if (i > 0) this.output.push(", ");
+            let arg = inst.callArgs.get(i);
+            this.output.push(this.emitType(arg.valueType));
+            this.output.push(" ");
+            this.output.push(this.emitValue(arg));
+        }
+        this.output.push(")\n");
+    }
+
+    private emitReturnInst(inst: MIRInst): void {
+        this.output.push("ret ");
+        this.output.push(this.emitType(inst.value.valueType));
+        if (inst.value.valueType.name != "void") {
+            this.output.push(" ");
+            this.output.push(this.emitValue(inst.value));
+        }
+        this.output.push("\n");
+    }
+
+    private emitBranchInst(inst: MIRInst): void {
+        let condType = inst.condition.valueType;
+        let condStr = this.emitValue(inst.condition);
+        // If condition is pointer or null, coerce it to i1 properly
+        if (condStr == "null") {
+            condStr = "false";
+        } else if (condType.isPointer) {
+            let boolReg = "%cond_ptr_bool_" + this.idToStr(inst.trueBlock);
+            this.output.push(boolReg);
+            this.output.push(" = icmp ne ptr ");
+            this.output.push(condStr);
+            this.output.push(", null\n");
+            condStr = boolReg;
+        } else if (condType.name != "bool") {
+            let truncReg = "%cond_trunc_" + this.idToStr(inst.trueBlock);
+            this.output.push(truncReg);
+            this.output.push(" = trunc ");
+            this.output.push(this.emitType(condType));
+            this.output.push(" ");
+            this.output.push(condStr);
+            this.output.push(" to i1\n");
+            condStr = truncReg;
+        }
+        this.output.push("br i1 ");
+        this.output.push(condStr);
+        this.output.push(", label %bb");
+        this.output.push(this.idToStr(inst.trueBlock));
+        this.output.push(", label %bb");
+        this.output.push(this.idToStr(inst.falseBlock));
+        this.output.push("\n");
+    }
+
+    private emitJumpInst(inst: MIRInst): void {
+        this.output.push("br label %bb");
+        this.output.push(this.idToStr(inst.targetBlock));
+        this.output.push("\n");
+    }
+
+    private emitAllocaInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = alloca ");
+        this.output.push(this.emitType(inst.allocType));
+        this.output.push("\n");
+    }
+
+    private emitGetElementPtrInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = getelementptr ");
+        this.output.push(this.emitType(inst.basePtr.valueType));
+        this.output.push(", ptr ");
+        this.output.push(this.emitValue(inst.basePtr));
+        this.output.push(", i32 ");
+        this.output.push(this.emitValue(inst.indexValue));
+        this.output.push("\n");
+    }
+
+    private emitIncrefInst(inst: MIRInst): void {
+        this.output.push("call void @tsn_incref(ptr ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(")\n");
+    }
+
+    private emitDecrefInst(inst: MIRInst): void {
+        this.output.push("call void @tsn_decref(ptr ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(")\n");
+    }
+
+    private emitIntToPtrInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = inttoptr ");
+        this.output.push(this.emitType(inst.value.valueType));
+        this.output.push(" ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(" to ptr\n");
+    }
+
+    private emitPtrToIntInst(inst: MIRInst): void {
+        this.output.push(this.emitValue(inst.result));
+        this.output.push(" = ptrtoint ptr ");
+        this.output.push(this.emitValue(inst.value));
+        this.output.push(" to i64\n");
+    }
+
+    private emitType(t: MIRType): string {
+        if (t.isPointer) {
+            return "ptr";
+        }
+        
+        // Primitive types
+        if (t.name == "i32") return "i32";
+        if (t.name == "i64") return "i64";
+        if (t.name == "i8") return "i8";
+        if (t.name == "i16") return "i16";
+        if (t.name == "f32") return "float";
+        if (t.name == "f64") return "double";
+        if (t.name == "bool") return "i1";
+        if (t.name == "void") return "void";
+        
+        // Reference types (all pointers in LLVM)
+        if (t.name == "string") return "ptr";
+        if (t.name == "Array") return "ptr";
+        
+        // Struct types - use %TypeName format
+        return "%" + t.name;
+    }
+
+    private emitValue(v: MIRValue): string {
+        if (v.kind == "Constant") {
+            let c = v;
+            if (c.valueType.name == "string") {
+                let idx = this.findStringLiteral(c.constantValue);
+                return "@.str." + this.idToStr(idx);
+            }
+            if (c.valueType.isPointer && c.constantValue == "0") {
+                return "null";
+            }
+            return c.constantValue;
+        }
+        if (v.kind == "Register") {
+            let r = v;
+            return "%r" + this.idToStr(r.registerId);
+        }
+        if (v.kind == "Global") {
+            let g = v;
+            return "@" + g.globalName;
+        }
+        return "%unknown";
+    }
+
+    private idToStr(id: i32): string {
+        // Convert integer to string
+        if (id == 0) return "0";
+        
+        let isNegative = false;
+        if (id < 0) {
+            isNegative = true;
+            id = 0 - id;
+        }
+        
+        let digits = "";
+        while (id > 0) {
+            let digit = id % 10;
+            if (digit == 0) digits = "0" + digits;
+            else if (digit == 1) digits = "1" + digits;
+            else if (digit == 2) digits = "2" + digits;
+            else if (digit == 3) digits = "3" + digits;
+            else if (digit == 4) digits = "4" + digits;
+            else if (digit == 5) digits = "5" + digits;
+            else if (digit == 6) digits = "6" + digits;
+            else if (digit == 7) digits = "7" + digits;
+            else if (digit == 8) digits = "8" + digits;
+            else if (digit == 9) digits = "9" + digits;
+            id = id / 10;
+        }
+        
+        if (isNegative) {
+            return "-" + digits;
+        }
+        return digits;
+    }
+
+    @unsafe private pushString(arr: Array<string>, item: string): void {
+        class_incref(item);
+        arr.push(item);
+    }
+
+    @unsafe private getString(arr: Array<string>, index: i32): string {
+        let res = arr.get(index);
+        class_incref(res);
+        return res;
+    }
+
+    @unsafe private findStringLiteral(s: string): i32 {
+        let i = 0;
+        while (i < this.stringLiterals.length) {
+            let item = this.getString(this.stringLiterals, i);
+            if (item == s) {
+                return i;
+            }
+            i = i + 1;
+        }
+        return 0 - 1;
+    }
+
+    private collectStringLiterals(): void {
+        log("--- collectStringLiterals: start");
+        log("--- functions.length: " + this.idToStr(this.module.functions.length));
+        let i = 0;
+        while (i < this.module.functions.length) {
+            log("--- functions get index " + this.idToStr(i));
+            let func = this.module.functions.get(i);
+            log("--- functions got " + func.name);
+            this.collectFuncStrings(func);
+            i = i + 1;
+        }
+        log("--- collectStringLiterals: end");
+    }
+
+    private collectFuncStrings(func: MIRFunction): void {
+        log("--- collectFuncStrings: start for " + func.name);
+        log("--- blocks.length: " + this.idToStr(func.blocks.length));
+        let i = 0;
+        while (i < func.blocks.length) {
+            log("--- blocks get index " + this.idToStr(i));
+            let block = func.blocks.get(i);
+            log("--- block instructions length: " + this.idToStr(block.instructions.length));
+            this.collectBlockStrings(block);
+            i = i + 1;
+        }
+        log("--- collectFuncStrings: end");
+    }
+
+    private collectBlockStrings(block: MIRBasicBlock): void {
+        let i = 0;
+        while (i < block.instructions.length) {
+            log("--- inst get index " + this.idToStr(i));
+            let inst = block.instructions.get(i);
+            log("--- inst opcode: " + inst.opcode);
+            this.collectInstStrings(inst);
+            i = i + 1;
+        }
+    }
+
+    private collectInstStrings(inst: MIRInst): void {
+        if (inst.opcode == "Binary") {
+            let bin = inst;
+            this.checkAndAddString(bin.leftOperand);
+            this.checkAndAddString(bin.rightOperand);
+        } else if (inst.opcode == "Store") {
+            let st = inst;
+            this.checkAndAddString(st.value);
+        } else if (inst.opcode == "Call") {
+            let cl = inst;
+            if (cl.callArgs != null) {
+                let i = 0;
+                while (i < cl.callArgs.length) {
+                    this.checkAndAddString(cl.callArgs.get(i));
+                    i = i + 1;
+                }
+            }
+        } else if (inst.opcode == "Return") {
+            let rt = inst;
+            this.checkAndAddString(rt.value);
+        } else if (inst.opcode == "Branch") {
+            let br = inst;
+            this.checkAndAddString(br.condition);
+        } else if (inst.opcode == "Incref") {
+            let inc = inst;
+            this.checkAndAddString(inc.value);
+        } else if (inst.opcode == "Decref") {
+            let dec = inst;
+            this.checkAndAddString(dec.value);
+        }
+    }
+
+    private checkAndAddString(v: MIRValue): void {
+        if (v == null) return;
+        if (v.kind == "Constant") {
+            let c = v;
+            if (c.valueType.name == "string") {
+                let idx = this.findStringLiteral(c.constantValue);
+                if (idx < 0) {
+                    this.pushString(this.stringLiterals, c.constantValue);
+                }
+            }
+        }
+    }
+
+    private escapeString(s: string): string {
+        let res = "";
+        let i = 0;
+        while (i < s.length) {
+            let ch = s.charCodeAt(i);
+            if (ch == 10) {
+                res = res + "\\0A";
+            } else if (ch == 13) {
+                res = res + "\\0D";
+            } else if (ch == 9) {
+                res = res + "\\09";
+            } else if (ch == 34) {
+                res = res + "\\22";
+            } else if (ch == 92) {
+                res = res + "\\5C";
+            } else if (ch >= 32 && ch <= 126) {
+                res = res + s.slice(i, i + 1);
+            } else {
+                res = res + "\\" + this.byteToHex(ch);
+            }
+            i = i + 1;
+        }
+        return res;
+    }
+
+    private byteToHex(b: i32): string {
+        let high = (b / 16) % 16;
+        let low = b % 16;
+        return this.hexDigit(high) + this.hexDigit(low);
+    }
+
+    private hexDigit(d: i32): string {
+        if (d == 0) return "0";
+        if (d == 1) return "1";
+        if (d == 2) return "2";
+        if (d == 3) return "3";
+        if (d == 4) return "4";
+        if (d == 5) return "5";
+        if (d == 6) return "6";
+        if (d == 7) return "7";
+        if (d == 8) return "8";
+        if (d == 9) return "9";
+        if (d == 10) return "A";
+        if (d == 11) return "B";
+        if (d == 12) return "C";
+        if (d == 13) return "D";
+        if (d == 14) return "E";
+        if (d == 15) return "F";
+        return "0";
+    }
+
+    private emitStringLiteralDefinition(idx: i32, s: string): void {
+        let len = s.length;
+        let lenPlusOne = len + 1;
+        let escaped = this.escapeString(s);
+        
+        this.output.push("@.str.");
+        this.output.push(this.idToStr(idx));
+        this.output.push(" = private unnamed_addr constant { i32, i32, [");
+        this.output.push(this.idToStr(lenPlusOne));
+        this.output.push(" x i8] } { i32 -1, i32 ");
+        this.output.push(this.idToStr(len));
+        this.output.push(", [");
+        this.output.push(this.idToStr(lenPlusOne));
+        this.output.push(" x i8] c\"");
+        this.output.push(escaped);
+        this.output.push("\\00\" }, align 8\n");
+    }
+
+    private joinOutput(): string {
+        if (this.output.length == 0) return "";
+        return this.recursiveJoin(0, this.output.length);
+    }
+
+    private recursiveJoin(start: i32, end: i32): string {
+        let count = end - start;
+        if (count == 0) return "";
+        if (count == 1) return this.output.get(start);
+        
+        let mid = start + (count / 2);
+        let left = this.recursiveJoin(start, mid);
+        let right = this.recursiveJoin(mid, end);
+        return left + right;
+    }
+}
+
+export function main_codegen(): i32 {
+    log("MIR Codegen test");
+    return 0;
+}
+

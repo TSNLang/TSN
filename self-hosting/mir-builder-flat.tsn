@@ -642,7 +642,14 @@ export class MIRBuilder {
                                 else if (calleeName == "createAlloca") { methodReturnType = new MIRType("ptr", true, 8); }
                                 else if (calleeName == "createStore") { methodReturnType = new MIRType("void", false, 0); }
                                 else if (calleeName == "createIntToPtr") { methodReturnType = new MIRType("ptr", true, 8); }
-                                else if (calleeName == "createPtrToInt") { methodReturnType = new MIRType("ptr", true, 8); }
+                                else if (calleeName == "createPtrToInt") { methodReturnType = new MIRType("i64", false, 8); }
+                                // MIRCodegen methods
+                                else if (calleeName == "emitType") { methodReturnType = new MIRType("ptr", true, 8); }
+                                else if (calleeName == "emitValue") { methodReturnType = new MIRType("ptr", true, 8); }
+                                else if (calleeName == "emitInstruction") { methodReturnType = new MIRType("void", false, 0); }
+                                else if (calleeName == "byteToHex") { methodReturnType = new MIRType("ptr", true, 8); }
+                                else if (calleeName == "hexDigit") { methodReturnType = new MIRType("ptr", true, 8); }
+                                else if (calleeName == "recursiveJoin") { methodReturnType = new MIRType("ptr", true, 8); }
                                 // Common getters that return primitives
                                 else if (calleeName == "getCount" || calleeName == "getValue" || calleeName == "getExtra") {
                                     methodReturnType = new MIRType("i32", false, 4);
@@ -703,15 +710,19 @@ export class MIRBuilder {
             else if (calleeName == "createIncrefInst") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "createDecrefInst") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "createIntToPtrInst") { returnType = new MIRType("ptr", true, 8); }
-            else if (calleeName == "createPtrToIntInst") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "createPtrToIntInst") { returnType = new MIRType("i64", false, 8); }
             // MIRCodegen methods
             else if (calleeName == "collectStringLiterals") { returnType = new MIRType("void", false, 0); }
             else if (calleeName == "emitHeader") { returnType = new MIRType("void", false, 0); }
             else if (calleeName == "emitGlobals") { returnType = new MIRType("void", false, 0); }
             else if (calleeName == "emitFunctions") { returnType = new MIRType("void", false, 0); }
             else if (calleeName == "emitStringLiteralDefinition") { returnType = new MIRType("void", false, 0); }
+            else if (calleeName == "emitType") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "joinOutput") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "recursiveJoin") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "getString") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "byteToHex") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "hexDigit") { returnType = new MIRType("ptr", true, 8); }
             // Array methods (generic arrays assumed to contain ptr objects for now)
             else if (calleeName == "get") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "push") { returnType = new MIRType("void", false, 0); }
@@ -740,7 +751,7 @@ export class MIRBuilder {
             else if (calleeName == "createConstant") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "createCall") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "createIntToPtr") { returnType = new MIRType("ptr", true, 8); }
-            else if (calleeName == "createPtrToInt") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "createPtrToInt") { returnType = new MIRType("i64", false, 8); }
             else if (calleeName == "analyzeExpression") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "analyzeStatement") { returnType = new MIRType("void", false, 0); }
             else if (calleeName == "buildFunction") { returnType = new MIRType("void", false, 0); }
@@ -978,15 +989,29 @@ export class MIRBuilder {
             // Pointer arithmetic: if one operand is ptr and other is int, perform i64-based pointer arithmetic
             if (left.valueType.isPointer && !right.valueType.isPointer) {
                 let baseInt = this.createPtrToInt(left);
+                // Cast right to i64 if needed
+                let rightInt = right;
+                if (right.valueType.name != "i64") {
+                    rightInt = this.currentFunction.createRegister(new MIRType("i64", false, 8));
+                    let sextInst = createBinaryInst("sext_hack", rightInt, right, right);
+                    this.getCurrentBlock().instructions.push(sextInst);
+                }
                 let resultInt = this.currentFunction.createRegister(new MIRType("i64", false, 8));
-                let inst = createBinaryInst(op, resultInt, baseInt, right);
+                let inst = createBinaryInst(op, resultInt, baseInt, rightInt);
                 this.getCurrentBlock().instructions.push(inst);
                 return this.createIntToPtr(resultInt);
             } else if (!left.valueType.isPointer && right.valueType.isPointer) {
                 if (op == "+") {
                     let baseInt = this.createPtrToInt(right);
+                    // Cast left to i64 if needed
+                    let leftInt = left;
+                    if (left.valueType.name != "i64") {
+                        leftInt = this.currentFunction.createRegister(new MIRType("i64", false, 8));
+                        let sextInst = createBinaryInst("sext_hack", leftInt, left, left);
+                        this.getCurrentBlock().instructions.push(sextInst);
+                    }
                     let resultInt = this.currentFunction.createRegister(new MIRType("i64", false, 8));
-                    let inst = createBinaryInst(op, resultInt, left, baseInt);
+                    let inst = createBinaryInst(op, resultInt, leftInt, baseInt);
                     this.getCurrentBlock().instructions.push(inst);
                     return this.createIntToPtr(resultInt);
                 }
