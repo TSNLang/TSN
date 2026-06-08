@@ -770,10 +770,24 @@ export class MIRBuilder {
             log("analyzeExpression: processing NewExpr");
             let newExpr = expr as NewExpr;
             
+            // Handle generic types: Array<Token> -> Array_Token
+            let actualClassName = newExpr.className;
+            if (newExpr.typeArgs.length > 0) {
+                log("analyzeExpression: NewExpr has typeArgs");
+                actualClassName = newExpr.className + "_";
+                for (let i = 0; i < newExpr.typeArgs.length; i = i + 1) {
+                    if (i > 0) {
+                        actualClassName = actualClassName + "_";
+                    }
+                    actualClassName = actualClassName + newExpr.typeArgs.get(i);
+                }
+                log("analyzeExpression: NewExpr generic type mangled to: " + actualClassName);
+            }
+            
             // Look up class info to get size
-            let classInfo = this.getClassInfo(newExpr.className);
+            let classInfo = this.getClassInfo(actualClassName);
             if (classInfo == null) {
-                log("analyzeExpression: NewExpr class not found: " + newExpr.className);
+                log("analyzeExpression: NewExpr class not found: " + actualClassName);
                 return this.createConstant("0", new MIRType("ptr", true, 8));
             }
             
@@ -787,7 +801,7 @@ export class MIRBuilder {
             // TODO: Initialize VTable pointer at offset 0 (skip for now)
             
             // Call constructor if it exists: ClassName.init(objPtr, ...args)
-            let constructorName = newExpr.className + ".init";
+            let constructorName = actualClassName + ".init";
             log("analyzeExpression: NewExpr calling constructor " + constructorName);
             let ctorArgs = new Array<MIRValue>();
             ctorArgs.push(objPtr); // 'this' parameter (ownership transferred to array)

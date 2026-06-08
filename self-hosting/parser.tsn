@@ -2803,6 +2803,21 @@ export class Parser {
             if (this.peek().kind == TokenKind.Identifier) {
                 className = this.advance().lexeme;
             }
+            log("Parser: after className=" + className);
+            // Parse generic type arguments: Array<Token>
+            let typeArgs = new Array<string>();
+            if (this.matchKind(TokenKind.Less)) {
+                log("Parser: matched Less token, parsing type args");
+                while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
+                    if (this.peek().kind == TokenKind.Identifier) {
+                        typeArgs.push(this.advance().lexeme);
+                    }
+                    if (!this.matchKind(TokenKind.Comma)) {
+                        break;
+                    }
+                }
+                this.matchKind(TokenKind.Greater);
+            }
             let args = new Array<Expr>();
             if (this.matchKind(TokenKind.LParen)) {
                 while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
@@ -2813,7 +2828,7 @@ export class Parser {
                 }
                 this.matchKind(TokenKind.RParen);
             }
-            return new NewExpr(className, args, new Array<string>());
+            return new NewExpr(className, args, typeArgs);
         }
         if (this.matchKind(TokenKind.LBracket)) {
             let elements = new Array<Expr>();

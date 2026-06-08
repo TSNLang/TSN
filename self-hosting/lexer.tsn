@@ -1,5 +1,6 @@
 import { log } from "std:console";
 import { Array } from "std:array";
+import { Array_Token } from "std:array_token";
 import { Token, TokenKind } from "./ast.tsn";
 
 export class Lexer {
@@ -17,9 +18,9 @@ export class Lexer {
         this.column = 1;
     }
 
-    tokenize(): Array<Token> {
+    tokenize(): Array_Token {
         log("--- Lexer.tokenize: start");
-        let tokens = new Array<Token>();
+        let tokens = new Array_Token();
 
         while (this.pos < this.sourceLength) {
             this.skipWhitespaceAndComments();
@@ -28,11 +29,11 @@ export class Lexer {
             }
 
             let token = this.nextToken();
-            tokens.push(token);
+            tokens.push(token as ptr);
         }
 
         log("--- Lexer.tokenize: scan complete, adding EOF");
-        tokens.push(new Token(TokenKind.EOF, "", this.line, this.column) as Token);
+        tokens.push(new Token(TokenKind.EOF, "", this.line, this.column) as ptr);
         log("--- Lexer.tokenize: success");
         return tokens;
     }

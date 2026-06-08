@@ -1,0 +1,61 @@
+import * as memory from "std:memory";
+
+/**
+ * Array_Token - Specialized array for Token type
+ * Manual instantiation of Array<Token> for Level 4 bootstrap
+ */
+export class Array_Token {
+    private data: rawPtr<ptr>;
+    public length: i32;
+    private capacity: i32;
+
+    @unsafe constructor() {
+        this.length = 0;
+        this.capacity = 16;
+        this.data = memory.alloc((this.capacity as i64) * 8); // sizeof(Token) = 8 (ptr)
+        memory.fill(this.data, 0, (this.capacity as i64) * 8);
+    }
+
+    @unsafe push(item: ptr): void {
+        if (this.length >= this.capacity) {
+            this.grow();
+        }
+        
+        let p: rawPtr<ptr> = memory.offset(this.data, (this.length as i64) * 8);
+        p.set(item);
+        this.length = this.length + 1;
+    }
+
+    @unsafe pop(): ptr {
+        if (this.length <= 0) {
+            return null as ptr;
+        }
+        
+        this.length = this.length - 1;
+        let p: rawPtr<ptr> = memory.offset(this.data, (this.length as i64) * 8);
+        return p.get();
+    }
+
+    @unsafe get(index: i32): ptr {
+        let p: rawPtr<ptr> = memory.offset(this.data, (index as i64) * 8);
+        return p.get();
+    }
+
+    @unsafe set(index: i32, item: ptr): void {
+        let p: rawPtr<ptr> = memory.offset(this.data, (index as i64) * 8);
+        p.set(item);
+    }
+
+    @unsafe private grow(): void {
+        let newCapacity = this.capacity * 2;
+        let newData: rawPtr<ptr> = memory.alloc((newCapacity as i64) * 8);
+        memory.copy(newData, this.data, (this.length as i64) * 8);
+        memory.free(this.data);
+        this.data = newData;
+        this.capacity = newCapacity;
+    }
+
+    @unsafe dispose(): void {
+        memory.free(this.data);
+    }
+}

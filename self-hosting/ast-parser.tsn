@@ -451,6 +451,17 @@ export class ASTParser {
         if (this.matchKind(TokenKind.This)) return new ThisExpr();
         if (this.matchKind(TokenKind.New)) {
             let name = this.advanceLexeme();
+            // Parse generic type arguments: Array<Token>
+            let typeArgs = new Array<string>();
+            if (this.matchKind(TokenKind.Less)) {
+                while (!this.check(TokenKind.Greater) && !this.isAtEnd()) {
+                    if (this.peek().kind == TokenKind.Identifier) {
+                        typeArgs.push(this.advanceLexeme());
+                    }
+                    if (!this.matchKind(TokenKind.Comma)) break;
+                }
+                this.matchKind(TokenKind.Greater);
+            }
             let args = new Array<Expr>();
             if (this.matchKind(TokenKind.LParen)) {
                 while (!this.check(TokenKind.RParen) && !this.isAtEnd()) {
@@ -459,7 +470,7 @@ export class ASTParser {
                 }
                 this.matchKind(TokenKind.RParen);
             }
-            return new NewExpr(name, args, new Array<string>());
+            return new NewExpr(name, args, typeArgs);
         }
         if (this.matchKind(TokenKind.LParen)) {
             let expr = this.parseExpression();
