@@ -641,8 +641,41 @@ export class MIRBuilder {
                     calleeName = memberExpr.member;
                     log("CallExpr: MemberExpr callee, member = " + calleeName);
                     
-                    // Check if this is a method call on an object (obj.method())
-                    if (memberExpr.object.kind == "Identifier") {
+                    // Check if this is a method call on an object (obj.method() or this.method())
+                    if (memberExpr.object.kind == "ThisExpr") {
+                        // Method call on this: this.method() -> ClassName.method(this, args)
+                        log("CallExpr: detected this.method() call");
+                        let fullMethodName = this.currentClassName + "." + calleeName;
+                        // Get 'this' pointer (always first parameter, r0)
+                        let thisParam = this.currentFunction.params.get(0);
+                        // Insert thisParam as first argument
+                        let methodArgs = new Array<MIRValue>();
+                        methodArgs.push(thisParam);
+                        for (let i = 0; i < args.length; i = i + 1) {
+                            methodArgs.push(args.get(i));
+                        }
+                        // Determine return type - default to ptr
+                        let methodReturnType = new MIRType("ptr", true, 8);
+                        if (calleeName == "analyzeStatement") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeExpression") { methodReturnType = new MIRType("ptr", true, 8); }
+                        else if (calleeName == "analyzeReturn") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeDeclaration") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeFunction") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeClass") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeMethod") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeBlock") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeVarDecl") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeExprStmt") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeIf") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeWhile") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "analyzeFor") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "collectGlobalSymbol") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "collectClassMembers") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "enterScope") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "exitScope") { methodReturnType = new MIRType("void", false, 0); }
+                        else if (calleeName == "getCurrentBlock") { methodReturnType = new MIRType("ptr", true, 8); }
+                        return this.createCall(fullMethodName, methodArgs, methodReturnType);
+                    } else if (memberExpr.object.kind == "Identifier") {
                         let objId = memberExpr.object as IdentifierExpr;
                         let objAddr = this.findLocal(objId.name);
                         if (objAddr != null) {
