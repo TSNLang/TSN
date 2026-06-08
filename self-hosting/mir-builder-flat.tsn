@@ -210,11 +210,37 @@ export class MIRBuilder {
             }
         }
         
-        // Phase 2: Compute field offsets for all classes
+        // Phase 1.5: Add hardcoded imported class info (Token from ast.tsn)
+        log("MIRBuilder.build: Phase 1.5 - Adding hardcoded Token class");
+        let tokenClass = new ClassInfo("Token");
+        let tokenKindField = new ClassFieldInfo("kind", "i32", 0);
+        tokenKindField.offset = 8;
+        tokenKindField.offsetStr = "8";
+        tokenClass.fields.push(tokenKindField);
+        let tokenLexemeField = new ClassFieldInfo("lexeme", "string", 1);
+        tokenLexemeField.offset = 12;
+        tokenLexemeField.offsetStr = "12";
+        tokenClass.fields.push(tokenLexemeField);
+        let tokenLineField = new ClassFieldInfo("line", "i32", 2);
+        tokenLineField.offset = 20;
+        tokenLineField.offsetStr = "20";
+        tokenClass.fields.push(tokenLineField);
+        let tokenColumnField = new ClassFieldInfo("column", "i32", 3);
+        tokenColumnField.offset = 24;
+        tokenColumnField.offsetStr = "24";
+        tokenClass.fields.push(tokenColumnField);
+        tokenClass.size = 28;
+        tokenClass.sizeStr = "28";
+        this.classRegistry.push(tokenClass);
+        this.classNames.push("Token");
+        
+        // Phase 2: Compute field offsets for all classes (skip Token - already computed)
         log("MIRBuilder.build: Phase 2 - Computing field offsets");
         for (let i = 0; i < this.classRegistry.length; i = i + 1) {
             let classInfo = this.classRegistry.get(i);
-            classInfo.computeFieldOffsets();
+            if (classInfo.name != "Token") {
+                classInfo.computeFieldOffsets();
+            }
         }
         
         // Phase 2.5: Process imports and build symbol mappings
@@ -401,11 +427,14 @@ export class MIRBuilder {
             log("analyzeStatement: VarDeclStmt, analyzing init expr");
             let val = this.analyzeExpression(varDecl.init);
             log("analyzeStatement: VarDeclStmt, expr analyzed");
-            // Allocate space for the variable
-            let addr = this.createAlloca(val.valueType);
-            this.createStore(val, addr);
-            // Add to symbol table
-            this.addLocal(varDecl.name, addr);
+            // Skip void-typed variables (no storage needed)
+            if (val.valueType.name != "void") {
+                // Allocate space for the variable
+                let addr = this.createAlloca(val.valueType);
+                this.createStore(val, addr);
+                // Add to symbol table
+                this.addLocal(varDecl.name, addr);
+            }
         } else if (stmt.kind == "ExprStmt") {
             log("analyzeStatement: ExprStmt, casting");
             let exprStmt = stmt as ExprStmt;
@@ -917,6 +946,15 @@ export class MIRBuilder {
                     let fieldType = new MIRType("i32", false, 4);
                     let fieldPtr = this.createFieldPtr(objVal, "8", fieldType);
                     return this.createLoadTyped(fieldPtr, fieldType);
+                } else if (mem.member == "kind") {
+                    // Token.kind is i32 at offset 8, Expr.kind is string at offset 0
+                    // Try Token first (most common case in parser)
+                    className = "Token";
+                } else if (mem.member == "lexeme" || mem.member == "line" || mem.member == "column") {
+                    className = "Token";
+                } else if (mem.member == "value") {
+                    // Could be NumberLiteral, StringLiteral, BooleanLiteral - try NumberLiteral first
+                    className = "NumberLiteral";
                 }
                 classInfo = this.getClassInfo(className);
                 if (classInfo != null) {

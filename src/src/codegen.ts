@@ -2501,8 +2501,10 @@ export class CodeGenerator {
             const cmp = op.includes('eq') ? 'eq' : 'ne';
             const res = this.newTemp();
             this.emit(`${res} = icmp ${cmp} i32 ${tag}, ${typeIndex}`);
-            this.tempTypes.set(res, 'i1');
-            return res;
+            const resZext = this.newTemp();
+            this.emit(`${resZext} = zext i1 ${res} to i32`);
+            this.tempTypes.set(resZext, 'i32');
+            return resZext;
         }
     }
 
@@ -2510,7 +2512,16 @@ export class CodeGenerator {
     const finalR = this.coerceToType(r, rt_raw, finalRt);
     const t = this.newTemp();
     this.emit(`${t} = ${op} ${finalRt} ${finalL}, ${finalR}`);
-    this.tempTypes.set(t, op.startsWith('icmp') ? 'i1' : finalRt);
+    
+    // For comparison operators, emit zext i1 to i32
+    if (op.startsWith('icmp')) {
+      const tZext = this.newTemp();
+      this.emit(`${tZext} = zext i1 ${t} to i32`);
+      this.tempTypes.set(tZext, 'i32');
+      return tZext;
+    }
+    
+    this.tempTypes.set(t, finalRt);
     return t;
   }
 
@@ -3780,7 +3791,7 @@ export class CodeGenerator {
     if (name === 'string') return 'string';
     // Primitives
     const primitives: Record<string, string> = {
-        'i32':'i32','i64':'i64','i8':'i8','i16':'i16','i1':'i1','bool':'i1','boolean':'i1',
+        'i32':'i32','i64':'i64','i8':'i8','i16':'i16','i1':'i1','bool':'i32','boolean':'i32',
         'f32':'float','f64':'double','void':'void','ptr':'ptr','rawPtr':'ptr'
     };
     if (primitives[name]) return primitives[name];
@@ -3798,7 +3809,7 @@ export class CodeGenerator {
     const map: Record<string, string> = { 
       'i8': 'i8', 'i16': 'i16', 'i32': 'i32', 'i64': 'i64', 'i128': 'i128',
       'u8': 'i8', 'u16': 'i16', 'u32': 'i32', 'u64': 'i64', 'u128': 'i128',
-      'u1': 'i1', 'bool': 'i1', 'boolean': 'i1',
+      'u1': 'i1', 'bool': 'i32', 'boolean': 'i32',
       'f16': 'half', 'half': 'half', 'bfloat': 'bfloat',
       'f32': 'float', 'float': 'float',
       'f64': 'double', 'double': 'double',
