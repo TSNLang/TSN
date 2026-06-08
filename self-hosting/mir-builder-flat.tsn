@@ -868,6 +868,13 @@ export class MIRBuilder {
                     className = "ClassInfo";
                 } else if (mem.member == "fields" || mem.member == "methods") {
                     className = "ClassInfo";
+                } else if (mem.member == "length") {
+                    // Array.length is i32, return it directly
+                    log("analyzeExpression: MemberExpr detected array.length, returning i32");
+                    let objVal = this.analyzeExpression(mem.object);
+                    let fieldType = new MIRType("i32", false, 4);
+                    let fieldPtr = this.createFieldPtr(objVal, "8", fieldType);
+                    return this.createLoadTyped(fieldPtr, fieldType);
                 }
                 classInfo = this.getClassInfo(className);
                 if (classInfo != null) {

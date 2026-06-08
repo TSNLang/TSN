@@ -21,15 +21,18 @@ export class MIRCodegen {
 
         this.emitHeader();
         
+        // Emit globals and functions first (may add strings to stringLiterals)
+        this.emitGlobals();
+        this.emitFunctions();
+        
+        // Now emit all string literals (including any added during codegen)
         let i = 0;
         while (i < this.stringLiterals.length) {
             let strVal = this.getString(this.stringLiterals, i);
             this.emitStringLiteralDefinition(i, strVal);
             i = i + 1;
         }
-
-        this.emitGlobals();
-        this.emitFunctions();
+        
         return this.joinOutput();
     }
 
