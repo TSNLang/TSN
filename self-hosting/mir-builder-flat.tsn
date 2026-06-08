@@ -409,8 +409,13 @@ export class MIRBuilder {
         } else if (stmt.kind == "ExprStmt") {
             log("analyzeStatement: ExprStmt, casting");
             let exprStmt = stmt as ExprStmt;
-            log("analyzeStatement: ExprStmt, analyzing expr");
-            this.analyzeExpression(exprStmt.expr);
+            // Skip empty statements (e.g., standalone semicolons)
+            if (exprStmt.expr == null) {
+                log("analyzeStatement: ExprStmt is empty, skipping");
+            } else {
+                log("analyzeStatement: ExprStmt, analyzing expr");
+                this.analyzeExpression(exprStmt.expr);
+            }
             log("analyzeStatement: ExprStmt, done");
         } else if (stmt.kind == "ReturnStmt") {
             let retStmt = stmt as ReturnStmt;

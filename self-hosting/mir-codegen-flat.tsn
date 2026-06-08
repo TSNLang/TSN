@@ -538,6 +538,11 @@ export class MIRCodegen {
             let c = v;
             if (c.valueType.name == "string") {
                 let idx = this.findStringLiteral(c.constantValue);
+                if (idx == 0 - 1) {
+                    // String not found, add it to the list
+                    idx = this.stringLiterals.length;
+                    this.stringLiterals.push(c.constantValue);
+                }
                 return "@.str." + this.idToStr(idx);
             }
             if (c.valueType.isPointer && c.constantValue == "0") {
