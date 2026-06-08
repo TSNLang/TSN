@@ -358,7 +358,7 @@ export class MIRBuilder {
         if (typeText == "i16") return new MIRType("i16", false, 2);
         if (typeText == "f32") return new MIRType("f32", false, 4);
         if (typeText == "f64") return new MIRType("f64", false, 8);
-        if (typeText == "bool") return new MIRType("bool", false, 1);
+        if (typeText == "bool") return new MIRType("i32", false, 4); // TSN bool is i32
         if (typeText == "void") return new MIRType("void", false, 0);
         if (typeText == "string") return new MIRType("string", true, 8);
         if (typeText == "ptr") return new MIRType("ptr", true, 8);
@@ -424,27 +424,6 @@ export class MIRBuilder {
                 val = this.createConstant("0", this.currentFunction.returnType);
             } else {
                 val = this.analyzeExpression(retStmt.value);
-                // Type coercion: if return value type doesn't match function return type, cast it
-                if (val.valueType.name != this.currentFunction.returnType.name) {
-                    // If function returns bool but value is i32, truncate to i1
-                    if (this.currentFunction.returnType.name == "bool" && val.valueType.name == "i32") {
-                        let constValue = "0";
-                        if (val.kind == "Constant") {
-                            constValue = (val as MIRConstant).value;
-                        }
-                        val = this.createConstant(constValue, this.currentFunction.returnType);
-                    }
-                    // If function returns ptr but value is i32, cast i32 to ptr (inttoptr)
-                    else if (this.currentFunction.returnType.isPointer && !val.valueType.isPointer) {
-                        val = this.createIntToPtr(val);
-                    }
-                    // If function returns i32 but value is ptr, cast ptr to i32 (ptrtoint then trunc)
-                    else if (!this.currentFunction.returnType.isPointer && val.valueType.isPointer) {
-                        let ptrInt = this.createPtrToInt(val);
-                        // ptrtoint returns i64, function expects i32, but LLVM will handle truncation
-                        val = ptrInt;
-                    }
-                }
             }
             this.createReturn(val);
         } else if (stmt.kind == "IfStmt") {
@@ -571,6 +550,7 @@ export class MIRBuilder {
             return this.createBinary(bin.operator, left, right);
         } else if (expr.kind == "Identifier") {
             let id = expr as IdentifierExpr;
+            log("analyzeExpression: Identifier name = " + id.name);
             // Special case: null is a pointer constant
             if (id.name == "null") {
                 return this.createConstant("0", new MIRType("ptr", true, 8));
@@ -578,17 +558,28 @@ export class MIRBuilder {
             // Look up variable in symbol table
             // First check if it's a function parameter (accessed by register id directly, no load needed)
             let paramIdx = this.findParamIndex(id.name);
+            log("analyzeExpression: Identifier paramIdx = ");
+            print_i32(paramIdx);
             if (paramIdx >= 0) {
                 // Re-create the param register by index (same id as when it was created: params are r0, r1, ...)
                 let typeText = this.paramTypeTexts.get(paramIdx);
+                log("analyzeExpression: Identifier typeText = " + typeText);
                 let paramType = this.parseType(typeText);
-                return createRegister(paramType, paramIdx);
+                log("analyzeExpression: Identifier paramType parsed");
+                log("analyzeExpression: Identifier calling createRegister with paramIdx = ");
+                print_i32(paramIdx);
+                let reg = createRegister(paramType, paramIdx);
+                log("analyzeExpression: Identifier createRegister returned");
+                return reg;
             }
             let addr = this.findLocal(id.name);
+            log("analyzeExpression: Identifier findLocal returned");
             if (addr != null) {
+                log("analyzeExpression: Identifier loading from addr");
                 // Load the value from the address
                 return this.createLoad(addr);
             }
+            log("analyzeExpression: Identifier not found, returning dummy");
             // If not found, return a dummy constant
             return this.createConstant("0", new MIRType("i32", false, 4));
         } else if (expr.kind == "CallExpr") {
@@ -710,7 +701,8 @@ export class MIRBuilder {
             }
             log("CallExpr: calling createCall for " + calleeName);
             // Hardcode return types for known functions
-            let returnType = new MIRType("i32", false, 4);
+            // Default to ptr (most functions return objects), override for known primitives
+            let returnType = new MIRType("ptr", true, 8);
             // FFI functions that return pointers
             if (calleeName == "GetProcessHeap") { returnType = new MIRType("ptr", true, 8); }
             else if (calleeName == "tsn_HeapAlloc") { returnType = new MIRType("ptr", true, 8); }
@@ -792,6 +784,25 @@ export class MIRBuilder {
             else if (calleeName == "analyzeStatement") { returnType = new MIRType("void", false, 0); }
             else if (calleeName == "buildFunction") { returnType = new MIRType("void", false, 0); }
             else if (calleeName == "buildClass") { returnType = new MIRType("void", false, 0); }
+            // String manipulation functions
+            else if (calleeName == "cstringToString") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "tsn_get_argv") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "tsn_alloc") { returnType = new MIRType("ptr", true, 8); }
+            // Functions returning i32
+            else if (calleeName == "tsn_strlen") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "tsn_write_i32") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "tsn_memcpy") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "WriteFile") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "ReadFile") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "CloseHandle") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "print_i32") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "log") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "charCodeAt") { returnType = new MIRType("i32", false, 4); }
+            else if (calleeName == "createBlock") { returnType = new MIRType("i32", false, 4); }
+            // Parser/Compiler functions
+            else if (calleeName == "parse") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "codegen") { returnType = new MIRType("ptr", true, 8); }
+            else if (calleeName == "compile") { returnType = new MIRType("ptr", true, 8); }
             
             // Hardcoded import mapping (arrays/fields don't work with Level 1→Level 3 compilation)
             let actualName = calleeName;
@@ -924,6 +935,15 @@ export class MIRBuilder {
             }
             
             log("analyzeExpression: MemberExpr field not found: " + mem.member);
+            // Special case: enum access like TokenKind.Import returns i32
+            if (mem.object.kind == "Identifier") {
+                let objId = mem.object as IdentifierExpr;
+                // Check if object name suggests an enum (ends with Kind, Type, etc.)
+                if (objId.name == "TokenKind" || objId.name == "NodeKind" || objId.name == "ExprKind") {
+                    log("analyzeExpression: MemberExpr detected enum access, returning i32");
+                    return this.createConstant("0", new MIRType("i32", false, 4));
+                }
+            }
             return this.createConstant("0", new MIRType("ptr", true, 8));
         }
         return this.createConstant("0", new MIRType("i32", false, 4));
@@ -1015,10 +1035,10 @@ export class MIRBuilder {
     }
 
     public createBinary(op: string, left: MIRValue, right: MIRValue): MIRRegister {
-        // Comparison operators always return bool (i1)
+        // Comparison operators always return bool (i32 in TSN)
         let resultType = left.valueType;
         if (op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=") {
-            resultType = new MIRType("bool", false, 1);
+            resultType = new MIRType("i32", false, 4);
             // Type coercion: if comparing ptr with non-ptr, cast non-ptr to ptr
             if (left.valueType.isPointer && !right.valueType.isPointer) {
                 let rightCasted = this.createIntToPtr(right);
@@ -1093,34 +1113,33 @@ export class MIRBuilder {
         return result;
     }
 
-    public createCast(value: MIRValue, targetType: MIRType): MIRRegister {
+    public createCast(value: MIRValue, targetType: MIRType): MIRValue {
         // Handle casting between different types
         // i32 -> ptr: inttoptr
         if (!value.valueType.isPointer && targetType.isPointer) {
             return this.createIntToPtr(value);
         }
-        // ptr -> i32/i64: ptrtoint
+        // ptr -> i32/i64: ptrtoint, then wrap back to ptr to maintain ptr return type
         if (value.valueType.isPointer && !targetType.isPointer) {
             let ptrInt = this.createPtrToInt(value);
-            // If target is i32, the i64 will be used as-is (lower 32 bits implicit in LLVM)
-            // For simplicity, just return the i64 ptrtoint result
-            return ptrInt;
+            // Wrap i64 back to ptr so return type is consistent
+            return this.createIntToPtr(ptrInt);
         }
-        // i32 -> i64: sext
+        // i32 -> i64: sext, then wrap to ptr
         if (value.valueType.name == "i32" && targetType.name == "i64") {
             let result = this.currentFunction.createRegister(targetType);
             let sextInst = createBinaryInst("sext_hack", result, value, value);
             this.getCurrentBlock().instructions.push(sextInst);
-            return result;
+            return this.createIntToPtr(result);
         }
         // For now, treat other casts as no-op or return value with new type annotation
         // This handles string/ptr aliases
         if (targetType.isPointer && value.valueType.isPointer) {
             // Both are pointers, just return the value
-            return value as MIRRegister;
+            return value;
         }
         // Same type or compatible: return as-is
-        return value as MIRRegister;
+        return value;
     }
 
     public createLoad(address: MIRValue): MIRRegister {
@@ -1245,9 +1264,13 @@ export class MIRBuilder {
 
     public createIntToPtr(value: MIRValue): MIRRegister {
         // Cast integer to pointer using inttoptr instruction
+        log("createIntToPtr: start");
         let result = this.currentFunction.createRegister(new MIRType("ptr", true, 8));
+        log("createIntToPtr: register created");
         let inst = createIntToPtrInst(result, value);
+        log("createIntToPtr: instruction created");
         this.getCurrentBlock().instructions.push(inst);
+        log("createIntToPtr: instruction pushed");
         return result;
     }
 

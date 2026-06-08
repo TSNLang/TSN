@@ -322,6 +322,31 @@ export class MIRCodegen {
             return;
         }
 
+        // Comparison operators - emit icmp (returns i1), then zext to i32
+        if (inst.binaryOp == "==" || inst.binaryOp == "!=" || inst.binaryOp == "<" || inst.binaryOp == ">" || inst.binaryOp == "<=" || inst.binaryOp == ">=") {
+            let tempResult = this.emitValue(inst.result) + "_i1";
+            this.output.push(tempResult);
+            this.output.push(" = ");
+            if (inst.binaryOp == "==") this.output.push("icmp eq ");
+            else if (inst.binaryOp == "!=") this.output.push("icmp ne ");
+            else if (inst.binaryOp == "<") this.output.push("icmp slt ");
+            else if (inst.binaryOp == ">") this.output.push("icmp sgt ");
+            else if (inst.binaryOp == "<=") this.output.push("icmp sle ");
+            else if (inst.binaryOp == ">=") this.output.push("icmp sge ");
+            this.output.push(this.emitType(operandType));
+            this.output.push(" ");
+            this.output.push(leftVal);
+            this.output.push(", ");
+            this.output.push(rightVal);
+            this.output.push("\n  ");
+            // zext i1 to i32
+            this.output.push(this.emitValue(inst.result));
+            this.output.push(" = zext i1 ");
+            this.output.push(tempResult);
+            this.output.push(" to i32\n");
+            return;
+        }
+
         this.output.push(this.emitValue(inst.result));
         this.output.push(" = ");
         
@@ -336,20 +361,6 @@ export class MIRCodegen {
             this.output.push("sdiv ");
         } else if (inst.binaryOp == "%") {
             this.output.push("srem ");
-        }
-        // Comparison operators
-        else if (inst.binaryOp == "==") {
-            this.output.push("icmp eq ");
-        } else if (inst.binaryOp == "!=") {
-            this.output.push("icmp ne ");
-        } else if (inst.binaryOp == "<") {
-            this.output.push("icmp slt ");
-        } else if (inst.binaryOp == ">") {
-            this.output.push("icmp sgt ");
-        } else if (inst.binaryOp == "<=") {
-            this.output.push("icmp sle ");
-        } else if (inst.binaryOp == ">=") {
-            this.output.push("icmp sge ");
         }
         // Logical operators
         else if (inst.binaryOp == "&&") {
