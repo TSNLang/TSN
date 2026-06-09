@@ -380,6 +380,9 @@ entry:
 ; Result structure: { i32 tag, ptr value } where tag: 0=Ok, 1=Err
 %Result = type { i32, ptr }
 
+; Global to store last Result for value() workaround
+@_tsn_last_result = internal global ptr null
+
 define ptr @readText(ptr %path) {
 entry:
   ; For now, always return error Result (file I/O not implemented)
@@ -388,19 +391,33 @@ entry:
   store i32 1, ptr %tag_ptr  ; Error tag
   %value_ptr = getelementptr %Result, ptr %result, i32 0, i32 1
   store ptr null, ptr %value_ptr
+  
+  ; Store in global for value() to read
+  store ptr %result, ptr @_tsn_last_result
+  
   ret ptr %result
 }
 
 define ptr @value(ptr %obj) {
-entry:
   %is_null = icmp eq ptr %obj, null
-  br i1 %is_null, label %ret_null, label %extract
+  br i1 %is_null, label %use_global, label %extract
 
 extract:
-  ; Extract value from Result
+  ; Extract value from Result parameter
   %value_ptr = getelementptr %Result, ptr %obj, i32 0, i32 1
   %val = load ptr, ptr %value_ptr
   ret ptr %val
+
+use_global:
+  ; No parameter - read from global (Level 6 bug workaround)
+  %global_result = load ptr, ptr @_tsn_last_result
+  %is_global_null = icmp eq ptr %global_result, null
+  br i1 %is_global_null, label %ret_null, label %extract_global
+
+extract_global:
+  %global_value_ptr = getelementptr %Result, ptr %global_result, i32 0, i32 1
+  %global_val = load ptr, ptr %global_value_ptr
+  ret ptr %global_val
 
 ret_null:
   ret ptr null
@@ -415,11 +432,31 @@ entry:
 
 define i32 @isOk(ptr %result) {
 entry:
+  %is_null = icmp eq ptr %result, null
+  br i1 %is_null, label %use_global, label %check_tag
+
+check_tag:
   %tag_ptr = getelementptr %Result, ptr %result, i32 0, i32 0
   %tag = load i32, ptr %tag_ptr
   %ok = icmp eq i32 %tag, 0
   %ret = zext i1 %ok to i32
   ret i32 %ret
+
+use_global:
+  ; No parameter - read from global (Level 6 bug workaround)
+  %global_result = load ptr, ptr @_tsn_last_result
+  %is_global_null = icmp eq ptr %global_result, null
+  br i1 %is_global_null, label %ret_false, label %check_global_tag
+
+check_global_tag:
+  %global_tag_ptr = getelementptr %Result, ptr %global_result, i32 0, i32 0
+  %global_tag = load i32, ptr %global_tag_ptr
+  %global_ok = icmp eq i32 %global_tag, 0
+  %global_ret = zext i1 %global_ok to i32
+  ret i32 %global_ret
+
+ret_false:
+  ret i32 0
 }
 
 ; Parser functions
