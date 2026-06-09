@@ -6,7 +6,7 @@
 
 // Forward declarations
 extern void tsn_init_args(int argc, char** argv);
-extern int32_t tsn_main(void);  // TSN main() renamed to tsn_main in main-level7-renamed.ll
+extern int32_t tsn_main(int argc, char** argv);
 
 #ifdef _WIN32
 #include <windows.h>
@@ -50,9 +50,9 @@ int wmain(int argc, wchar_t** wargv) {
     fflush(stdout);
     tsn_init_args(argc, argv);
     
-    printf("DEBUG: Calling tsn_main\n");
+    printf("DEBUG: Calling tsn_main with argc=%d\n", argc);
     fflush(stdout);
-    int32_t result = tsn_main();
+    int32_t result = tsn_main(argc, argv);
     
     printf("DEBUG: tsn_main returned %d\n", result);
     fflush(stdout);
