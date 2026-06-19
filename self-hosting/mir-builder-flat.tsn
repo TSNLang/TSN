@@ -686,7 +686,15 @@ export class MIRBuilder {
     }
 
     public createFunction(name: string, returnType: MIRType): MIRFunction {
-        let func = new MIRFunction(name, returnType);
+        // Basic name mangling for top-level functions in self-hosting
+        let mangledName = name;
+        if (name != "main" && name != "log" && name != "readText" && name != "writeText" && name != "print_i32" && name != "tsn_get_argc" && name != "tsn_get_argv" && name != "tsn_alloc" && name != "tsn_strlen" && name != "tsn_write_i32" && name != "tsn_memcpy" && name != "debug_log_i32" && name != "debug_log_i64" && name != "debug_log_ptr") {
+            if (this.currentClassName == "") {
+                mangledName = "_T." + name + "$P";
+            }
+        }
+        
+        let func = new MIRFunction(mangledName, returnType);
         this.currentFunction = func;
         let entryId = func.createBlock("entry");
         this.currentBlockId = entryId;
@@ -928,6 +936,26 @@ export class MIRBuilder {
                 if (call.callee.kind == "Identifier") {
                     let calleeId = call.callee as IdentifierExpr;
                     calleeName = calleeId.name;
+                    
+                    // Map common runtime functions to mangled names for compatibility
+                    if (calleeName == "log") calleeName = "_T.log$P.ptr";
+                    else if (calleeName == "readText") calleeName = "_T.readText$P.ptr";
+                    else if (calleeName == "writeText") calleeName = "_T.writeText$P.ptr.ptr";
+                    else if (calleeName == "print_i32") calleeName = "print_i32";
+                    else if (calleeName == "tsn_get_argc") calleeName = "tsn_get_argc";
+                    else if (calleeName == "tsn_get_argv") calleeName = "tsn_get_argv";
+                    else if (calleeName == "tsn_alloc") calleeName = "tsn_alloc";
+                    else if (calleeName == "tsn_strlen") calleeName = "tsn_strlen";
+                    else if (calleeName == "tsn_memcpy") calleeName = "tsn_memcpy";
+                    else if (calleeName == "debug_log_i32") calleeName = "debug_log_i32";
+                    else if (calleeName == "debug_log_i64") calleeName = "debug_log_i64";
+                    else if (calleeName == "debug_log_ptr") calleeName = "debug_log_ptr";
+                    else if (calleeName == "class_incref") calleeName = "class_incref";
+                    else if (calleeName == "class_decref") calleeName = "class_decref";
+                    else if (calleeName != "main") {
+                        // Mangling for regular top-level functions
+                        calleeName = "_T." + calleeName + "$P";
+                    }
                 } else if (call.callee.kind == "MemberExpr") {
                     // Handle qualified calls like memory.offset() or method calls like obj.method()
                     let memberExpr = call.callee as MemberExpr;

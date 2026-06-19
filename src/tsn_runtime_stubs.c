@@ -1,40 +1,173 @@
-// Stub runtime functions for Level 6/7 procedural compiler
-// These are minimal implementations to allow linking
+// TSN Runtime Stubs
+// Provides all string/array primitives and structured results for stdlib.
+// Uses __asm__ to bind C functions to TSN mangled names.
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Memory allocation (correct mangled name)
-void* _T_alloc__P_i64(long long size) {
-    return malloc(size);
-}
+typedef struct { int refcount; int length; char bytes[]; } TsnString;
+typedef struct { int refcount; int vtable_pad; void** data; int len; int cap; } Array;
 
-// Alternative mangled names - LLVM uses $ but linker might translate
-void* _T_alloc_P_i64(long long size) {
-    return malloc(size);
-}
-
-// Exact name with $ character (may need pragma)
-#pragma comment(linker, "/alternatename:_T.alloc$P.i64=_T_alloc_P_i64")
-#pragma comment(linker, "/alternatename:_T.concat$P.ptr.ptr=_T_concat_P_ptr_ptr")
-
-// Array methods (assuming Array structure: vtable, data, len, cap)
+// Class representation of ReadTextResult in TSN (refcount, ok, data, error)
 typedef struct {
-    void* vtable;
-    void** data;
-    int len;
-    int cap;
-} Array;
+    int refcount;
+    int padding_vtable; // TSN objects have 8-byte header (refcount + metadata/vtable)
+    int ok;
+    int padding_align;  // Align string pointer to 8 bytes
+    TsnString* data;
+    int error;
+} ReadTextResult;
 
-void* Array_get(Array* arr, int index) {
-    if (index >= 0 && index < arr->len) {
-        return arr->data[index];
-    }
+// Class representation of WriteTextResult
+typedef struct {
+    int refcount;
+    int padding_vtable;
+    int ok;
+    int bytesWritten;
+    int error;
+} WriteTextResult;
+
+// ── Helper: make a TsnString from a C string ───────────────────────────────
+static TsnString* make_str(const char* src, int len) {
+    TsnString* r = malloc(sizeof(TsnString) + len + 1);
+    r->refcount = 1; r->length = len;
+    if (src) memcpy(r->bytes, src, len);
+    r->bytes[len] = 0;
+    return r;
+}
+
+// ── String primitives ──────────────────────────────────────────────────────
+int          tsn_byteLength (TsnString* s)               __asm__("_T.byteLength$P.ptr");
+int          tsn_length     (TsnString* s)               __asm__("_T.length$P.ptr");
+void*        tsn_concat     (TsnString* a, TsnString* b) __asm__("_T.concat$P.ptr.ptr");
+void*        tsn_str_concat (TsnString* a, TsnString* b) __asm__("_T.string_concat$P.ptr.ptr");
+int          tsn_equals     (TsnString* a, TsnString* b) __asm__("_T.equals$P.ptr.ptr");
+int          tsn_str_equals (TsnString* a, TsnString* b) __asm__("_T.string_equals$P.ptr.ptr");
+void*        tsn_substr     (TsnString* s, int st, int l) __asm__("_T.substr$P.ptr.i32.i32");
+int          tsn_charCodeAt (TsnString* s, int i)        __asm__("_T.charCodeAt$P.ptr.i32");
+int          tsn_indexOf    (TsnString* h, TsnString* n) __asm__("_T.indexOf$P.ptr.ptr");
+
+// ── Runtime I/O ──────────────────────────────────────────────────────────
+void*        tsn_log        (TsnString* s)               __asm__("_T.log$P.ptr");
+ReadTextResult* tsn_readText(TsnString* path)            __asm__("_T.readText$P.ptr");
+WriteTextResult* tsn_writeText(TsnString* p, TsnString* c) __asm__("_T.writeText$P.ptr.ptr");
+void*        tsn_alloc_impl (long long size)             __asm__("_T.alloc$P.i64");
+void         tsn_write_i32_m(void* addr, int val)        __asm__("_T.tsn_write_i32$P");
+
+// ── Implementations ────────────────────────────────────────────────────────
+int tsn_byteLength(TsnString* s)  { return s ? s->length : 0; }
+int tsn_length    (TsnString* s)  { return s ? s->length : 0; }
+
+void* tsn_concat(TsnString* a, TsnString* b) {
+    int la = a ? a->length : 0, lb = b ? b->length : 0;
+    TsnString* r = make_str(NULL, la + lb);
+    if (a) memcpy(r->bytes,      a->bytes, la);
+    if (b) memcpy(r->bytes + la, b->bytes, lb);
+    r->bytes[la + lb] = 0;
+    return r;
+}
+
+void* tsn_str_concat(TsnString* a, TsnString* b) { return tsn_concat(a, b); }
+
+int tsn_equals(TsnString* a, TsnString* b) {
+    if (a == b) return 1;
+    if (!a || !b || a->length != b->length) return 0;
+    return memcmp(a->bytes, b->bytes, a->length) == 0;
+}
+int tsn_str_equals(TsnString* a, TsnString* b) { return tsn_equals(a, b); }
+
+void* tsn_substr(TsnString* s, int st, int len) {
+    if (!s || st < 0 || st >= s->length) return make_str("", 0);
+    if (st + len > s->length) len = s->length - st;
+    return make_str(s->bytes + st, len);
+}
+
+int tsn_charCodeAt(TsnString* s, int i) {
+    return (s && i >= 0 && i < s->length) ? (unsigned char)s->bytes[i] : 0;
+}
+
+int tsn_indexOf(TsnString* h, TsnString* n) {
+    if (!h || !n || n->length == 0) return -1;
+    char* p = strstr(h->bytes, n->bytes);
+    return p ? (int)(p - h->bytes) : -1;
+}
+
+void* tsn_log(TsnString* s) {
+    if (s) { fwrite(s->bytes, 1, s->length, stdout); putchar('\n'); fflush(stdout); }
     return NULL;
 }
 
-void Array_push(Array* arr, void* item) {
+ReadTextResult* tsn_readText(TsnString* path) {
+    ReadTextResult* res = calloc(1, sizeof(ReadTextResult));
+    res->refcount = 1;
+    if (!path) {
+        res->ok = 0; res->data = make_str("", 0); res->error = 1;
+        return res;
+    }
+    FILE* f = fopen(path->bytes, "rb");
+    if (!f) {
+        res->ok = 0; res->data = make_str("", 0); res->error = 1;
+        return res;
+    }
+    fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+    TsnString* content = make_str(NULL, (int)sz);
+    fread(content->bytes, 1, sz, f); fclose(f);
+    content->bytes[sz] = 0;
+    
+    res->ok = 1; res->data = content; res->error = 0;
+    return res;
+}
+
+WriteTextResult* tsn_writeText(TsnString* path, TsnString* content) {
+    WriteTextResult* res = calloc(1, sizeof(WriteTextResult));
+    res->refcount = 1;
+    if (!path || !content) {
+        res->ok = 0; res->bytesWritten = 0; res->error = 1;
+        return res;
+    }
+    FILE* f = fopen(path->bytes, "wb");
+    if (!f) {
+        res->ok = 0; res->bytesWritten = 0; res->error = 1;
+        return res;
+    }
+    int written = (int)fwrite(content->bytes, 1, content->length, f);
+    fclose(f);
+    res->ok = 1; res->bytesWritten = written; res->error = 0;
+    return res;
+}
+
+void* tsn_alloc_impl(long long size) { return calloc(1, (size_t)size); }
+
+void tsn_write_i32_m(void* addr, int val) { *((int*)addr) = val; }
+
+// ── Flat-name aliases (for v1/v2 IR that calls without mangling) ──────────
+void* log_flat          (TsnString* s)               __asm__("log");
+ReadTextResult* readText_flat (TsnString* p)         __asm__("readText");
+WriteTextResult* writeText_flat(TsnString* p, TsnString* c) __asm__("writeText");
+void* value_flat        ()                           __asm__("value");
+void* tokenize_flat     ()                           __asm__("tokenize");
+void* parseDecl_flat    ()                           __asm__("parseDeclaration");
+void* build_flat        (void* a)                    __asm__("build");
+void* generate_flat     ()                           __asm__("generate");
+void* Array_get_flat    (Array* a, int i)            __asm__("Array.get");
+void  Array_push_flat   (Array* a, void* item)       __asm__("Array.push");
+
+void* log_flat      (TsnString* s)               { return tsn_log(s); }
+ReadTextResult* readText_flat (TsnString* p)     { return tsn_readText(p); }
+WriteTextResult* writeText_flat(TsnString* p, TsnString* c) { return tsn_writeText(p, c); }
+void* value_flat    ()                           { return NULL; }
+void* tokenize_flat ()                           { return NULL; }
+void* parseDecl_flat()                           { return NULL; }
+void* build_flat    (void* a)                    { return NULL; }
+void* generate_flat ()                           { return NULL; }
+
+void* Array_get_flat(Array* arr, int index) {
+    if (!arr || index < 0 || index >= arr->len) return NULL;
+    return arr->data[index];
+}
+void Array_push_flat(Array* arr, void* item) {
+    if (!arr) return;
     if (arr->len >= arr->cap) {
         arr->cap = arr->cap == 0 ? 8 : arr->cap * 2;
         arr->data = realloc(arr->data, arr->cap * sizeof(void*));
@@ -42,122 +175,20 @@ void Array_push(Array* arr, void* item) {
     arr->data[arr->len++] = item;
 }
 
-// String functions (TSN strings: refcount(i32) + length(i32) + bytes)
-typedef struct {
-    int refcount;
-    int length;
-    char bytes[];
-} TsnString;
-
-void* _T_concat_P_ptr_ptr(TsnString* a, TsnString* b) {
-    if (!a || !b) return a ? a : b;
-    int newLen = a->length + b->length;
-    TsnString* result = malloc(sizeof(TsnString) + newLen + 1);
-    result->refcount = 0;
-    result->length = newLen;
-    memcpy(result->bytes, a->bytes, a->length);
-    memcpy(result->bytes + a->length, b->bytes, b->length);
-    result->bytes[newLen] = 0;
-    return result;
+// Real implementation of cstringToString for bootstrap
+void* tsn_cstringToString(const char* cstr) __asm__("_T.cstringToString$P.ptr");
+void* tsn_cstringToString(const char* cstr) {
+    if (!cstr) return make_str("", 0);
+    return make_str(cstr, (int)strlen(cstr));
 }
 
-int _T_byteLength_P_ptr(TsnString* s) {
-    return s ? s->length : 0;
+void* cstringToString_flat(const char* cstr) __asm__("cstringToString");
+void* cstringToString_flat(const char* cstr) {
+    return tsn_cstringToString(cstr);
 }
 
-int _T_length_P_ptr(TsnString* s) {
-    return s ? s->length : 0;
+// Additional alias for compiler v1 mangled cstringToString (without .ptr suffix)
+void* tsn_cstringToString_v1(const char* cstr) __asm__("_T.cstringToString$P");
+void* tsn_cstringToString_v1(const char* cstr) {
+    return tsn_cstringToString(cstr);
 }
-
-void* _T_substr_P_ptr_i32_i32(TsnString* s, int start, int len) {
-    if (!s || start < 0 || start >= s->length) return NULL;
-    if (start + len > s->length) len = s->length - start;
-    TsnString* result = malloc(sizeof(TsnString) + len + 1);
-    result->refcount = 0;
-    result->length = len;
-    memcpy(result->bytes, s->bytes + start, len);
-    result->bytes[len] = 0;
-    return result;
-}
-
-int _T_charCodeAt_P_ptr_i32(TsnString* s, int index) {
-    if (!s || index < 0 || index >= s->length) return 0;
-    return (unsigned char)s->bytes[index];
-}
-
-int _T_indexOf_P_ptr_ptr(TsnString* haystack, TsnString* needle) {
-    if (!haystack || !needle) return -1;
-    char* pos = strstr(haystack->bytes, needle->bytes);
-    return pos ? (int)(pos - haystack->bytes) : -1;
-}
-
-// String methods
-void* string_slice(TsnString* s, int start, int end) {
-    if (!s || start < 0) return NULL;
-    if (end < 0 || end > s->length) end = s->length;
-    int len = end - start;
-    if (len <= 0) return NULL;
-    return _T_substr_P_ptr_i32_i32(s, start, len);
-}
-
-int string_charCodeAt(TsnString* s, int index) {
-    return _T_charCodeAt_P_ptr_i32(s, index);
-}
-
-// Standalone string functions (for flat calls)
-void* slice(TsnString* s, int start, int end) {
-    return string_slice(s, start, end);
-}
-
-int charCodeAt(TsnString* s, int index) {
-    return string_charCodeAt(s, index);
-}
-
-void* unknown(void) {
-    // Return empty string for unknown token kinds
-    TsnString* result = malloc(sizeof(TsnString) + 8);
-    result->refcount = 0;
-    result->length = 7;
-    memcpy(result->bytes, "UNKNOWN", 7);
-    result->bytes[7] = 0;
-    return result;
-}
-
-// IO functions
-void* readText(void* path) {
-    // Stub - return empty string
-    TsnString* result = malloc(sizeof(TsnString) + 1);
-    result->refcount = 0;
-    result->length = 0;
-    result->bytes[0] = 0;
-    return result;
-}
-
-void* value(void* obj) {
-    // Stub - return the object itself
-    return obj;
-}
-
-// Constructor support
-void super(void) {
-    // Stub - do nothing
-}
-
-// Method declarations for external linkage
-void* get(void* arr, int index) { return Array_get((Array*)arr, index); }
-void push(void* arr, void* item) { Array_push((Array*)arr, item); }
-void* parseDeclaration(void* parser) { return NULL; }
-int matchKind(void* parser, int kind) { return 0; }
-void* parseImportDecl(void* parser) { return NULL; }
-void* parseFunctionDecl(void* parser) { return NULL; }
-void* parseClassDecl(void* parser) { return NULL; }
-void advance(void* parser) {}
-int peekKind(void* parser) { return 0; }
-void* advanceLexeme(void* parser) { return NULL; }
-void skipUntil(void* parser, int kind) {}
-void* parseTypeText(void* parser) { return NULL; }
-void pushParam(void* params, void* param) {}
-void* parseBlockStmt(void* parser) { return NULL; }
-void* parseClassMember(void* parser) { return NULL; }
-void pushMember(void* members, void* member) {}
-void* parseStatement(void* parser) { return NULL; }
