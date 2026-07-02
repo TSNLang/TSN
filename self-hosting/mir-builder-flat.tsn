@@ -238,6 +238,42 @@ export class MIRBuilder {
         this.classRegistry.push(tokenClass);
         this.classNames.push("Token");
         
+        // Lexer class from lexer.tsn
+        let lexerClass = new ClassInfo("Lexer");
+        let lexerSourceField = new ClassFieldInfo("source", "string", 0);
+        lexerSourceField.offset = 8;
+        lexerSourceField.offsetStr = "8";
+        lexerClass.fields.push(lexerSourceField);
+        let lexerInitMethod = new ClassMethodInfo("init", 0);
+        lexerClass.addMethod(lexerInitMethod);
+        let lexerTokenizeMethod = new ClassMethodInfo("tokenize", 1);
+        lexerClass.addMethod(lexerTokenizeMethod);
+        lexerClass.size = 16;
+        lexerClass.sizeStr = "16";
+        this.classRegistry.push(lexerClass);
+        this.classNames.push("Lexer");
+        
+        // ASTParser class from ast-parser.tsn
+        let astParserClass = new ClassInfo("ASTParser");
+        let parserTokensField = new ClassFieldInfo("tokens", "Array", 0);
+        parserTokensField.offset = 8;
+        parserTokensField.offsetStr = "8";
+        astParserClass.fields.push(parserTokensField);
+        let parserPosField = new ClassFieldInfo("pos", "i32", 1);
+        parserPosField.offset = 16;
+        parserPosField.offsetStr = "16";
+        astParserClass.fields.push(parserPosField);
+        let parserInitMethod = new ClassMethodInfo("init", 0);
+        astParserClass.addMethod(parserInitMethod);
+        let parserParseMethod = new ClassMethodInfo("parse", 1);
+        astParserClass.addMethod(parserParseMethod);
+        let parserParseDeclarationMethod = new ClassMethodInfo("parseDeclaration", 2);
+        astParserClass.addMethod(parserParseDeclarationMethod);
+        astParserClass.size = 24;
+        astParserClass.sizeStr = "24";
+        this.classRegistry.push(astParserClass);
+        this.classNames.push("ASTParser");
+        
         // Symbol class from semantics.tsn
         let symbolClass = new ClassInfo("Symbol");
         let symbolNameField = new ClassFieldInfo("name", "string", 0);
@@ -290,7 +326,7 @@ export class MIRBuilder {
         arrayDataField.offset = 8;
         arrayDataField.offsetStr = "8";
         arrayClass.fields.push(arrayDataField);
-        let arrayLenField = new ClassFieldInfo("len", "i32", 1);
+        let arrayLenField = new ClassFieldInfo("length", "i32", 1);
         arrayLenField.offset = 16;
         arrayLenField.offsetStr = "16";
         arrayClass.fields.push(arrayLenField);
@@ -1053,6 +1089,16 @@ export class MIRBuilder {
                                 else if (calleeName == "push") { methodReturnType = new MIRType("void", false, 0); }
                                 else if (calleeName == "length") { methodReturnType = new MIRType("i32", false, 4); }
                                 else if (calleeName == "indexOf") { methodReturnType = new MIRType("i32", false, 4); }
+                                // Lexer methods
+                                else if (calleeName == "tokenize") { methodReturnType = new MIRType("ptr", true, 8); }
+                                // ASTParser methods
+                                else if (calleeName == "parse") { methodReturnType = new MIRType("ptr", true, 8); }
+                                else if (calleeName == "parseDeclaration") { methodReturnType = new MIRType("ptr", true, 8); }
+                                // Result/Optional methods
+                                else if (calleeName == "isOk") { methodReturnType = new MIRType("i32", false, 4); }
+                                else if (calleeName == "value") { methodReturnType = new MIRType("ptr", true, 8); }
+                                else if (calleeName == "build") { methodReturnType = new MIRType("ptr", true, 8); }
+                                else if (calleeName == "generate") { methodReturnType = new MIRType("ptr", true, 8); }
                                 // MIRBuilder/helper methods
                                 else if (calleeName == "getCurrentBlock") { methodReturnType = new MIRType("ptr", true, 8); }
                                 else if (calleeName == "analyzeExpression") { methodReturnType = new MIRType("ptr", true, 8); }
@@ -1323,11 +1369,11 @@ export class MIRBuilder {
                 } else if (mem.member == "fields" || mem.member == "methods") {
                     className = "ClassInfo";
                 } else if (mem.member == "length") {
-                    // Array.length is i32, return it directly
+                    // Array.length is i32, return it directly at offset 16 (standard Array struct)
                     log("analyzeExpression: MemberExpr detected array.length, returning i32");
                     let objVal = this.analyzeExpression(mem.object);
                     let fieldType = new MIRType("i32", false, 4);
-                    let fieldPtr = this.createFieldPtr(objVal, "8", fieldType);
+                    let fieldPtr = this.createFieldPtr(objVal, "16", fieldType);
                     return this.createLoadTyped(fieldPtr, fieldType);
                 } else if (mem.member == "kind") {
                     // Token.kind is i32 at offset 8, Expr.kind is string at offset 0

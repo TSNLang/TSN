@@ -29,21 +29,29 @@ function logBool(label: string, value: bool): void {
 }
 
 @unsafe function parseFile(state: CompilerState, path: string): Program {
+    log("parseFile: Calling readText...");
     let fsResult = readText(path);
+    log("parseFile: readText finished.");
     if (!fsResult.isOk()) {
         log("Error: could not read file: ");
         log(path);
         return null as Program;
     }
 
+    log("parseFile: extracting file content...");
     state.source = fsResult.value();
+    log("parseFile: source extracted.");
     class_incref(state.source);
+    log("parseFile: initializing Lexer...");
     let lexer = new Lexer(state.source);
+    log("parseFile: Lexing started...");
     state.tokens = lexer.tokenize();
+    log("parseFile: Lexing finished.");
     if (state.tokens.length == 0) {
         log("Error: no tokens generated from file");
         return null as Program;
     }
+    class_incref(state.tokens);
     let parser = new ASTParser(state.tokens);
     
     // Inline parse logic using parser.pos directly
@@ -86,36 +94,7 @@ declare function debug_log_i64(val: i64): void;
 declare function debug_log_ptr(ptr: ptr): void;
 
 // Helper to convert C string (char*) to TSN string
-@unsafe function cstringToString(cstr: ptr): string {
-    if (cstr == null as ptr) {
-        return "";
-    }
-    
-    // Count length - read bytes directly from memory
-    let len = tsn_strlen(cstr);
-    
-    if (len == 0) {
-        return "";
-    }
-    
-    // Allocate TSN string: 4 bytes refcount + 4 bytes length + data + null terminator
-    // Need null terminator for C API compatibility (e.g., file operations)
-    let totalSize = 8 + len + 1;
-    let buf = tsn_alloc(totalSize as i64);
-    
-    // Set refcount = 1 at offset 0
-    tsn_write_i32(buf, 1);
-    
-    // Set length at offset 4
-    let pLength = (buf as i64 + 4 as i64) as ptr;
-    tsn_write_i32(pLength, len);
-    
-    // Copy data at offset 8, including null terminator
-    let dataDest = (buf as i64 + 8 as i64) as ptr;
-    tsn_memcpy(dataDest, cstr, len + 1);
-    
-    return buf as string;
-}
+declare function cstringToString(cstr: ptr): string;
 
 @unsafe function main(): i32 {
     log("=== TSN Compiler Starting ===");
