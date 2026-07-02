@@ -3415,7 +3415,7 @@ export class CodeGenerator {
   }
 
   private generateMemberExpr(e: MemberExpr): string {
-    const objVal = this.generateExpression(e.object);
+    let objVal = this.generateExpression(e.object);
     let objType = this.tempTypes.get(objVal) || this.inferExprType(e.object) || 'ptr';
     
     // HEURISTIC: If bootstrap compiler misidentified ptr as i32, force it back to ptr
