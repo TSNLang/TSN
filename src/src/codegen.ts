@@ -3057,7 +3057,9 @@ export class CodeGenerator {
     let actualObj = obj.startsWith('%') && this.hoistedVars.has(obj.substring(1)) ? (() => {
         const t = this.newTemp();
         const ot = this.localVarTypes.get(obj.substring(1)) || 'ptr';
-        this.emit(`${t} = load ${this.toLLVMType(ot)}, ptr ${obj}, align 8`);
+        // For virtual dispatch, always load as ptr since it's an object reference
+        const llvmType = (ot === 'ptr' || this.classDecls.has(ot) || this.interfaceDecls.has(ot)) ? 'ptr' : this.toLLVMType(ot);
+        this.emit(`${t} = load ${llvmType}, ptr ${obj}, align 8`);
         return t;
     })() : obj;
 
