@@ -19,16 +19,16 @@ export class Parser {
         if (decl) {
           if (decl.kind === ASTKind.ExportDecl) {
               const inner = (decl as ExportDecl).declaration;
-              console.log(`--- parser.parse: successfully parsed EXPORTED ${inner.kind} at line ${decl.line}`);
-              if (inner.kind === ASTKind.ClassDecl) console.log(`--- parser.parse: class name=${(inner as ClassDecl).name}`);
+              // console.log(`--- parser.parse: successfully parsed EXPORTED ${inner.kind} at line ${decl.line}`);
+              // if (inner.kind === ASTKind.ClassDecl) console.log(`--- parser.parse: class name=${(inner as ClassDecl).name}`);
           } else {
-              console.log(`--- parser.parse: successfully parsed ${decl.kind} at line ${decl.line}`);
+              // console.log(`--- parser.parse: successfully parsed ${decl.kind} at line ${decl.line}`);
           }
           declarations.push(decl);
         }
         else this.synchronize();
       } catch (e) {
-        console.log(`--- parser.parse: ERROR at line ${this.peek().line}: ${e.message}`);
+        // console.log(`--- parser.parse: ERROR at line ${this.peek().line}: ${e.message}`);
         this.synchronize();
       }
     }

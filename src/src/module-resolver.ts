@@ -66,9 +66,9 @@ export class ModuleResolver {
 
   // Resolve a module path to its exports
   resolveModule(modulePath: string): ModuleExports | null {
-    console.log(`--- moduleResolver.resolve: ${modulePath}`);
+    // // console.log(`--- moduleResolver.resolve: ${modulePath}`);
     if (this.moduleCache.has(modulePath)) {
-      console.log(`--- moduleResolver.resolve: cache hit for ${modulePath}`);
+      // // console.log(`--- moduleResolver.resolve: cache hit for ${modulePath}`);
       return this.moduleCache.get(modulePath)!;
     }
 
@@ -93,7 +93,7 @@ export class ModuleResolver {
     const result = new Map<string, ExportedSymbol>();
     const namespace = importDecl.namespace;
 
-    console.log(`--- getImportedSymbols: import from ${importDecl.source}, symbols count=${moduleExports.symbols.length}`);
+    // // console.log(`--- getImportedSymbols: import from ${importDecl.source}, symbols count=${moduleExports.symbols.length}`);
 
     // Handle default import: import Optional from 'std:option'
     if (importDecl.defaultImport) {
@@ -106,14 +106,14 @@ export class ModuleResolver {
 
     if (namespace) {
       for (const sym of moduleExports.symbols) {
-        console.log(`--- getImportedSymbols: namespace=${namespace}, sym.name=${sym.name}, sym.realName=${sym.realName}`);
+        // // console.log(`--- getImportedSymbols: namespace=${namespace}, sym.name=${sym.name}, sym.realName=${sym.realName}`);
         result.set(`${importDecl.namespace}.${sym.name}`, sym);
       }
     } else {
       for (const spec of importDecl.specifiers) {
         const exported = moduleExports.symbols.find((s) => s.name === spec.imported || s.name.endsWith("." + spec.imported));
         if (exported) {
-          console.log(`--- getImportedSymbols: spec.local=${spec.local}, exported.name=${exported.name}, exported.realName=${exported.realName}`);
+          // // console.log(`--- getImportedSymbols: spec.local=${spec.local}, exported.name=${exported.name}, exported.realName=${exported.realName}`);
           result.set(spec.local, exported);
         }
       }
@@ -148,7 +148,7 @@ export class ModuleResolver {
   }
 
   private resolveStdModule(modulePath: string): ModuleExports | null {
-    console.log(`--- resolveStdModule start: ${modulePath}`);
+    // console.log(`--- resolveStdModule start: ${modulePath}`);
     if (STD_MODULES[modulePath]) {
         return {
           modulePath,
@@ -160,10 +160,10 @@ export class ModuleResolver {
     // Attempt to resolve as a TSN standard module in src/std/
     const stdName = modulePath.substring(4); // remove 'std:'
     const stdPath = `src/std/${stdName}.tsn`;
-    console.log(`--- resolveStandardModule: modulePath=${modulePath}, stdPath=${stdPath}`);
+    // console.log(`--- resolveStandardModule: modulePath=${modulePath}, stdPath=${stdPath}`);
     
     try {
-        console.log(`🔍 Loading std module from: ${stdPath}`);
+        // console.log(`🔍 Loading std module from: ${stdPath}`);
         const content = readFileSync(stdPath, 'utf8');
         const lexer = new Lexer(content);
         const tokens = lexer.tokenize();
@@ -177,10 +177,10 @@ export class ModuleResolver {
         const seenSymbols = new Set<string>();
 
         const addExportedSymbol = (innerDecl: any, namespace?: string) => {
-            console.log(`--- addExportedSymbol: start, innerDecl.kind=${innerDecl.kind}, namespace=${namespace}`);
+            // console.log(`--- addExportedSymbol: start, innerDecl.kind=${innerDecl.kind}, namespace=${namespace}`);
             if (innerDecl.kind === ASTKind.NamespaceDecl) {
               const ns = innerDecl as NamespaceDecl;
-              console.log(`--- addExportedSymbol: entering namespace ${ns.name}, body size=${ns.body.length}`);
+              // console.log(`--- addExportedSymbol: entering namespace ${ns.name}, body size=${ns.body.length}`);
               for (const sub of ns.body) {
                 if (sub.kind === ASTKind.FunctionDecl || sub.kind === ASTKind.ClassDecl || sub.kind === ASTKind.VarDecl || sub.kind === ASTKind.EnumDecl) {
                   addExportedSymbol(sub as any, ns.name);
@@ -188,7 +188,7 @@ export class ModuleResolver {
                   const exportDecl = sub as ExportDecl;
                   addExportedSymbol(exportDecl.declaration, ns.name);
                 } else {
-                  console.log(`--- addExportedSymbol: skipping sub kind=${sub.kind}`);
+                  // console.log(`--- addExportedSymbol: skipping sub kind=${sub.kind}`);
                 }
               }
               return;
@@ -222,7 +222,7 @@ export class ModuleResolver {
                 
                 // If it's a namespaced function, use the namespaced name in metadata
                 const metaName = mangledName;
-                console.log(`--- addExportedSymbol: fullName=${fullName}, metaName=${metaName}, mangledName=${mangledName}`);
+                // console.log(`--- addExportedSymbol: fullName=${fullName}, metaName=${metaName}, mangledName=${mangledName}`);
 
                 symbols.push({
                   name: fullName,
@@ -259,7 +259,7 @@ export class ModuleResolver {
         };
         
         for (const decl of program.declarations) {
-            console.log(`--- resolveStandardModule: top-level decl kind=${decl.kind}, line=${decl.line}`);
+            // console.log(`--- resolveStandardModule: top-level decl kind=${decl.kind}, line=${decl.line}`);
             if (decl.kind === ASTKind.ExportDecl) {
                 addExportedSymbol((decl as ExportDecl).declaration as FunctionDecl | ClassDecl | VarDecl | EnumDecl);
                 continue;
@@ -269,7 +269,7 @@ export class ModuleResolver {
                 const ns = decl as NamespaceDecl;
                 const lineText = sourceLines[ns.line - 1] || '';
                 const isNSExported = /\bexport\b/.test(lineText);
-                console.log(`--- resolveStandardModule: checking namespace ${ns.name}, lineText="${lineText}", isNSExported=${isNSExported}`);
+                // console.log(`--- resolveStandardModule: checking namespace ${ns.name}, lineText="${lineText}", isNSExported=${isNSExported}`);
                 // For stdlib, we treat all namespaces as exported if they are top-level
                 if (isNSExported || true) {
                     addExportedSymbol(ns);
@@ -327,10 +327,10 @@ export class ModuleResolver {
         const sourceLines = content.split(/\r?\n/);
 
         const addExportedSymbol = (innerDecl: FunctionDecl | ClassDecl | VarDecl | EnumDecl) => {
-          Deno.writeTextFileSync("codegen_debug.txt", `--- addExportedSymbol: kind=${innerDecl.kind}\n`, { append: true });
+          // Deno.writeTextFileSync("codegen_debug.txt", `--- addExportedSymbol: kind=${innerDecl.kind}\n`, { append: true });
           if (innerDecl.kind === ASTKind.ClassDecl) {
             const c = innerDecl as ClassDecl;
-            Deno.writeTextFileSync("codegen_debug.txt", `--- addExportedSymbol: class name=${c.name}\n`, { append: true });
+            // Deno.writeTextFileSync("codegen_debug.txt", `--- addExportedSymbol: class name=${c.name}\n`, { append: true });
             if (seenSymbols.has(`class:${c.name}`)) return;
             seenSymbols.add(`class:${c.name}`);
             symbols.push({ name: c.name, kind: 'class', ast: c });
@@ -369,7 +369,7 @@ export class ModuleResolver {
         };
 
         for (const decl of program.declarations) {
-          Deno.writeTextFileSync("codegen_debug.txt", `--- resolveFileModule: top-level decl kind=${decl.kind}, line=${decl.line}\n`, { append: true });
+          // Deno.writeTextFileSync("codegen_debug.txt", `--- resolveFileModule: top-level decl kind=${decl.kind}, line=${decl.line}\n`, { append: true });
           if (decl.kind === ASTKind.ExportDecl) {
             addExportedSymbol((decl as ExportDecl).declaration as FunctionDecl | ClassDecl | VarDecl | EnumDecl);
             continue;

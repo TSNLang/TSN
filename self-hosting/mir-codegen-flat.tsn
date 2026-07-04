@@ -115,20 +115,107 @@ export class MIRCodegen {
         this.output.push("declare i32 @_T.string_equals$P.ptr.ptr(ptr, ptr)\n");
         this.output.push("declare void @tsn_incref(ptr)\n");
         this.output.push("declare void @tsn_decref(ptr)\n");
+        
+        // Class runtime
+        this.output.push("declare ptr @class_alloc(i32)\n");
+        this.output.push("declare void @class_incref(ptr)\n");
+        this.output.push("declare void @class_decref(ptr, ptr)\n");
+        this.output.push("declare void @class_freeing(ptr)\n");
+        this.output.push("declare void @free(ptr)\n");
+        
+        // Windows Memory API
+        this.output.push("declare ptr @GetProcessHeap()\n");
+        this.output.push("declare ptr @tsn_HeapAlloc(ptr, i32, i64)\n");
+        this.output.push("declare i32 @tsn_HeapFree(ptr, i32, ptr)\n");
+        this.output.push("declare ptr @tsn_HeapReAlloc(ptr, i32, ptr, i64)\n");
+        this.output.push("declare void @RtlMoveMemory(ptr, ptr, i64)\n");
+        this.output.push("declare void @RtlFillMemory(ptr, i64, i8)\n");
+        
+        // Windows File/Console API
+        this.output.push("declare ptr @GetStdHandle(i32)\n");
+        this.output.push("declare i32 @WriteFile(ptr, ptr, i32, ptr, ptr)\n");
+        this.output.push("declare ptr @tsn_CreateFileA(ptr, i32, i32, ptr, i32, i32, ptr)\n");
+        this.output.push("declare i32 @tsn_ReadFile(ptr, ptr, i32, ptr, ptr)\n");
+        this.output.push("declare i32 @tsn_WriteFile(ptr, ptr, i32, ptr, ptr)\n");
+        this.output.push("declare i32 @tsn_CloseHandle(ptr)\n");
+        this.output.push("declare i32 @tsn_GetFileSize(ptr, ptr)\n");
+        this.output.push("declare i32 @tsn_GetLastError()\n");
+        this.output.push("declare ptr @tsn_GetProcessHeap()\n");
+        
+        // Command-line arguments
+        this.output.push("declare i32 @tsn_get_argc()\n");
+        this.output.push("declare ptr @tsn_get_argv_ptr()\n");
+        this.output.push("declare ptr @tsn_get_argv(i32)\n");
+        
+        // String utilities
+        this.output.push("declare ptr @cstringToString(ptr)\n");
+        this.output.push("declare i32 @tsn_strlen(ptr)\n");
+        
+        // Memory utilities
+        this.output.push("declare ptr @tsn_alloc(i64)\n");
+        this.output.push("declare void @tsn_memcpy(ptr, ptr, i32)\n");
+        this.output.push("declare void @tsn_write_i32(ptr, i32)\n");
+        
+        // Debug functions
+        this.output.push("declare void @print_i32(i32)\n");
+        this.output.push("declare void @print_ptr(i64)\n");
+        this.output.push("declare void @debug_log_i32(i32)\n");
+        this.output.push("declare void @debug_log_i64(i64)\n");
+        this.output.push("declare void @debug_log_ptr(ptr)\n");
 
-        // Output all scanned external declarations
+        // Output all scanned external declarations (skip already declared runtime functions)
+        let runtimeFuncs = new Array<string>();
+        runtimeFuncs.push("addressof");
+        runtimeFuncs.push("_T.alloc$P.i64");
+        runtimeFuncs.push("_T.free$P.void");
+        runtimeFuncs.push("_T.string_concat$P.ptr.ptr");
+        runtimeFuncs.push("_T.string_equals$P.ptr.ptr");
+        runtimeFuncs.push("tsn_incref");
+        runtimeFuncs.push("tsn_decref");
+        runtimeFuncs.push("class_alloc");
+        runtimeFuncs.push("class_incref");
+        runtimeFuncs.push("class_decref");
+        runtimeFuncs.push("class_freeing");
+        runtimeFuncs.push("free");
+        runtimeFuncs.push("GetProcessHeap");
+        runtimeFuncs.push("tsn_HeapAlloc");
+        runtimeFuncs.push("tsn_HeapFree");
+        runtimeFuncs.push("tsn_HeapReAlloc");
+        runtimeFuncs.push("RtlMoveMemory");
+        runtimeFuncs.push("RtlFillMemory");
+        runtimeFuncs.push("GetStdHandle");
+        runtimeFuncs.push("WriteFile");
+        runtimeFuncs.push("tsn_CreateFileA");
+        runtimeFuncs.push("tsn_ReadFile");
+        runtimeFuncs.push("tsn_WriteFile");
+        runtimeFuncs.push("tsn_CloseHandle");
+        runtimeFuncs.push("tsn_GetFileSize");
+        runtimeFuncs.push("tsn_GetLastError");
+        runtimeFuncs.push("tsn_GetProcessHeap");
+        runtimeFuncs.push("tsn_get_argc");
+        runtimeFuncs.push("tsn_get_argv_ptr");
+        runtimeFuncs.push("tsn_get_argv");
+        runtimeFuncs.push("cstringToString");
+        runtimeFuncs.push("tsn_strlen");
+        runtimeFuncs.push("tsn_alloc");
+        runtimeFuncs.push("tsn_memcpy");
+        runtimeFuncs.push("tsn_write_i32");
+        runtimeFuncs.push("print_i32");
+        runtimeFuncs.push("print_ptr");
+        runtimeFuncs.push("debug_log_i32");
+        runtimeFuncs.push("debug_log_i64");
+        runtimeFuncs.push("debug_log_ptr");
+        
         let extIdx = 0;
         while (extIdx < extDecls.length) {
             let callee = extCallees.get(extIdx);
             let isBuiltIn = false;
-            if (callee == "addressof" || callee == "tsn_incref" || callee == "tsn_decref") {
-                isBuiltIn = true;
-            }
-            if (callee == "_T.alloc$P.i64" || callee == "_T.free$P.void") {
-                isBuiltIn = true;
-            }
-            if (callee == "_T.string_concat$P.ptr.ptr" || callee == "_T.string_equals$P.ptr.ptr") {
-                isBuiltIn = true;
+            let rtIdx = 0;
+            while (rtIdx < runtimeFuncs.length) {
+                if (callee == runtimeFuncs.get(rtIdx)) {
+                    isBuiltIn = true;
+                }
+                rtIdx = rtIdx + 1;
             }
 
             if (!isBuiltIn) {

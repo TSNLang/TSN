@@ -1,0 +1,287 @@
+// Parser - Recursive Descent Parser
+// Convert tokens → AST
+
+import { Array } from "std:array";
+import { log } from "std:console";
+import { Token } from "./lexer.tsn";
+import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, ReturnStmt, ExprStmt, VarDeclStmt, Expr, NumberLiteral, Identifier, BinaryExpr, CallExpr } from "./ast.tsn";
+
+export class Parser {
+    tokens: Array<Token>;
+    current: i32;
+    
+    constructor(tokens: Array<Token>) {
+        this.tokens = tokens;
+        this.current = 0;
+    }
+    
+    // ========================================
+    // MAIN ENTRY POINT
+    // ========================================
+    
+    public parse(): Program {
+        let program = new Program();
+        
+        while (!this.isAtEnd()) {
+            if (this.check("FUNCTION")) {
+                let func = this.parseFunction();
+                program.functions.push(func);
+            } else {
+                this.advance(); // Skip unknown tokens
+            }
+        }
+        
+        return program;
+    }
+    
+    // ========================================
+    // FUNCTION DECLARATION
+    // ========================================
+    
+    private parseFunction(): FunctionDecl {
+        this.consume("FUNCTION", "Expected 'function'");
+        
+        let name = this.consume("IDENTIFIER", "Expected function name").lexeme;
+        
+        this.consume("LPAREN", "Expected '('");
+        
+        let func = new FunctionDecl(name, "void"); // Default return type
+        
+        // Parse parameters
+        if (!this.check("RPAREN")) {
+            func.params.push(this.parseParameter());
+            
+            while (this.match("COMMA")) {
+                func.params.push(this.parseParameter());
+            }
+        }
+        
+        this.consume("RPAREN", "Expected ')'");
+        
+        // Parse return type
+        if (this.match("COLON")) {
+            func.returnType = this.consume("IDENTIFIER", "Expected return type").lexeme;
+        }
+        
+        // Parse body
+        func.body = this.parseBlock();
+        
+        return func;
+    }
+    
+    private parseParameter(): Parameter {
+        let name = this.consume("IDENTIFIER", "Expected parameter name").lexeme;
+        this.consume("COLON", "Expected ':'");
+        let type = this.consume("IDENTIFIER", "Expected parameter type").lexeme;
+        
+        return new Parameter(name, type);
+    }
+    
+    // ========================================
+    // STATEMENTS
+    // ========================================
+    
+    private parseBlock(): BlockStmt {
+        this.consume("LBRACE", "Expected '{'");
+        
+        let block = new BlockStmt();
+        
+        while (!this.check("RBRACE") && !this.isAtEnd()) {
+            block.statements.push(this.parseStatement());
+        }
+        
+        this.consume("RBRACE", "Expected '}'");
+        
+        return block;
+    }
+    
+    private parseStatement(): Stmt {
+        if (this.check("RETURN")) {
+            return this.parseReturn();
+        }
+        
+        if (this.check("LET")) {
+            return this.parseVarDecl();
+        }
+        
+        // Expression statement
+        return this.parseExprStmt();
+    }
+    
+    private parseReturn(): Stmt {
+        this.consume("RETURN", "Expected 'return'");
+        
+        let value = this.parseExpression();
+        
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        return new ReturnStmt(value);
+    }
+    
+    private parseVarDecl(): Stmt {
+        this.consume("LET", "Expected 'let'");
+        
+        let name = this.consume("IDENTIFIER", "Expected variable name").lexeme;
+        
+        this.consume("COLON", "Expected ':'");
+        
+        let type = this.consume("IDENTIFIER", "Expected type").lexeme;
+        
+        this.consume("ASSIGN", "Expected '='");
+        
+        let init = this.parseExpression();
+        
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        return new VarDeclStmt(name, type, init);
+    }
+    
+    private parseExprStmt(): Stmt {
+        let expr = this.parseExpression();
+        this.consume("SEMICOLON", "Expected ';'");
+        return new ExprStmt(expr);
+    }
+    
+    // ========================================
+    // EXPRESSIONS (Operator Precedence)
+    // ========================================
+    
+    private parseExpression(): Expr {
+        return this.parseComparison();
+    }
+    
+    private parseComparison(): Expr {
+        let expr = this.parseAddition();
+        
+        while (this.match("LT") || this.match("GT") || this.match("LE") || this.match("GE") || this.match("EQ")) {
+            let op = this.previous().lexeme;
+            let right = this.parseAddition();
+            expr = new BinaryExpr(expr, op, right);
+        }
+        
+        return expr;
+    }
+    
+    private parseAddition(): Expr {
+        let expr = this.parseMultiplication();
+        
+        while (this.match("PLUS") || this.match("MINUS")) {
+            let op = this.previous().lexeme;
+            let right = this.parseMultiplication();
+            expr = new BinaryExpr(expr, op, right);
+        }
+        
+        return expr;
+    }
+    
+    private parseMultiplication(): Expr {
+        let expr = this.parsePrimary();
+        
+        while (this.match("STAR") || this.match("SLASH")) {
+            let op = this.previous().lexeme;
+            let right = this.parsePrimary();
+            expr = new BinaryExpr(expr, op, right);
+        }
+        
+        return expr;
+    }
+    
+    private parsePrimary(): Expr {
+        // Number literal
+        if (this.check("NUMBER")) {
+            let token = this.advance();
+            let value = this.stringToInt(token.lexeme);
+            return new NumberLiteral(value);
+        }
+        
+        // Identifier or function call
+        if (this.check("IDENTIFIER")) {
+            let name = this.advance().lexeme;
+            
+            // Function call
+            if (this.match("LPAREN")) {
+                let call = new CallExpr(name);
+                
+                if (!this.check("RPAREN")) {
+                    call.args.push(this.parseExpression());
+                    
+                    while (this.match("COMMA")) {
+                        call.args.push(this.parseExpression());
+                    }
+                }
+                
+                this.consume("RPAREN", "Expected ')'");
+                return call;
+            }
+            
+            // Just identifier
+            return new Identifier(name);
+        }
+        
+        // Parenthesized expression
+        if (this.match("LPAREN")) {
+            let expr = this.parseExpression();
+            this.consume("RPAREN", "Expected ')'");
+            return expr;
+        }
+        
+        log("Parser error: Unexpected token");
+        return new NumberLiteral(0); // Error fallback
+    }
+    
+    // ========================================
+    // HELPER METHODS
+    // ========================================
+    
+    private match(type: string): bool {
+        if (this.check(type)) {
+            this.advance();
+            return true;
+        }
+        return false;
+    }
+    
+    private check(type: string): bool {
+        if (this.isAtEnd()) return false;
+        return this.peek().type == type;
+    }
+    
+    private advance(): Token {
+        if (!this.isAtEnd()) {
+            this.current = this.current + 1;
+        }
+        return this.previous();
+    }
+    
+    private isAtEnd(): bool {
+        return this.peek().type == "EOF";
+    }
+    
+    private peek(): Token {
+        return this.tokens.get(this.current);
+    }
+    
+    private previous(): Token {
+        return this.tokens.get(this.current - 1);
+    }
+    
+    private consume(type: string, message: string): Token {
+        if (this.check(type)) {
+            return this.advance();
+        }
+        
+        log("Parser error: " + message);
+        return this.peek(); // Error fallback
+    }
+    
+    private stringToInt(s: string): i32 {
+        let result = 0;
+        let i = 0;
+        while (i < s.length) {
+            let digit = s.charCodeAt(i) - 48; // '0' = 48
+            result = result * 10 + digit;
+            i = i + 1;
+        }
+        return result;
+    }
+}

@@ -1,33 +1,102 @@
-# Danh sách các đuôi file cần xóa
-$extensions = "*.ll", "*.exe", "*.txt", "*.tsn", "*.log", "*.c", "*.ts", "*.meta", "test*", "*.obj", "*.o", "*.a", "*.so", "*.dll", "*.dylib", "*.pdb", "*.cache", "*.tmp", "*.bak", "*.old", "*.swp", "*.swo", "*.DS_Store", "*.ilk", "*.s"
+# Script dọn dẹp file rác và chuẩn bị cho rewrite
+# Xóa tất cả generated files, giữ lại source code và runtime
 
-Write-Host "Đang dọn dẹp thư mục dự án..." -ForegroundColor Cyan
+Write-Host "=== TSN Cleanup Script ===" -ForegroundColor Cyan
+Write-Host "Dọn dẹp file generated, giữ lại source và runtime..." -ForegroundColor Yellow
+Write-Host ""
 
-# 1. SỬA LỖI: Đổi thành .\* để -Include hoạt động chính xác khi Recurse
-$filesToDelete = Get-ChildItem -Path .\* -Include $extensions -Recurse
-
-# 2. Lọc bỏ các file không muốn xóa
-$filteredFiles = $filesToDelete | Where-Object {
-    # Điều kiện 1: Không xóa file bắt đầu bằng .git hoặc git
-    $isGitFile = $_.Name -like ".git*" -or $_.Name -like "git*"
+# Files cần GIỮ LẠI
+$keepPatterns = @(
+    # Source code TypeScript compiler
+    "src/src/*.ts",
+    "src/tsconfig.json",
+    "src/package.json",
     
-    # Điều kiện 2: TỐI ƯU: Dùng -match để nhận diện cả \src\src\ và /src/src/
-    $isSourceTs = $_.Extension -eq ".ts" -and $_.FullName -match 'src[/\\]src'
+    # Runtime (working, keep it!)
+    "src/tsn_runtime.c",
+    "src/tsn_runtime_stubs.c",
+    "src/tsn_runtime_stubs.ll",
+    "src/tsn_runtime_stubs_linking.ll",
+    "src/tsn_runtime_stubs_minimal.ll",
+    "src/windows_api_stubs.ll",
+    "src/main_wrapper*.c",
+    "src/tsn_main_wrapper.c",
+    
+    # Standard library (pre-compiled, working)
+    "src/std/*.tsn",
+    "src/std/*.ll",
+    "src/std/*.meta",
+    
+    # Examples
+    "examples/*.tsn",
+    
+    # Old self-hosting (will move to backup)
+    "self-hosting/*.tsn",
+    "self-hosting/*.js",
+    
+    # Documentation
+    "docs/**",
+    "*.md",
+    
+    # Build scripts
+    "*.ps1",
+    "*.sh",
+    
+    # Git
+    ".git/**",
+    ".gitignore",
+    "gitattributes.txt",
+    
+    # Resources
+    "resources/**",
+    
+    # Config
+    "*.json"
+)
 
-    # Điều kiện 2.1: Không xóa file .c quan trọng
-    $isSourceC = $_.Extension -eq ".c" -and $_.Name -eq "tsn_runtime.c"
+# Xóa TẤT CẢ .ll files trong self-hosting (quá nhiều duplicate)
+Write-Host "Xóa tất cả .ll files trong self-hosting/..." -ForegroundColor Yellow
+Get-ChildItem -Path "self-hosting" -Filter "*.ll" | Remove-Item -Force
+Get-ChildItem -Path "self-hosting" -Filter "*.meta" | Remove-Item -Force
 
-    # Điều kiện 3: Không xóa file .tsn trong self-hosting hoặc src/std
-    $isSourceTsn = $_.Extension -eq ".tsn" -and ($_.FullName -match 'self-hosting' -or $_.FullName -match 'src[/\\]std')
+# Xóa executables
+Write-Host "Xóa executables..." -ForegroundColor Yellow
+Get-ChildItem -Path "." -Filter "*.exe" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path "self-hosting" -Filter "*.exe" | Remove-Item -Force -ErrorAction SilentlyContinue
 
-    # Điều kiện 4: Nếu là file *.tsn VÀ nằm trong thư mục "examples" thì bỏ qua
-    $isTsnInExamples = $_.Extension -eq ".tsn" -and $_.FullName -match 'examples'
+# Xóa test files
+Write-Host "Xóa test files..." -ForegroundColor Yellow
+Get-ChildItem -Path "." -Filter "test*.tsn" | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path "." -Filter "test*.ll" | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path "." -Filter "test*.exe" | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path "." -Filter "output.ll" | Remove-Item -Force -ErrorAction SilentlyContinue
 
-    # Chỉ giữ lại những file KHÔNG vi phạm các điều kiện trên
-    return (-not $isGitFile) -and (-not $isSourceTs) -and (-not $isSourceC) -and (-not $isSourceTsn) -and (-not $isTsnInExamples)
-}
+# Xóa temp/debug files
+Write-Host "Xóa temp files..." -ForegroundColor Yellow
+Get-ChildItem -Path "." -Filter "*.log" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path "." -Filter "*.tmp" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path "." -Filter "*.bak" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path "." -Filter "codegen_debug.txt" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 
-# 3. Thực hiện xóa (Mẹo: Thêm -WhatIf ở cuối để test trước khi xóa thật)
-$filteredFiles | Remove-Item -Force -ErrorAction SilentlyContinue
+# Xóa Python scripts cũ (không cần nữa)
+Write-Host "Xóa Python fix scripts..." -ForegroundColor Yellow
+Remove-Item -Path "fix_*.py" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "patch-*.ps1" -Force -ErrorAction SilentlyContinue
 
-Write-Host "Đã dọn dẹp xong!" -ForegroundColor Green
+Write-Host ""
+Write-Host "=== Cleanup Complete ===" -ForegroundColor Green
+Write-Host "Đã xóa:" -ForegroundColor Green
+Write-Host "  - Tất cả .ll files trong self-hosting/" -ForegroundColor Gray
+Write-Host "  - Tất cả executables" -ForegroundColor Gray
+Write-Host "  - Test files" -ForegroundColor Gray
+Write-Host "  - Temp/log files" -ForegroundColor Gray
+Write-Host ""
+Write-Host "Đã GIỮ LẠI:" -ForegroundColor Green
+Write-Host "  ✓ Runtime C code (src/tsn_runtime*.c)" -ForegroundColor Gray
+Write-Host "  ✓ Standard library (src/std/*.tsn, *.ll)" -ForegroundColor Gray
+Write-Host "  ✓ TypeScript compiler (src/src/*.ts)" -ForegroundColor Gray
+Write-Host "  ✓ TSN source files (self-hosting/*.tsn)" -ForegroundColor Gray
+Write-Host "  ✓ Examples (examples/*.tsn)" -ForegroundColor Gray
+Write-Host "  ✓ Documentation (docs/, *.md)" -ForegroundColor Gray
+Write-Host ""
+Write-Host "Sẵn sàng để viết lại compiler!" -ForegroundColor Cyan

@@ -135,3 +135,339 @@ void debug_log_ptr(void* ptr) {
     printf("DEBUG_PTR: %p\n", ptr);
     fflush(stdout);
 }
+
+// Array_Token structure (generic array of pointers)
+typedef struct {
+    int32_t refcount;
+    void* vtable;
+    void* data;
+    int32_t length;
+    int32_t capacity;
+} Array_Token_Struct;
+
+// Generic Array structure (same layout as Array_Token)
+typedef Array_Token_Struct Array_Generic;
+
+// Forward declarations for vtable methods
+void Array_push_impl(Array_Generic* arr, void* item);
+void* Array_pop_impl(Array_Generic* arr);
+void* Array_get_impl(Array_Generic* arr, int32_t index);
+void Array_set_impl(Array_Generic* arr, int32_t index, void* item);
+void Array_dispose_impl(Array_Generic* arr);
+
+// Array vtable - must match LLVM IR layout: [push, pop, get, set, dispose, filter, find, grow]
+static void* Array_VTable_Data[8] = {
+    (void*)Array_push_impl,
+    (void*)Array_pop_impl,
+    (void*)Array_get_impl,
+    (void*)Array_set_impl,
+    (void*)Array_dispose_impl,
+    NULL,  // filter
+    NULL,  // find
+    NULL   // grow
+};
+
+// Create new Array_Token
+void* Array_Token_new() {
+    Array_Token_Struct* arr = (Array_Token_Struct*)calloc(1, sizeof(Array_Token_Struct));
+    if (!arr) return NULL;
+    
+    arr->refcount = 1;
+    arr->vtable = (void*)Array_VTable_Data;
+    arr->length = 0;
+    arr->capacity = 16;
+    arr->data = calloc(16, sizeof(void*));
+    
+    return arr;
+}
+
+// Create new generic Array (same as Array_Token)
+void* Array_new() {
+    return Array_Token_new();
+}
+
+// Generic Array push
+void Array_push_impl(Array_Generic* arr, void* item) {
+    if (!arr) return;
+    
+    if (arr->length >= arr->capacity) {
+        int32_t newCapacity = arr->capacity * 2;
+        void** newData = (void**)calloc(newCapacity, sizeof(void*));
+        if (arr->data) {
+            memcpy(newData, arr->data, arr->length * sizeof(void*));
+            free(arr->data);
+        }
+        arr->data = newData;
+        arr->capacity = newCapacity;
+    }
+    
+    ((void**)arr->data)[arr->length] = item;
+    arr->length++;
+}
+
+// Generic Array get
+void* Array_get_impl(Array_Generic* arr, int32_t index) {
+    if (!arr) {
+        printf("Array_get_impl: NULL array!\n");
+        fflush(stdout);
+        return NULL;
+    }
+    if (index < 0 || index >= arr->length) {
+        printf("Array_get_impl: index %d out of bounds (length=%d)\n", index, arr->length);
+        fflush(stdout);
+        return NULL;
+    }
+    void* result = ((void**)arr->data)[index];
+    return result;
+}
+
+// Generic Array pop
+void* Array_pop_impl(Array_Generic* arr) {
+    if (!arr || arr->length == 0) return NULL;
+    arr->length--;
+    return ((void**)arr->data)[arr->length];
+}
+
+// Generic Array set
+void Array_set_impl(Array_Generic* arr, int32_t index, void* item) {
+    if (!arr || index < 0 || index >= arr->length) return;
+    ((void**)arr->data)[index] = item;
+}
+
+// Generic Array dispose
+void Array_dispose_impl(Array_Generic* arr) {
+    if (!arr) return;
+    if (arr->data) {
+        free(arr->data);
+        arr->data = NULL;
+    }
+}
+
+// Push item to Array_Token
+void Array_Token_push_impl(Array_Token_Struct* arr, void* item) {
+    if (!arr) return;
+    
+    if (arr->length >= arr->capacity) {
+        int32_t newCapacity = arr->capacity * 2;
+        void** newData = (void**)calloc(newCapacity, sizeof(void*));
+        if (arr->data) {
+            memcpy(newData, arr->data, arr->length * sizeof(void*));
+            free(arr->data);
+        }
+        arr->data = newData;
+        arr->capacity = newCapacity;
+    }
+    
+    ((void**)arr->data)[arr->length] = item;
+    arr->length++;
+}
+
+// TSN String structure: { i32 refcount, i32 length, [n x i8] bytes }
+typedef struct {
+    int32_t refcount;
+    int32_t length;
+    char bytes[0];
+} TsnString;
+
+// Debug helper to log string info
+void debug_string(const char* label, TsnString* str) {
+    if (!str) {
+        printf("DEBUG %s: NULL\n", label);
+        return;
+    }
+    printf("DEBUG %s: ptr=%p, refcount=%d, length=%d\n", label, str, str->refcount, str->length);
+    fflush(stdout);
+}
+
+// Result structure: { i32 tag, ptr value } where tag: 0=Ok, 1=Err
+typedef struct {
+    int32_t tag;
+    void* value;
+} TsnResult;
+
+// readText - Read entire file into TSN string
+void* readText(const char* path) {
+    TsnResult* result = (TsnResult*)malloc(sizeof(TsnResult));
+    if (!result) {
+        result = (TsnResult*)malloc(sizeof(TsnResult));
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+#ifdef _WIN32
+    // Open file
+    HANDLE hFile = CreateFileA(
+        path,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+
+    if (hFile == INVALID_HANDLE_VALUE) {
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    // Get file size
+    DWORD fileSize = GetFileSize(hFile, NULL);
+    if (fileSize == INVALID_FILE_SIZE) {
+        CloseHandle(hFile);
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    // Allocate TSN string: 8 bytes header + fileSize + 1 (null terminator)
+    size_t allocSize = 8 + fileSize + 1;
+    TsnString* str = (TsnString*)malloc(allocSize);
+    if (!str) {
+        CloseHandle(hFile);
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    // Initialize string header
+    str->refcount = 0;
+    str->length = (int32_t)fileSize;
+
+    // Read file content
+    DWORD bytesRead = 0;
+    if (!ReadFile(hFile, str->bytes, fileSize, &bytesRead, NULL) || bytesRead != fileSize) {
+        CloseHandle(hFile);
+        free(str);
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    // Null terminate
+    str->bytes[fileSize] = '\0';
+
+    CloseHandle(hFile);
+
+    // Return Ok result
+    result->tag = 0;  // Ok
+    result->value = str;
+    return result;
+#else
+    // Unix implementation
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long fileSize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    size_t allocSize = 8 + fileSize + 1;
+    TsnString* str = (TsnString*)malloc(allocSize);
+    if (!str) {
+        fclose(f);
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    str->refcount = 0;
+    str->length = (int32_t)fileSize;
+
+    size_t bytesRead = fread(str->bytes, 1, fileSize, f);
+    if (bytesRead != (size_t)fileSize) {
+        fclose(f);
+        free(str);
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    str->bytes[fileSize] = '\0';
+    fclose(f);
+
+    result->tag = 0;  // Ok
+    result->value = str;
+    return result;
+#endif
+}
+
+// writeText - Write TSN string to file
+void* writeText(const char* path, TsnString* content) {
+    TsnResult* result = (TsnResult*)malloc(sizeof(TsnResult));
+    if (!result) {
+        result = (TsnResult*)malloc(sizeof(TsnResult));
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    if (!content) {
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+#ifdef _WIN32
+    // Open/create file
+    HANDLE hFile = CreateFileA(
+        path,
+        GENERIC_WRITE,
+        0,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+
+    if (hFile == INVALID_HANDLE_VALUE) {
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    // Write content
+    DWORD bytesWritten = 0;
+    if (!WriteFile(hFile, content->bytes, (DWORD)content->length, &bytesWritten, NULL) || 
+        bytesWritten != (DWORD)content->length) {
+        CloseHandle(hFile);
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    CloseHandle(hFile);
+
+    // Return Ok result
+    result->tag = 0;  // Ok
+    result->value = NULL;
+    return result;
+#else
+    // Unix implementation
+    FILE* f = fopen(path, "wb");
+    if (!f) {
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    size_t bytesWritten = fwrite(content->bytes, 1, content->length, f);
+    fclose(f);
+
+    if (bytesWritten != (size_t)content->length) {
+        result->tag = 1;  // Error
+        result->value = NULL;
+        return result;
+    }
+
+    result->tag = 0;  // Ok
+    result->value = NULL;
+    return result;
+#endif
+}

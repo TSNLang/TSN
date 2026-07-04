@@ -14,12 +14,12 @@ const RUNTIME_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', 'tsn_ru
 // Compile a single .tsn file, returning the LLVM IR string and exported symbols.
 function compileFile(inputFile: string, outputFile: string, baseDir: string): boolean {
   try {
-    // console.log(`📖 Reading ${inputFile}...`);
+    // // console.log(`📖 Reading ${inputFile}...`);
     const source = readFileSync(inputFile, 'utf8');
     const reporter = new Reporter(source, inputFile);
 
     // Lexical analysis
-    console.log('🔤 Lexical analysis...');
+    // // console.log('🔤 Lexical analysis...');
     const lexer = new Lexer(source, reporter);
     const tokens = lexer.tokenize();
     
@@ -28,10 +28,10 @@ function compileFile(inputFile: string, outputFile: string, baseDir: string): bo
       reporter.print();
       return false;
     }
-    console.log(`   ✓ ${tokens.length} tokens`);
+    // // console.log(`   ✓ ${tokens.length} tokens`);
 
     // Parsing
-    console.log('🌳 Parsing...');
+    // // console.log('🌳 Parsing...');
     const parser = new Parser(tokens, reporter);
     const ast = parser.parse();
     
@@ -40,18 +40,18 @@ function compileFile(inputFile: string, outputFile: string, baseDir: string): bo
       reporter.print();
       return false;
     }
-    console.log(`   ✓ ${ast.declarations.length} declarations`);
+    // // console.log(`   ✓ ${ast.declarations.length} declarations`);
 
     // Code generation
-    console.log('⚙️  Code generation...');
+    // // console.log('⚙️  Code generation...');
     const resolver = new ModuleResolver(baseDir);
     const codegen = new CodeGenerator(resolver);
     const linkedAst = codegen.includeImportedModulePrograms(ast);
     const llvmIR = codegen.generate(linkedAst, undefined);
-    console.log(`   ✓ ${llvmIR.split('\n').length} lines of LLVM IR`);
+    // // console.log(`   ✓ ${llvmIR.split('\n').length} lines of LLVM IR`);
 
     // Write output .ll
-    console.log(`💾 Writing ${outputFile}...`);
+    // // console.log(`💾 Writing ${outputFile}...`);
     writeFileSync(outputFile, llvmIR, 'utf8');
 
     // Write .meta file (for other modules to import this)
@@ -60,28 +60,28 @@ function compileFile(inputFile: string, outputFile: string, baseDir: string): bo
     if (exportedSymbols.length > 0) {
       const meta = ModuleResolver.generateMetaFile(inputFile, outputFile, exportedSymbols);
       writeFileSync(metaFile, meta, 'utf8');
-      console.log(`📋 Writing ${metaFile} (${exportedSymbols.length} exports)...`);
+      // console.log(`📋 Writing ${metaFile} (${exportedSymbols.length} exports)...`);
     }
 
     return true;
   } catch (error) {
-    console.error('❌ Compilation failed due to an unexpected error:');
-    console.error(error);
+    // console.error('❌ Compilation failed due to an unexpected error:');
+    // console.error(error);
     return false;
   }
 }
 
 function printUsage() {
-  console.error('Usage:');
-  console.error('  Single file:    tsn-compiler <input.tsn> [output.ll]');
-  console.error('  Multiple files: tsn-compiler <file1.tsn> <file2.tsn> ... -o <output.ll>');
-  console.error('  With linking:   tsn-compiler <file1.tsn> <file2.tsn> ... --link -o <output.exe>');
-  console.error('');
-  console.error('Examples:');
-  console.error('  node src/src/main.ts hello.tsn hello.ll');
-  console.error('  bun src/src/main.ts hello.tsn hello.ll');
-  console.error('  deno run --allow-read --allow-write --allow-run src/src/main.ts hello.tsn hello.ll');
-  console.error('  deno run --allow-read --allow-write --allow-run src/src/main.ts hello.tsn --link -o hello.exe');
+  // console.error('Usage:');
+  // console.error('  Single file:    tsn-compiler <input.tsn> [output.ll]');
+  // console.error('  Multiple files: tsn-compiler <file1.tsn> <file2.tsn> ... -o <output.ll>');
+  // console.error('  With linking:   tsn-compiler <file1.tsn> <file2.tsn> ... --link -o <output.exe>');
+  // console.error('');
+  // console.error('Examples:');
+  // console.error('  node src/src/main.ts hello.tsn hello.ll');
+  // console.error('  bun src/src/main.ts hello.tsn hello.ll');
+  // console.error('  deno run --allow-read --allow-write --allow-run src/src/main.ts hello.tsn hello.ll');
+  // console.error('  deno run --allow-read --allow-write --allow-run src/src/main.ts hello.tsn --link -o hello.exe');
 }
 
 function main() {
@@ -138,8 +138,8 @@ function main() {
         const exeFile = requestedOutput
           ? (requestedOutput.endsWith('.exe') ? requestedOutput : requestedOutput.replace(/\.ll$/, '.exe'))
           : inputFile.replace(/\.(tsn|ts)$/, '.exe');
-        console.log('');
-        console.log(`🔧 Linking: clang ${llOutputFile} ${RUNTIME_FILE} -o ${exeFile}`);
+        // console.log('');
+        // console.log(`🔧 Linking: clang ${llOutputFile} ${RUNTIME_FILE} -o ${exeFile}`);
 
         const result = spawnSync('clang', [llOutputFile, RUNTIME_FILE, '-o', exeFile], {
           encoding: 'utf8',
@@ -147,19 +147,19 @@ function main() {
         });
 
         if (result.status === 0) {
-          console.log(`✅ Linked: ${exeFile}`);
+          // console.log(`✅ Linked: ${exeFile}`);
         } else {
-          console.error('❌ Linking failed:');
-          console.error(result.stderr || result.error?.message || 'Unknown linker error');
+          // console.error('❌ Linking failed:');
+          // console.error(result.stderr || result.error?.message || 'Unknown linker error');
           process.exit(1);
         }
       } else {
-        console.log('');
-        console.log('✨ Compilation successful!');
-        console.log('');
-        console.log('Next steps:');
-        console.log(`  1. Compile to executable: clang ${llOutputFile} ${RUNTIME_FILE} -o program.exe`);
-        console.log('  2. Run: ./program.exe');
+        // console.log('');
+        // console.log('✨ Compilation successful!');
+        // console.log('');
+        // console.log('Next steps:');
+        // console.log(`  1. Compile to executable: clang ${llOutputFile} ${RUNTIME_FILE} -o program.exe`);
+        // console.log('  2. Run: ./program.exe');
       }
     } else {
       process.exit(1);
@@ -168,8 +168,8 @@ function main() {
     return;
   }
 
-  console.log(`🔗 Multi-file compilation: ${inputFiles.length} files`);
-  console.log('');
+  // console.log(`🔗 Multi-file compilation: ${inputFiles.length} files`);
+  // console.log('');
 
   const llFiles: string[] = [];
   let allOk = true;
@@ -180,24 +180,24 @@ function main() {
 
     const baseDir = dirname(inputFile);
 
-    console.log(`--- Compiling ${inputFile} ---`);
+    // console.log(`--- Compiling ${inputFile} ---`);
     const ok = compileFile(inputFile, llFile, baseDir);
     if (!ok) {
       allOk = false;
     }
-    console.log('');
+    // console.log('');
   }
 
   if (!allOk) {
-    console.error('❌ Some files failed to compile');
+    // console.error('❌ Some files failed to compile');
     process.exit(1);
   }
 
-  console.log('✅ All files compiled successfully!');
-  console.log('');
-  console.log('Generated LLVM IR files:');
+  // console.log('✅ All files compiled successfully!');
+  // console.log('');
+  // console.log('Generated LLVM IR files:');
   for (const llFile of llFiles) {
-    console.log(`  ${llFile}`);
+    // console.log(`  ${llFile}`);
   }
 
   if (doLink) {
@@ -213,8 +213,8 @@ function main() {
     // Filter out std files that might already be in llFiles
     const uniqueLLFiles = [...new Set([...llFiles, ...stdFiles])];
 
-    console.log('');
-    console.log(`🔧 Linking: clang ${llFiles.length} files + stdlib + ${RUNTIME_FILE} -o ${outputFile}`);
+    // console.log('');
+    // console.log(`🔧 Linking: clang ${llFiles.length} files + stdlib + ${RUNTIME_FILE} -o ${outputFile}`);
 
     const result = spawnSync('clang', [...uniqueLLFiles, RUNTIME_FILE, '-o', outputFile, '-Wno-override-module'], {
       encoding: 'utf8',
@@ -222,16 +222,16 @@ function main() {
     });
 
     if (result.status === 0) {
-      console.log(`✅ Linked: ${outputFile}`);
+      // console.log(`✅ Linked: ${outputFile}`);
     } else {
-      console.error('❌ Linking failed:');
-      console.error(result.stderr || result.error?.message || 'Unknown linker error');
+      // console.error('❌ Linking failed:');
+      // console.error(result.stderr || result.error?.message || 'Unknown linker error');
       process.exit(1);
     }
   } else {
-    console.log('');
-    console.log('To link manually:');
-    console.log(`  clang ${llFiles.join(' ')} ${RUNTIME_FILE} -o program.exe`);
+    // console.log('');
+    // console.log('To link manually:');
+    // console.log(`  clang ${llFiles.join(' ')} ${RUNTIME_FILE} -o program.exe`);
   }
 }
 

@@ -1,0 +1,235 @@
+// Lexer - Simple Token Scanner
+// Chuyển source code thành stream of tokens
+
+import { Array } from "std:array";
+import { log } from "std:console";
+
+// ========================================
+// TOKEN DEFINITIONS
+// ========================================
+
+export class Token {
+    type: string;
+    lexeme: string;
+    line: i32;
+    column: i32;
+    
+    constructor(type: string, lexeme: string, line: i32, column: i32) {
+        this.type = type;
+        this.lexeme = lexeme;
+        this.line = line;
+        this.column = column;
+    }
+}
+
+// ========================================
+// LEXER
+// ========================================
+
+export class Lexer {
+    source: string;
+    pos: i32;
+    line: i32;
+    column: i32;
+    tokens: Array<Token>;
+    
+    constructor(source: string) {
+        this.source = source;
+        this.pos = 0;
+        this.line = 1;
+        this.column = 1;
+        this.tokens = new Array<Token>();
+    }
+    
+    // Main tokenization function
+    public tokenize(): Array<Token> {
+        while (this.pos < this.source.length) {
+            this.scanToken();
+        }
+        
+        // Add EOF token
+        this.addToken("EOF", "");
+        
+        return this.tokens;
+    }
+    
+    private scanToken(): void {
+        let ch = this.current();
+        
+        // Skip whitespace
+        if (ch == 32 || ch == 9 || ch == 13) {  // space, tab, CR
+            this.advance();
+            return;
+        }
+        
+        // Handle newline
+        if (ch == 10) {  // LF
+            this.line = this.line + 1;
+            this.column = 1;
+            this.advance();
+            return;
+        }
+        
+        // Skip comments: //
+        if (ch == 47 && this.peek() == 47) {  // '//'
+            while (this.pos < this.source.length && this.current() != 10) {
+                this.advance();
+            }
+            return;
+        }
+        
+        // Identifier or keyword
+        if (this.isAlpha(ch)) {
+            this.scanIdentifier();
+            return;
+        }
+        
+        // Number
+        if (this.isDigit(ch)) {
+            this.scanNumber();
+            return;
+        }
+        
+        // Single character tokens
+        if (ch == 40) { this.addToken("LPAREN", "("); this.advance(); return; }  // (
+        if (ch == 41) { this.addToken("RPAREN", ")"); this.advance(); return; }  // )
+        if (ch == 123) { this.addToken("LBRACE", "{"); this.advance(); return; } // {
+        if (ch == 125) { this.addToken("RBRACE", "}"); this.advance(); return; } // }
+        if (ch == 44) { this.addToken("COMMA", ","); this.advance(); return; }   // ,
+        if (ch == 59) { this.addToken("SEMICOLON", ";"); this.advance(); return; } // ;
+        if (ch == 58) { this.addToken("COLON", ":"); this.advance(); return; }   // :
+        
+        // Operators
+        if (ch == 43) { this.addToken("PLUS", "+"); this.advance(); return; }    // +
+        if (ch == 45) { this.addToken("MINUS", "-"); this.advance(); return; }   // -
+        if (ch == 42) { this.addToken("STAR", "*"); this.advance(); return; }    // *
+        if (ch == 47) { this.addToken("SLASH", "/"); this.advance(); return; }   // /
+        
+        // Comparison operators
+        if (ch == 61) {  // =
+            if (this.peek() == 61) {  // ==
+                this.addToken("EQ", "==");
+                this.advance();
+                this.advance();
+                return;
+            }
+            this.addToken("ASSIGN", "=");
+            this.advance();
+            return;
+        }
+        
+        if (ch == 60) {  // <
+            if (this.peek() == 61) {  // <=
+                this.addToken("LE", "<=");
+                this.advance();
+                this.advance();
+                return;
+            }
+            this.addToken("LT", "<");
+            this.advance();
+            return;
+        }
+        
+        if (ch == 62) {  // >
+            if (this.peek() == 61) {  // >=
+                this.addToken("GE", ">=");
+                this.advance();
+                this.advance();
+                return;
+            }
+            this.addToken("GT", ">");
+            this.advance();
+            return;
+        }
+        
+        // Unknown character - skip
+        log("Lexer: Unknown character at line " + this.intToString(this.line));
+        this.advance();
+    }
+    
+    private scanIdentifier(): void {
+        let start = this.pos;
+        
+        while (this.pos < this.source.length && this.isAlphaNumeric(this.current())) {
+            this.advance();
+        }
+        
+        let lexeme = this.source.slice(start, this.pos);
+        let tokenType = this.getKeywordType(lexeme);
+        
+        this.addToken(tokenType, lexeme);
+    }
+    
+    private scanNumber(): void {
+        let start = this.pos;
+        
+        while (this.pos < this.source.length && this.isDigit(this.current())) {
+            this.advance();
+        }
+        
+        let lexeme = this.source.slice(start, this.pos);
+        this.addToken("NUMBER", lexeme);
+    }
+    
+    private getKeywordType(lexeme: string): string {
+        if (lexeme == "function") return "FUNCTION";
+        if (lexeme == "return") return "RETURN";
+        if (lexeme == "let") return "LET";
+        if (lexeme == "if") return "IF";
+        if (lexeme == "else") return "ELSE";
+        if (lexeme == "while") return "WHILE";
+        if (lexeme == "true") return "TRUE";
+        if (lexeme == "false") return "FALSE";
+        return "IDENTIFIER";
+    }
+    
+    private addToken(type: string, lexeme: string): void {
+        let token = new Token(type, lexeme, this.line, this.column);
+        this.tokens.push(token);
+    }
+    
+    private current(): i32 {
+        if (this.pos >= this.source.length) {
+            return 0;
+        }
+        return this.source.charCodeAt(this.pos);
+    }
+    
+    private peek(): i32 {
+        if (this.pos + 1 >= this.source.length) {
+            return 0;
+        }
+        return this.source.charCodeAt(this.pos + 1);
+    }
+    
+    private advance(): void {
+        this.pos = this.pos + 1;
+        this.column = this.column + 1;
+    }
+    
+    private isAlpha(ch: i32): bool {
+        return (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch == 95; // A-Z, a-z, _
+    }
+    
+    private isDigit(ch: i32): bool {
+        return ch >= 48 && ch <= 57; // 0-9
+    }
+    
+    private isAlphaNumeric(ch: i32): bool {
+        return this.isAlpha(ch) || this.isDigit(ch);
+    }
+    
+    private intToString(n: i32): string {
+        if (n == 0) return "0";
+        if (n == 1) return "1";
+        if (n == 2) return "2";
+        if (n == 3) return "3";
+        if (n == 4) return "4";
+        if (n == 5) return "5";
+        if (n == 6) return "6";
+        if (n == 7) return "7";
+        if (n == 8) return "8";
+        if (n == 9) return "9";
+        return "?";
+    }
+}

@@ -2584,7 +2584,7 @@ export class CodeGenerator {
 
     const isResolveCall = name === ".resolve" || name === "this.resolve" || name.endsWith(".resolve") || name.includes(".resolve$") || (info && (info.name === ".resolve" || info.name.endsWith(".resolve")));
 
-    console.log(`--- generateInternalCall: name=${name}, info.name=${info ? info.name : 'null'}, isResolveCall=${isResolveCall}`);
+    // console.log(`--- generateInternalCall: name=${name}, info.name=${info ? info.name : 'null'}, isResolveCall=${isResolveCall}`);
 
     if (info && info.restParamIndex !== undefined) {
       const fixedCount = info.restParamIndex;
@@ -2787,7 +2787,7 @@ export class CodeGenerator {
   private generateMemberCallExpr(m: MemberExpr, args: Expression[], genericArgs?: TypeAnnotation[]): string {
     const fullName = (m.object.kind === ASTKind.Identifier) ? `${(m.object as Identifier).name}.${m.member}` : undefined;
     
-    console.log(`--- generateMemberCallExpr: member=${m.member}, fullName=${fullName}`);
+    // console.log(`--- generateMemberCallExpr: member=${m.member}, fullName=${fullName}`);
 
     // Namespace check (e.g. memory.alloc or string.byteLength)
     if (m.object.kind === ASTKind.Identifier) {
@@ -3301,7 +3301,7 @@ export class CodeGenerator {
 
     const actualMangled = (sym as any).realName || sym.name || mangled;
     
-    console.log(`--- generateImportedCall: local=${local}, mangled=${mangled}, actualMangled=${actualMangled}`);
+    // console.log(`--- generateImportedCall: local=${local}, mangled=${mangled}, actualMangled=${actualMangled}`);
 
     const isResolve = local === 'resolve' || local.endsWith('.resolve') || actualMangled === '.resolve' || actualMangled.includes('.resolve$') || actualMangled.startsWith('.resolve');
 

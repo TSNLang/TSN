@@ -1,0 +1,180 @@
+// AST Node Definitions - Simple & Clean
+// Chỉ support những gì CẦN THIẾT cho Phase 1
+
+import { Array } from "std:array";
+
+// ========================================
+// BASE TYPES
+// ========================================
+
+export class SourceLocation {
+    line: i32;
+    column: i32;
+    
+    constructor(line: i32, column: i32) {
+        this.line = line;
+        this.column = column;
+    }
+}
+
+// ========================================
+// PROGRAM & DECLARATIONS
+// ========================================
+
+export class Program {
+    functions: Array<FunctionDecl>;
+    
+    constructor() {
+        this.functions = new Array<FunctionDecl>();
+    }
+}
+
+export class FunctionDecl {
+    name: string;
+    params: Array<Parameter>;
+    returnType: string;
+    body: BlockStmt;
+    
+    constructor(name: string, returnType: string) {
+        this.name = name;
+        this.returnType = returnType;
+        this.params = new Array<Parameter>();
+        this.body = new BlockStmt();
+    }
+}
+
+export class Parameter {
+    name: string;
+    typeAnnotation: string;
+    
+    constructor(name: string, typeAnnotation: string) {
+        this.name = name;
+        this.typeAnnotation = typeAnnotation;
+    }
+}
+
+// ========================================
+// STATEMENTS
+// ========================================
+
+export class BlockStmt {
+    statements: Array<Stmt>;
+    
+    constructor() {
+        this.statements = new Array<Stmt>();
+    }
+}
+
+// Base class for all statements
+export class Stmt {
+    kind: string;
+    
+    constructor(kind: string) {
+        this.kind = kind;
+    }
+}
+
+export class ReturnStmt {
+    kind: string;
+    value: Expr;
+    
+    constructor(value: Expr) {
+        this.kind = "ReturnStmt";
+        this.value = value;
+    }
+}
+
+export class ExprStmt {
+    kind: string;
+    expr: Expr;
+    
+    constructor(expr: Expr) {
+        this.kind = "ExprStmt";
+        this.expr = expr;
+    }
+}
+
+export class VarDeclStmt {
+    kind: string;
+    name: string;
+    typeAnnotation: string;
+    init: Expr;
+    
+    constructor(name: string, typeAnnotation: string, init: Expr) {
+        this.kind = "VarDeclStmt";
+        this.name = name;
+        this.typeAnnotation = typeAnnotation;
+        this.init = init;
+    }
+}
+
+// ========================================
+// EXPRESSIONS
+// ========================================
+
+// Base class for all expressions
+export class Expr {
+    kind: string;
+    
+    constructor(kind: string) {
+        this.kind = kind;
+    }
+}
+
+export class NumberLiteral {
+    kind: string;
+    value: i32;
+    
+    constructor(value: i32) {
+        this.kind = "NumberLiteral";
+        this.value = value;
+    }
+}
+
+export class Identifier {
+    kind: string;
+    name: string;
+    
+    constructor(name: string) {
+        this.kind = "Identifier";
+        this.name = name;
+    }
+}
+
+export class BinaryExpr {
+    kind: string;
+    left: Expr;
+    operator: string;
+    right: Expr;
+    
+    constructor(left: Expr, operator: string, right: Expr) {
+        this.kind = "BinaryExpr";
+        this.left = left;
+        this.operator = operator;
+        this.right = right;
+    }
+}
+
+export class CallExpr {
+    kind: string;
+    callee: string;
+    args: Array<Expr>;
+    
+    constructor(callee: string) {
+        this.kind = "CallExpr";
+        this.callee = callee;
+        this.args = new Array<Expr>();
+    }
+}
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+export function isValidType(typeName: string): i32 {
+    if (typeName == "i32") return 1;
+    if (typeName == "i64") return 1;
+    if (typeName == "bool") return 1;
+    if (typeName == "void") return 1;
+    return 0;
+}

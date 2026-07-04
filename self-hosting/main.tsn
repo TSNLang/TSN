@@ -41,6 +41,8 @@ function logBool(label: string, value: bool): void {
     log("parseFile: extracting file content...");
     state.source = fsResult.value();
     log("parseFile: source extracted.");
+    log("parseFile: source length:");
+    print_i32(state.source.length);
     class_incref(state.source);
     log("parseFile: initializing Lexer...");
     let lexer = new Lexer(state.source);
@@ -54,8 +56,10 @@ function logBool(label: string, value: bool): void {
     class_incref(state.tokens);
     let parser = new ASTParser(state.tokens);
     
+    log("parseFile: Creating declarations array...");
     // Inline parse logic using parser.pos directly
     let declarations = new Array<Declaration>();
+    log("parseFile: Starting parse loop...");
     while (parser.pos < state.tokens.length) {
         let t = state.tokens.get(parser.pos);
         if (t == null || t.kind == TokenKind.EOF) {
