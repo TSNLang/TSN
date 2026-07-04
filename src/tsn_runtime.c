@@ -60,6 +60,110 @@ void print_ptr(void* p) { printf("%p\n", p); }
 void print_f32(float f) { printf("%f\n", f); }
 void print_f64(double d) { printf("%lf\n", d); }
 
+// ============================================================
+// TSN String structure: { i32 refcount, i32 length, bytes... }
+// ============================================================
+typedef struct {
+    int32_t refcount;
+    int32_t length;
+    char bytes[0];  // flexible array
+} TsnStr;
+
+// Forward declarations
+void* readText_impl(const char* path);
+void* writeText_impl(const char* path, TsnStr* content);
+
+// Create a TSN string from a C string literal
+TsnStr* tsn_str_from_cstr(const char* s) {
+    int32_t len = (int32_t)strlen(s);
+    TsnStr* str = (TsnStr*)malloc(8 + len + 1);
+    str->refcount = 1;
+    str->length = len;
+    memcpy(str->bytes, s, len + 1);
+    return str;
+}
+
+// _T_log_P_ptr(str) - print TSN string to stdout
+void _T_log_P_ptr(TsnStr* s) {
+    if (!s) { printf("null\n"); fflush(stdout); return; }
+    printf("%.*s\n", s->length, s->bytes);
+    fflush(stdout);
+}
+
+void tsn_incref(void* p) { class_incref(p); }
+void tsn_decref(void* p) { class_decref(p, NULL); }
+
+// Array_length_impl - return length field of array
+int32_t Array_length_impl(void* arr) {
+    if (!arr) return 0;
+    typedef struct { int32_t refcount; int32_t pad; void* vtable; void* data; int32_t length; } ArrHdr;
+    return ((ArrHdr*)arr)->length;
+}
+
+// String concat
+void* _T_string_concat_P_ptr_ptr(TsnStr* a, TsnStr* b) {
+    if (!a && !b) return tsn_str_from_cstr("");
+    if (!a) return b;
+    if (!b) return a;
+    int32_t newlen = a->length + b->length;
+    TsnStr* result = (TsnStr*)malloc(8 + newlen + 1);
+    result->refcount = 1;
+    result->length = newlen;
+    memcpy(result->bytes, a->bytes, a->length);
+    memcpy(result->bytes + a->length, b->bytes, b->length);
+    result->bytes[newlen] = '\0';
+    return result;
+}
+
+// String equals
+int32_t _T_string_equals_P_ptr_ptr(TsnStr* a, TsnStr* b) {
+    if (a == b) return 1;
+    if (!a || !b) return 0;
+    if (a->length != b->length) return 0;
+    return memcmp(a->bytes, b->bytes, a->length) == 0 ? 1 : 0;
+}
+
+// _T_readText_P_ptr - read file, return TsnStr*
+void* _T_readText_P_ptr(TsnStr* pathStr) {
+    if (!pathStr) return NULL;
+    char path[4096];
+    int32_t len = pathStr->length < 4095 ? pathStr->length : 4095;
+    memcpy(path, pathStr->bytes, len);
+    path[len] = '\0';
+    return readText_impl(path);
+}
+
+// _T_writeText_P_ptr_ptr - write TsnStr to file
+void _T_writeText_P_ptr_ptr(TsnStr* pathStr, TsnStr* content) {
+    if (!pathStr || !content) return;
+    char path[4096];
+    int32_t len = pathStr->length < 4095 ? pathStr->length : 4095;
+    memcpy(path, pathStr->bytes, len);
+    path[len] = '\0';
+    writeText_impl(path, content);
+}
+
+// charCodeAt - get character code at index (string method)
+int32_t charCodeAt(TsnStr* s, int32_t idx) {
+    if (!s || idx < 0 || idx >= s->length) return -1;
+    return (unsigned char)s->bytes[idx];
+}
+
+// slice - get substring (simplified: slice(start, end))
+void* slice(TsnStr* s, int32_t start, int32_t end_idx) {
+    if (!s) return tsn_str_from_cstr("");
+    if (start < 0) start = 0;
+    if (end_idx > s->length) end_idx = s->length;
+    if (start >= end_idx) return tsn_str_from_cstr("");
+    int32_t newlen = end_idx - start;
+    TsnStr* result = (TsnStr*)malloc(8 + newlen + 1);
+    result->refcount = 1;
+    result->length = newlen;
+    memcpy(result->bytes, s->bytes + start, newlen);
+    result->bytes[newlen] = '\0';
+    return result;
+}
+
 // Windows wrappers
 #ifdef _WIN32
 #include <windows.h>
@@ -263,14 +367,11 @@ void Array_Token_push_impl(Array_Token_Struct* arr, void* item) {
 }
 
 // TSN String structure: { i32 refcount, i32 length, [n x i8] bytes }
-typedef struct {
-    int32_t refcount;
-    int32_t length;
-    char bytes[0];
-} TsnString;
+// Note: TsnStr is already defined above - this is an alias
+#define TsnString TsnStr
 
 // Debug helper to log string info
-void debug_string(const char* label, TsnString* str) {
+void debug_string(const char* label, TsnStr* str) {
     if (!str) {
         printf("DEBUG %s: NULL\n", label);
         return;
@@ -285,8 +386,8 @@ typedef struct {
     void* value;
 } TsnResult;
 
-// readText - Read entire file into TSN string
-void* readText(const char* path) {
+// readText_impl - Read entire file into TSN string
+void* readText_impl(const char* path) {
     TsnResult* result = (TsnResult*)malloc(sizeof(TsnResult));
     if (!result) {
         result = (TsnResult*)malloc(sizeof(TsnResult));
@@ -398,8 +499,8 @@ void* readText(const char* path) {
 #endif
 }
 
-// writeText - Write TSN string to file
-void* writeText(const char* path, TsnString* content) {
+// writeText_impl - Write TSN string to file
+void* writeText_impl(const char* path, TsnStr* content) {
     TsnResult* result = (TsnResult*)malloc(sizeof(TsnResult));
     if (!result) {
         result = (TsnResult*)malloc(sizeof(TsnResult));
