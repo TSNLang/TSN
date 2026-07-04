@@ -95,6 +95,18 @@ class Lexer:
             self.advance()
             return
         
+        if ch == '|' and self.peek() == '|':
+            self.add_token('OR', '||')
+            self.advance()
+            self.advance()
+            return
+        
+        if ch == '&' and self.peek() == '&':
+            self.add_token('AND', '&&')
+            self.advance()
+            self.advance()
+            return
+        
         # Single-char tokens
         single_chars = {
             '(': 'LPAREN', ')': 'RPAREN',
@@ -353,18 +365,29 @@ class Parser:
         methods = []
         
         while not self.check('RBRACE') and not self.is_at_end():
+            # Skip access modifiers if present
+            if self.check('PUBLIC') or self.check('PRIVATE'):
+                self.advance()
+            
             # Constructor
             if self.check('CONSTRUCTOR'):
                 method = self.parse_constructor()
                 methods.append(method)
-            # Method
-            elif self.peek_ahead(1).type == 'LPAREN':
-                method = self.parse_method()
-                methods.append(method)
-            # Field
             else:
-                field = self.parse_field()
-                fields.append(field)
+                # Need to look ahead to distinguish field from method
+                # Method: name ( ...
+                # Field: name : ...
+                name_token = self.peek()
+                next_token = self.peek_ahead(1)
+                
+                if next_token.type == 'LPAREN':
+                    # It's a method
+                    method = self.parse_method()
+                    methods.append(method)
+                else:
+                    # It's a field
+                    field = self.parse_field()
+                    fields.append(field)
         
         self.consume('RBRACE')
         
@@ -492,8 +515,12 @@ class Parser:
     def parse_var_decl(self) -> VarDeclStmt:
         self.consume('LET')
         name = self.consume('IDENTIFIER').value
-        self.consume('COLON')
-        type_name = self.parse_type()
+        
+        # Type annotation is optional (type inference)
+        type_name = "auto"
+        if self.match('COLON'):
+            type_name = self.parse_type()
+        
         self.consume('ASSIGN')
         init = self.parse_expression()
         self.consume('SEMICOLON')
@@ -537,7 +564,24 @@ class Parser:
         return expr
     
     def parse_logical_or(self) -> Expr:
-        return self.parse_comparison()
+        expr = self.parse_logical_and()
+        
+        while self.check('OR'):
+            op = self.advance().value
+            right = self.parse_logical_and()
+            expr = BinaryExpr(expr, op, right)
+        
+        return expr
+    
+    def parse_logical_and(self) -> Expr:
+        expr = self.parse_comparison()
+        
+        while self.check('AND'):
+            op = self.advance().value
+            right = self.parse_comparison()
+            expr = BinaryExpr(expr, op, right)
+        
+        return expr
     
     def parse_comparison(self) -> Expr:
         expr = self.parse_addition()
@@ -760,6 +804,7 @@ class Codegen:
         """Emit a single function"""
         self.register_counter = 0
         self.label_counter = 0
+        self.local_vars = {}  # Track local variables
         
         # Function signature
         return_type = self.get_llvm_type(func.return_type)
@@ -772,17 +817,313 @@ class Codegen:
         # Entry block
         self.output.append("entry:")
         
-        # TODO: Emit function body
-        # For now, just return default value
-        if func.return_type == "void":
-            self.output.append("  ret void")
-        elif func.return_type == "i32":
-            self.output.append("  ret i32 0")
-        else:
-            self.output.append("  ret ptr null")
+        # Allocate space for parameters
+        for param in func.params:
+            param_type = self.get_llvm_type(param.type_name)
+            alloca_reg = self.new_register()
+            self.output.append(f"  {alloca_reg} = alloca {param_type}, align 8")
+            self.output.append(f"  store {param_type} %{param.name}, ptr {alloca_reg}, align 8")
+            self.local_vars[param.name] = (alloca_reg, param_type)
+        
+        # Emit function body
+        self.emit_block_stmt(func.body)
+        
+        # Add default return if needed
+        if not self.output[-1].strip().startswith('ret'):
+            if func.return_type == "void":
+                self.output.append("  ret void")
+            elif func.return_type == "i32":
+                self.output.append("  ret i32 0")
+            else:
+                self.output.append("  ret ptr null")
         
         self.output.append("}")
         self.output.append("")
+    
+    def emit_block_stmt(self, block: BlockStmt):
+        """Emit statements in a block"""
+        for stmt in block.statements:
+            self.emit_statement(stmt)
+    
+    def emit_statement(self, stmt: ASTNode):
+        """Emit a single statement"""
+        if isinstance(stmt, ReturnStmt):
+            self.emit_return(stmt)
+        elif isinstance(stmt, VarDeclStmt):
+            self.emit_var_decl(stmt)
+        elif isinstance(stmt, ExprStmt):
+            self.emit_expr_stmt(stmt)
+        elif isinstance(stmt, IfStmt):
+            self.emit_if(stmt)
+        elif isinstance(stmt, WhileStmt):
+            self.emit_while(stmt)
+        elif isinstance(stmt, BlockStmt):
+            self.emit_block_stmt(stmt)
+    
+    def emit_return(self, stmt: ReturnStmt):
+        """Emit return statement"""
+        if stmt.value is None:
+            self.output.append("  ret void")
+        else:
+            value_reg, value_type = self.emit_expression(stmt.value)
+            self.output.append(f"  ret {value_type} {value_reg}")
+    
+    def emit_var_decl(self, stmt: VarDeclStmt):
+        """Emit variable declaration"""
+        # Allocate space
+        var_type = self.get_llvm_type(stmt.type_name)
+        alloca_reg = self.new_register()
+        self.output.append(f"  {alloca_reg} = alloca {var_type}, align 8")
+        
+        # Store initial value
+        init_reg, init_type = self.emit_expression(stmt.init)
+        self.output.append(f"  store {init_type} {init_reg}, ptr {alloca_reg}, align 8")
+        
+        # Track variable
+        self.local_vars[stmt.name] = (alloca_reg, var_type)
+    
+    def emit_expr_stmt(self, stmt: ExprStmt):
+        """Emit expression statement"""
+        self.emit_expression(stmt.expr)
+    
+    def emit_if(self, stmt: IfStmt):
+        """Emit if statement"""
+        # Evaluate condition
+        cond_reg, _ = self.emit_expression(stmt.condition)
+        
+        # Convert to i1
+        cond_i1 = self.new_register()
+        self.output.append(f"  {cond_i1} = trunc i32 {cond_reg} to i1")
+        
+        # Create labels
+        then_label = self.new_label("if.then")
+        else_label = self.new_label("if.else")
+        end_label = self.new_label("if.end")
+        
+        # Branch
+        if stmt.else_branch:
+            self.output.append(f"  br i1 {cond_i1}, label %{then_label}, label %{else_label}")
+        else:
+            self.output.append(f"  br i1 {cond_i1}, label %{then_label}, label %{end_label}")
+        
+        # Then branch
+        self.output.append(f"{then_label}:")
+        self.emit_statement(stmt.then_branch)
+        if not self.output[-1].strip().startswith('ret'):
+            self.output.append(f"  br label %{end_label}")
+        
+        # Else branch
+        if stmt.else_branch:
+            self.output.append(f"{else_label}:")
+            self.emit_statement(stmt.else_branch)
+            if not self.output[-1].strip().startswith('ret'):
+                self.output.append(f"  br label %{end_label}")
+        
+        # End
+        self.output.append(f"{end_label}:")
+    
+    def emit_while(self, stmt: WhileStmt):
+        """Emit while loop"""
+        # Labels
+        cond_label = self.new_label("while.cond")
+        body_label = self.new_label("while.body")
+        end_label = self.new_label("while.end")
+        
+        # Jump to condition
+        self.output.append(f"  br label %{cond_label}")
+        
+        # Condition
+        self.output.append(f"{cond_label}:")
+        cond_reg, _ = self.emit_expression(stmt.condition)
+        cond_i1 = self.new_register()
+        self.output.append(f"  {cond_i1} = trunc i32 {cond_reg} to i1")
+        self.output.append(f"  br i1 {cond_i1}, label %{body_label}, label %{end_label}")
+        
+        # Body
+        self.output.append(f"{body_label}:")
+        self.emit_statement(stmt.body)
+        self.output.append(f"  br label %{cond_label}")
+        
+        # End
+        self.output.append(f"{end_label}:")
+    
+    def emit_expression(self, expr: ASTNode) -> tuple:
+        """Emit expression and return (register, type)"""
+        if isinstance(expr, NumberLiteral):
+            return (str(expr.value), "i32")
+        
+        elif isinstance(expr, StringLiteral):
+            # Add to string literals
+            str_idx = len(self.string_literals)
+            self.string_literals.append(expr.value)
+            return (f"@.str.{str_idx}", "ptr")
+        
+        elif isinstance(expr, IdentifierExpr):
+            # Load from local variable
+            if expr.name in self.local_vars:
+                alloca_reg, var_type = self.local_vars[expr.name]
+                load_reg = self.new_register()
+                self.output.append(f"  {load_reg} = load {var_type}, ptr {alloca_reg}, align 8")
+                return (load_reg, var_type)
+            else:
+                # Unknown variable - return 0
+                return ("0", "i32")
+        
+        elif isinstance(expr, BinaryExpr):
+            return self.emit_binary(expr)
+        
+        elif isinstance(expr, CallExpr):
+            return self.emit_call(expr)
+        
+        elif isinstance(expr, MemberExpr):
+            return self.emit_member(expr)
+        
+        elif isinstance(expr, NewExpr):
+            return self.emit_new(expr)
+        
+        elif isinstance(expr, AssignExpr):
+            return self.emit_assign(expr)
+        
+        elif isinstance(expr, ThisExpr):
+            # 'this' is always %this parameter (first param in methods)
+            return ("%this", "ptr")
+        
+        else:
+            # Unknown expression
+            return ("0", "i32")
+    
+    def emit_binary(self, expr: BinaryExpr) -> tuple:
+        """Emit binary operation"""
+        left_reg, left_type = self.emit_expression(expr.left)
+        right_reg, right_type = self.emit_expression(expr.right)
+        
+        result_reg = self.new_register()
+        
+        # Arithmetic operators
+        if expr.op == '+':
+            self.output.append(f"  {result_reg} = add i32 {left_reg}, {right_reg}")
+            return (result_reg, "i32")
+        elif expr.op == '-':
+            self.output.append(f"  {result_reg} = sub i32 {left_reg}, {right_reg}")
+            return (result_reg, "i32")
+        elif expr.op == '*':
+            self.output.append(f"  {result_reg} = mul i32 {left_reg}, {right_reg}")
+            return (result_reg, "i32")
+        elif expr.op == '/':
+            self.output.append(f"  {result_reg} = sdiv i32 {left_reg}, {right_reg}")
+            return (result_reg, "i32")
+        
+        # Logical operators
+        elif expr.op == '||':
+            # Convert to i1, or, then back to i32
+            left_i1 = self.new_register()
+            right_i1 = self.new_register()
+            or_i1 = self.new_register()
+            self.output.append(f"  {left_i1} = trunc i32 {left_reg} to i1")
+            self.output.append(f"  {right_i1} = trunc i32 {right_reg} to i1")
+            self.output.append(f"  {or_i1} = or i1 {left_i1}, {right_i1}")
+            self.output.append(f"  {result_reg} = zext i1 {or_i1} to i32")
+            return (result_reg, "i32")
+        elif expr.op == '&&':
+            # Convert to i1, and, then back to i32
+            left_i1 = self.new_register()
+            right_i1 = self.new_register()
+            and_i1 = self.new_register()
+            self.output.append(f"  {left_i1} = trunc i32 {left_reg} to i1")
+            self.output.append(f"  {right_i1} = trunc i32 {right_reg} to i1")
+            self.output.append(f"  {and_i1} = and i1 {left_i1}, {right_i1}")
+            self.output.append(f"  {result_reg} = zext i1 {and_i1} to i32")
+            return (result_reg, "i32")
+        
+        # Comparison operators
+        elif expr.op == '<':
+            cmp_reg = self.new_register()
+            self.output.append(f"  {cmp_reg} = icmp slt i32 {left_reg}, {right_reg}")
+            self.output.append(f"  {result_reg} = zext i1 {cmp_reg} to i32")
+            return (result_reg, "i32")
+        elif expr.op == '>':
+            cmp_reg = self.new_register()
+            self.output.append(f"  {cmp_reg} = icmp sgt i32 {left_reg}, {right_reg}")
+            self.output.append(f"  {result_reg} = zext i1 {cmp_reg} to i32")
+            return (result_reg, "i32")
+        elif expr.op == '==':
+            cmp_reg = self.new_register()
+            self.output.append(f"  {cmp_reg} = icmp eq i32 {left_reg}, {right_reg}")
+            self.output.append(f"  {result_reg} = zext i1 {cmp_reg} to i32")
+            return (result_reg, "i32")
+        elif expr.op == '!=':
+            cmp_reg = self.new_register()
+            self.output.append(f"  {cmp_reg} = icmp ne i32 {left_reg}, {right_reg}")
+            self.output.append(f"  {result_reg} = zext i1 {cmp_reg} to i32")
+            return (result_reg, "i32")
+        elif expr.op == '<=':
+            cmp_reg = self.new_register()
+            self.output.append(f"  {cmp_reg} = icmp sle i32 {left_reg}, {right_reg}")
+            self.output.append(f"  {result_reg} = zext i1 {cmp_reg} to i32")
+            return (result_reg, "i32")
+        elif expr.op == '>=':
+            cmp_reg = self.new_register()
+            self.output.append(f"  {cmp_reg} = icmp sge i32 {left_reg}, {right_reg}")
+            self.output.append(f"  {result_reg} = zext i1 {cmp_reg} to i32")
+            return (result_reg, "i32")
+        
+        return ("0", "i32")
+    
+    def emit_call(self, expr: CallExpr) -> tuple:
+        """Emit function call"""
+        # Simple case: direct function call
+        if isinstance(expr.callee, IdentifierExpr):
+            func_name = self.mangle_function_name(expr.callee.name, False)
+            
+            # Evaluate arguments
+            args = []
+            for arg in expr.args:
+                arg_reg, arg_type = self.emit_expression(arg)
+                args.append(f"{arg_type} {arg_reg}")
+            
+            args_str = ', '.join(args) if args else ""
+            
+            # Call
+            result_reg = self.new_register()
+            self.output.append(f"  {result_reg} = call ptr @{func_name}({args_str})")
+            return (result_reg, "ptr")
+        
+        # Method call
+        elif isinstance(expr.callee, MemberExpr):
+            # TODO: Implement method calls
+            return ("null", "ptr")
+        
+        return ("null", "ptr")
+    
+    def emit_member(self, expr: MemberExpr) -> tuple:
+        """Emit member access"""
+        # TODO: Implement field access
+        return ("0", "i32")
+    
+    def emit_new(self, expr: NewExpr) -> tuple:
+        """Emit new expression"""
+        # Call constructor
+        result_reg = self.new_register()
+        self.output.append(f"  {result_reg} = call ptr @{expr.class_name}_new()")
+        return (result_reg, "ptr")
+    
+    def emit_assign(self, expr: AssignExpr) -> tuple:
+        """Emit assignment"""
+        # Get target address
+        if isinstance(expr.target, IdentifierExpr):
+            if expr.target.name in self.local_vars:
+                alloca_reg, var_type = self.local_vars[expr.target.name]
+                
+                # Evaluate value
+                value_reg, value_type = self.emit_expression(expr.value)
+                
+                # Store
+                self.output.append(f"  store {value_type} {value_reg}, ptr {alloca_reg}, align 8")
+                
+                return (value_reg, value_type)
+        
+        # TODO: Handle member assignment
+        return ("0", "i32")
     
     def emit_string_literals(self):
         """Emit string literal definitions"""
@@ -902,7 +1243,7 @@ def main():
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(llvm_ir)
     
-    print(f"\n✓ Success! Generated {len(llvm_ir)} bytes")
+    print(f"\nSuccess! Generated {len(llvm_ir)} bytes")
     print(f"  Output: {output_file}")
 
 if __name__ == '__main__':
