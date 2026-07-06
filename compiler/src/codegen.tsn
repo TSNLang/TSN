@@ -3,7 +3,7 @@
 
 import { Array } from "std:array";
 import { log } from "std:console";
-import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, ReturnStmt, ExprStmt, VarDeclStmt, Expr, NumberLiteral, Identifier, BinaryExpr, CallExpr } from "./ast.tsn";
+import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, Expr, ReturnStmt, ExprStmt, NumberLiteral, Identifier, BinaryExpr } from "./ast.tsn";
 
 export class Codegen {
     program: Program;
@@ -11,7 +11,6 @@ export class Codegen {
     regCounter: i32;
     labelCounter: i32;
     localVars: Array<string>;  // Track variable names & regs
-    identifierIndex: i32;       // Track which identifier we're emitting
     
     constructor(program: Program) {
         this.program = program;
@@ -19,7 +18,6 @@ export class Codegen {
         this.regCounter = 0;
         this.labelCounter = 0;
         this.localVars = new Array<string>();
-        this.identifierIndex = 0;
     }
     
     // ========================================
@@ -63,7 +61,6 @@ export class Codegen {
     private emitFunction(func: FunctionDecl): void {
         // Reset state for new function
         this.regCounter = 0;
-        this.identifierIndex = 0;
         this.localVars = new Array<string>();
         
         // Function signature: define i32 @functionName(params) {
@@ -157,18 +154,14 @@ export class Codegen {
     }
     
     private emitReturn(stmt: Stmt): void {
-        // Cast to ReturnStmt - we know it's return based on kind
-        let ret = stmt;
-        
-        // For now, assume it has a value
-        let valueReg = this.emitExpression(ret.value);
+        // Access field directly - no casting needed!
+        let valueReg = this.emitExpression(stmt.value);
         this.output.push("  ret i32 " + valueReg);
     }
     
     private emitExprStmt(stmt: Stmt): void {
-        // Cast to ExprStmt
-        let exprStmt = stmt;
-        this.emitExpression(exprStmt.expr);
+        // Access field directly
+        this.emitExpression(stmt.expr);
     }
     
     private emitVarDecl(stmt: Stmt): void {
@@ -200,49 +193,45 @@ export class Codegen {
     }
     
     private emitNumber(expr: Expr): string {
-        // Cast to NumberLiteral
-        let num = expr;
-        return this.intToString(num.value);
+        // Access field directly - no casting needed!
+        return this.intToString(expr.numValue);
     }
     
     private emitIdentifier(expr: Expr): string {
-        // Cast to Identifier
-        let id = expr;
+        // Access field directly
+        let name = expr.name;
         
-        this.output.push("  ; emitIdentifier called!");
-        
-        // TEMPORARY HACK: Always assume we have 2 parameters
-        // First identifier → load from %r0 (first param alloca)
-        // Second identifier → load from %r1 (second param alloca)
-        let varIndex = this.identifierIndex * 2;
-        this.identifierIndex = this.identifierIndex + 1;
-        
-        // Hard-code alloca registers for parameters
-        let allocaReg = "%r0";
-        if (varIndex == 2) {
-            allocaReg = "%r1";
+        // Look up variable in localVars array
+        // Format: [name1, reg1, name2, reg2, ...]
+        let i = 0;
+        while (i < this.localVars.length) {
+            let varName = this.localVars.get(i);
+            let varReg = this.localVars.get(i + 1);
+            
+            if (varName == name) {
+                // Found it! Load from alloca
+                let loadReg = this.newRegister();
+                this.output.push("  " + loadReg + " = load i32, ptr " + varReg + ", align 8");
+                return loadReg;
+            }
+            
+            i = i + 2;
         }
         
-        // Load value from alloca
-        let loadReg = this.newRegister();
-        this.output.push("  " + loadReg + " = load i32, ptr " + allocaReg + ", align 8");
-        return loadReg;
+        // Not found - error
+        this.output.push("  ; ERROR: Unknown identifier: " + name);
+        return "0";
     }
     
     private emitBinary(expr: Expr): string {
-        // Cast to BinaryExpr
-        let bin = expr;
+        this.output.push("  ; emitBinary - recursively evaluate left and right");
         
-        // Reset identifier index for this binary expression
-        this.identifierIndex = 0;
+        // Access fields directly - no casting needed!
+        let leftReg = this.emitExpression(expr.left);
+        let rightReg = this.emitExpression(expr.right);
         
-        // For simple case "a + b", both operands are identifiers
-        // Emit them directly as loads
-        let leftReg = this.emitIdentifierDirect(0);
-        let rightReg = this.emitIdentifierDirect(1);
         let resultReg = this.newRegister();
-        
-        let op = bin.operator;
+        let op = expr.operator;
         
         if (op == "+") {
             this.output.push("  " + resultReg + " = add i32 " + leftReg + ", " + rightReg);
@@ -255,18 +244,6 @@ export class Codegen {
         }
         
         return resultReg;
-    }
-    
-    private emitIdentifierDirect(index: i32): string {
-        // Load parameter by index (0 = first param, 1 = second param)
-        let allocaReg = "%r0";
-        if (index == 1) {
-            allocaReg = "%r1";
-        }
-        
-        let loadReg = this.newRegister();
-        this.output.push("  " + loadReg + " = load i32, ptr " + allocaReg + ", align 8");
-        return loadReg;
     }
     
     private emitCall(expr: Expr): string {

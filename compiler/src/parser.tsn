@@ -4,7 +4,7 @@
 import { Array } from "std:array";
 import { log } from "std:console";
 import { Token } from "./lexer.tsn";
-import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, ReturnStmt, ExprStmt, VarDeclStmt, Expr, NumberLiteral, Identifier, BinaryExpr, CallExpr } from "./ast.tsn";
+import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, Expr, ReturnStmt, ExprStmt, VarDeclStmt, NumberLiteral, Identifier, BinaryExpr, CallExpr } from "./ast.tsn";
 
 export class Parser {
     tokens: Array<Token>;
@@ -115,7 +115,7 @@ export class Parser {
         
         this.consume("SEMICOLON", "Expected ';'");
         
-        return new ReturnStmt(value);
+        return ReturnStmt(value);
     }
     
     private parseVarDecl(): Stmt {
@@ -133,13 +133,13 @@ export class Parser {
         
         this.consume("SEMICOLON", "Expected ';'");
         
-        return new VarDeclStmt(name, type, init);
+        return VarDeclStmt(name, type, init);
     }
     
     private parseExprStmt(): Stmt {
         let expr = this.parseExpression();
         this.consume("SEMICOLON", "Expected ';'");
-        return new ExprStmt(expr);
+        return ExprStmt(expr);
     }
     
     // ========================================
@@ -156,7 +156,7 @@ export class Parser {
         while (this.match("LT") || this.match("GT") || this.match("LE") || this.match("GE") || this.match("EQ")) {
             let op = this.previous().lexeme;
             let right = this.parseAddition();
-            expr = new BinaryExpr(expr, op, right);
+            expr = BinaryExpr(expr, op, right);
         }
         
         return expr;
@@ -168,7 +168,7 @@ export class Parser {
         while (this.match("PLUS") || this.match("MINUS")) {
             let op = this.previous().lexeme;
             let right = this.parseMultiplication();
-            expr = new BinaryExpr(expr, op, right);
+            expr = BinaryExpr(expr, op, right);
         }
         
         return expr;
@@ -180,7 +180,7 @@ export class Parser {
         while (this.match("STAR") || this.match("SLASH")) {
             let op = this.previous().lexeme;
             let right = this.parsePrimary();
-            expr = new BinaryExpr(expr, op, right);
+            expr = BinaryExpr(expr, op, right);
         }
         
         return expr;
@@ -191,7 +191,7 @@ export class Parser {
         if (this.check("NUMBER")) {
             let token = this.advance();
             let value = this.stringToInt(token.lexeme);
-            return new NumberLiteral(value);
+            return NumberLiteral(value);
         }
         
         // Identifier or function call
@@ -200,7 +200,7 @@ export class Parser {
             
             // Function call
             if (this.match("LPAREN")) {
-                let call = new CallExpr(name);
+                let call = CallExpr(name);
                 
                 if (this.check("RPAREN") == false) {
                     call.args.push(this.parseExpression());
@@ -215,7 +215,7 @@ export class Parser {
             }
             
             // Just identifier
-            return new Identifier(name);
+            return Identifier(name);
         }
         
         // Parenthesized expression
@@ -226,7 +226,7 @@ export class Parser {
         }
         
         log("Parser error: Unexpected token");
-        return new NumberLiteral(0); // Error fallback
+        return NumberLiteral(0); // Error fallback
     }
     
     // ========================================

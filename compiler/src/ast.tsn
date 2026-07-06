@@ -1,5 +1,5 @@
-// AST Node Definitions - Simple & Clean
-// Chỉ support những gì CẦN THIẾT cho Phase 1
+// AST Node Definitions - Phase 10: Tagged Union Approach
+// No inheritance - all fields in base class with type tag
 
 import { Array } from "std:array";
 
@@ -54,7 +54,7 @@ export class Parameter {
 }
 
 // ========================================
-// STATEMENTS
+// STATEMENTS - Tagged Union Style
 // ========================================
 
 export class BlockStmt {
@@ -65,106 +65,113 @@ export class BlockStmt {
     }
 }
 
-// Base class for all statements
+// ALL statement data in ONE class - discriminated by kind
 export class Stmt {
     kind: string;
     
-    constructor(kind: string) {
-        this.kind = kind;
-    }
-}
-
-export class ReturnStmt {
-    kind: string;
+    // ReturnStmt fields
     value: Expr;
     
-    constructor(value: Expr) {
-        this.kind = "ReturnStmt";
-        this.value = value;
-    }
-}
-
-export class ExprStmt {
-    kind: string;
+    // ExprStmt fields
     expr: Expr;
     
-    constructor(expr: Expr) {
-        this.kind = "ExprStmt";
-        this.expr = expr;
-    }
-}
-
-export class VarDeclStmt {
-    kind: string;
+    // VarDeclStmt fields
     name: string;
     typeAnnotation: string;
     init: Expr;
     
-    constructor(name: string, typeAnnotation: string, init: Expr) {
-        this.kind = "VarDeclStmt";
-        this.name = name;
-        this.typeAnnotation = typeAnnotation;
-        this.init = init;
+    constructor(kind: string) {
+        this.kind = kind;
+        this.value = new Expr("invalid");
+        this.expr = new Expr("invalid");
+        this.name = "";
+        this.typeAnnotation = "";
+        this.init = new Expr("invalid");
     }
 }
 
+// Factory functions for creating specific statement types
+export function ReturnStmt(value: Expr): Stmt {
+    let stmt = new Stmt("ReturnStmt");
+    stmt.value = value;
+    return stmt;
+}
+
+export function ExprStmt(expr: Expr): Stmt {
+    let stmt = new Stmt("ExprStmt");
+    stmt.expr = expr;
+    return stmt;
+}
+
+export function VarDeclStmt(name: string, typeAnnotation: string, init: Expr): Stmt {
+    let stmt = new Stmt("VarDeclStmt");
+    stmt.name = name;
+    stmt.typeAnnotation = typeAnnotation;
+    stmt.init = init;
+    return stmt;
+}
+
 // ========================================
-// EXPRESSIONS
+// EXPRESSIONS - Tagged Union Style
 // ========================================
 
-// Base class for all expressions
+// ALL expression data in ONE class - discriminated by kind
 export class Expr {
     kind: string;
     
-    constructor(kind: string) {
-        this.kind = kind;
-    }
-}
-
-export class NumberLiteral {
-    kind: string;
-    value: i32;
+    // NumberLiteral fields
+    numValue: i32;
     
-    constructor(value: i32) {
-        this.kind = "NumberLiteral";
-        this.value = value;
-    }
-}
-
-export class Identifier {
-    kind: string;
+    // Identifier fields
     name: string;
     
-    constructor(name: string) {
-        this.kind = "Identifier";
-        this.name = name;
-    }
-}
-
-export class BinaryExpr {
-    kind: string;
+    // BinaryExpr fields
     left: Expr;
     operator: string;
     right: Expr;
     
-    constructor(left: Expr, operator: string, right: Expr) {
-        this.kind = "BinaryExpr";
-        this.left = left;
-        this.operator = operator;
-        this.right = right;
-    }
-}
-
-export class CallExpr {
-    kind: string;
+    // CallExpr fields
     callee: string;
     args: Array<Expr>;
     
-    constructor(callee: string) {
-        this.kind = "CallExpr";
-        this.callee = callee;
+    constructor(kind: string) {
+        this.kind = kind;
+        this.numValue = 0;
+        this.name = "";
+        this.left = new Expr("invalid");
+        this.operator = "";
+        this.right = new Expr("invalid");
+        this.callee = "";
         this.args = new Array<Expr>();
     }
+}
+
+// Factory functions for creating specific expression types
+export function NumberLiteral(value: i32): Expr {
+    let expr = new Expr("NumberLiteral");
+    expr.numValue = value;
+    return expr;
+}
+
+export function Identifier(name: string): Expr {
+    let expr = new Expr("Identifier");
+    expr.name = name;
+    return expr;
+}
+
+export function BinaryExpr(left: Expr, operator: string, right: Expr): Expr {
+    let expr = new Expr("BinaryExpr");
+    expr.left = left;
+    expr.operator = operator;
+    expr.right = right;
+    return expr;
+}
+
+export function CallExpr(callee: string): Expr {
+    let expr = new Expr("CallExpr");
+    expr.callee = callee;
+    expr.args = new Array<Expr>();
+    return expr;
 }
 
 // ========================================
