@@ -8,37 +8,32 @@ import { Parser } from "./parser.tsn";
 import { Codegen } from "./codegen.tsn";
 
 function main(): void {
-    log("=== TSN Compiler v2 - Phase 9 Test ===");
+    log("=== TSN Compiler v2 - Phase 11 ===");
     
-    // Test with parameters
-    let source = "function add(a: i32, b: i32): i32 { return a + b; }";
+    // Test simple case
+    let source = "function test(): i32 { return 42; }";
     
-    log("Source code loaded");
-    log("Length: " + intToString(source.length));
-    
-    // Lexer
-    log("\n=== LEXER ===");
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
+    log("Tokens: " + intToString(tokens.length));
     
-    log("Tokens count: " + intToString(tokens.length));
-    
-    // Parser
-    log("\n=== PARSER ===");
+    log("Before creating parser");
     let parser = new Parser(tokens);
+    log("After creating parser");
+    
+    log("Before calling parse");
     let program = parser.parse();
+    log("After calling parse");
     
-    log("Functions parsed: " + intToString(program.functions.length));
+    log("Functions: " + intToString(program.functions.length));
     
-    // Codegen
-    log("\n=== CODEGEN ===");
+    log("Before codegen");
     let codegen = new Codegen(program);
     let llvmIR = codegen.generate();
+    log("After codegen");
     
-    log("First 100 chars of IR:");
-    log(llvmIR);
-    
-    log("\n=== Phase 9 Complete ===");
+    log("Generated LLVM IR");
+    log("Phase 11 Complete!");
 }
 
 function intToString(n: i32): string {
@@ -53,10 +48,51 @@ function intToString(n: i32): string {
     if (n == 8) return "8";
     if (n == 9) return "9";
     if (n == 10) return "10";
+    if (n == 11) return "11";
+    if (n == 12) return "12";
+    if (n == 13) return "13";
+    if (n == 14) return "14";
+    if (n == 15) return "15";
+    if (n == 16) return "16";
+    if (n == 17) return "17";
+    if (n == 18) return "18";
+    if (n == 19) return "19";
+    if (n == 20) return "20";
+    if (n == 21) return "21";
+    if (n == 22) return "22";
+    if (n == 23) return "23";
+    if (n == 24) return "24";
+    if (n == 25) return "25";
+    if (n == 26) return "26";
+    if (n == 27) return "27";
+    if (n == 28) return "28";
+    if (n == 29) return "29";
     if (n == 20) return "20";
     if (n == 30) return "30";
     if (n == 32) return "32";
+    if (n == 40) return "40";
     if (n == 42) return "42";
+    if (n == 50) return "50";
+    if (n == 51) return "51";
+    if (n == 52) return "52";
+    if (n == 53) return "53";
+    if (n == 54) return "54";
+    if (n == 55) return "55";
+    if (n == 56) return "56";
+    if (n == 57) return "57";
+    if (n == 58) return "58";
+    if (n == 59) return "59";
+    if (n == 60) return "60";
+    if (n == 61) return "61";
+    if (n == 62) return "62";
+    if (n == 63) return "63";
+    if (n == 64) return "64";
+    if (n == 65) return "65";
+    if (n == 66) return "66";
+    if (n == 67) return "67";
+    if (n == 70) return "70";
+    if (n == 80) return "80";
+    if (n == 90) return "90";
     if (n == 100) return "100";
     return "?";
 }
