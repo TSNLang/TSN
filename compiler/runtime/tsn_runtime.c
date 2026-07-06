@@ -3,6 +3,10 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 void* class_alloc(int32_t size) {
     void* p = calloc(1, size);
     if (p) {
@@ -93,11 +97,20 @@ void _T_log_P_ptr(TsnStr* s) {
 void tsn_incref(void* p) { class_incref(p); }
 void tsn_decref(void* p) { class_decref(p, NULL); }
 
-// Array_length_impl - return length field of array
+// Array_length_impl - return length field of array (offset depends on layout)
+// Array layout: { i32 refcount, pad(4), ptr vtable, ptr data, i32 length }
+// But TsnStr layout: { i32 refcount, i32 length, bytes... }
+// We use a unified approach: check refcount to detect type
 int32_t Array_length_impl(void* arr) {
     if (!arr) return 0;
     typedef struct { int32_t refcount; int32_t pad; void* vtable; void* data; int32_t length; } ArrHdr;
     return ((ArrHdr*)arr)->length;
+}
+
+// String length - reads index 1 (i32 length field of TsnStr)
+int32_t tsn_string_length(void* s) {
+    if (!s) return 0;
+    return ((TsnStr*)s)->length;
 }
 
 // String concat
@@ -123,14 +136,52 @@ int32_t _T_string_equals_P_ptr_ptr(TsnStr* a, TsnStr* b) {
     return memcmp(a->bytes, b->bytes, a->length) == 0 ? 1 : 0;
 }
 
-// _T_readText_P_ptr - read file, return TsnStr*
+// _T_readText_P_ptr - read file, return TsnStr* directly (not wrapped in Result)
 void* _T_readText_P_ptr(TsnStr* pathStr) {
     if (!pathStr) return NULL;
     char path[4096];
     int32_t len = pathStr->length < 4095 ? pathStr->length : 4095;
     memcpy(path, pathStr->bytes, len);
     path[len] = '\0';
-    return readText_impl(path);
+    
+    // Read file directly, return TsnStr* (not wrapped in TsnResult)
+#ifdef _WIN32
+    HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return NULL;
+    
+    DWORD fileSize = GetFileSize(hFile, NULL);
+    if (fileSize == INVALID_FILE_SIZE) { CloseHandle(hFile); return NULL; }
+    
+    TsnStr* str = (TsnStr*)malloc(8 + fileSize + 1);
+    if (!str) { CloseHandle(hFile); return NULL; }
+    
+    str->refcount = 1;
+    str->length = (int32_t)fileSize;
+    
+    DWORD bytesRead = 0;
+    if (!ReadFile(hFile, str->bytes, fileSize, &bytesRead, NULL) || bytesRead != fileSize) {
+        CloseHandle(hFile); free(str); return NULL;
+    }
+    str->bytes[fileSize] = '\0';
+    CloseHandle(hFile);
+    return str;
+#else
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long fileSize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    TsnStr* str = (TsnStr*)malloc(8 + fileSize + 1);
+    if (!str) { fclose(f); return NULL; }
+    str->refcount = 1;
+    str->length = (int32_t)fileSize;
+    size_t br = fread(str->bytes, 1, fileSize, f);
+    fclose(f);
+    if (br != (size_t)fileSize) { free(str); return NULL; }
+    str->bytes[fileSize] = '\0';
+    return str;
+#endif
 }
 
 // _T_writeText_P_ptr_ptr - write TsnStr to file
@@ -146,7 +197,8 @@ void _T_writeText_P_ptr_ptr(TsnStr* pathStr, TsnStr* content) {
 // charCodeAt - get character code at index (string method)
 int32_t charCodeAt(TsnStr* s, int32_t idx) {
     if (!s || idx < 0 || idx >= s->length) return -1;
-    return (unsigned char)s->bytes[idx];
+    unsigned char c = (unsigned char)s->bytes[idx];
+    return (int32_t)c;
 }
 
 // slice - get substring (simplified: slice(start, end))

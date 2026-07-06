@@ -22,7 +22,7 @@ export class Parser {
     public parse(): Program {
         let program = new Program();
         
-        while (!this.isAtEnd()) {
+        while (this.isAtEnd() == false) {
             if (this.check("FUNCTION")) {
                 let func = this.parseFunction();
                 program.functions.push(func);
@@ -48,7 +48,7 @@ export class Parser {
         let func = new FunctionDecl(name, "void"); // Default return type
         
         // Parse parameters
-        if (!this.check("RPAREN")) {
+        if (this.check("RPAREN") == false) {
             func.params.push(this.parseParameter());
             
             while (this.match("COMMA")) {
@@ -86,7 +86,7 @@ export class Parser {
         
         let block = new BlockStmt();
         
-        while (!this.check("RBRACE") && !this.isAtEnd()) {
+        while (this.check("RBRACE") == false && this.isAtEnd() == false) {
             block.statements.push(this.parseStatement());
         }
         
@@ -202,7 +202,7 @@ export class Parser {
             if (this.match("LPAREN")) {
                 let call = new CallExpr(name);
                 
-                if (!this.check("RPAREN")) {
+                if (this.check("RPAREN") == false) {
                     call.args.push(this.parseExpression());
                     
                     while (this.match("COMMA")) {
@@ -247,7 +247,7 @@ export class Parser {
     }
     
     private advance(): Token {
-        if (!this.isAtEnd()) {
+        if (this.isAtEnd() == false) {
             this.current = this.current + 1;
         }
         return this.previous();

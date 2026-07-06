@@ -1,127 +1,102 @@
-# TSN Compiler v2 - Clean Rewrite
+# TSN Compiler v2
 
-Đây là phiên bản **viết lại từ đầu** với kiến trúc đơn giản, sạch sẽ.
+This is the next-generation TSN compiler, bootstrapped from the Python compiler in `bootstrap/`.
 
-## Mục tiêu
-
-1. **Đơn giản hóa**: Loại bỏ abstraction không cần thiết
-2. **Dễ debug**: Code path rõ ràng, ngắn gọn
-3. **Tự host được**: Compiler có thể compile chính nó
-4. **Không có bug array index**: Fix từ thiết kế
-
-## Cấu trúc
+## Project Structure
 
 ```
 compiler/
-├── src/
-│   ├── lexer.tsn          # Tokenizer
-│   ├── parser.tsn         # Recursive descent parser
-│   ├── ast.tsn            # AST definitions
-│   ├── mir.tsn            # Medium IR definitions
-│   ├── mir_builder.tsn    # AST → MIR
-│   ├── codegen.tsn        # MIR → LLVM IR
-│   └── main.tsn           # Compiler entry point
-└── build/
-    └── (generated LLVM IR)
+├── src/              # TSN source files for the compiler
+│   ├── ast.tsn       # AST node definitions
+│   ├── lexer.tsn     # Tokenizer
+│   ├── parser.tsn    # Parser (TSN → AST)
+│   ├── codegen.tsn   # Code generator (AST → LLVM IR)
+│   └── main.tsn      # Main entry point
+├── runtime/          # C runtime library
+│   └── tsn_runtime.c # Memory management, string ops, array ops, etc.
+└── tsnc.exe          # Compiled executable
+
+bootstrap/
+├── compiler.py       # Python bootstrap compiler (TSN → LLVM IR)
+├── build-v2.ps1      # Build script
+└── *.ll              # Generated LLVM IR files
 ```
 
-## Nguyên tắc thiết kế
+## Build Instructions
 
-### 1. Keep It Simple
-- Mỗi function chỉ làm MỘT việc
-- Không có deep nesting
-- Tên biến rõ ràng, có ý nghĩa
+1. **Generate LLVM IR from TSN source:**
+   ```powershell
+   python bootstrap\compiler.py compiler\src\ast.tsn -o bootstrap\ast.ll
+   python bootstrap\compiler.py compiler\src\lexer.tsn -o bootstrap\lexer.ll
+   python bootstrap\compiler.py compiler\src\parser.tsn -o bootstrap\parser.ll
+   python bootstrap\compiler.py compiler\src\codegen.tsn -o bootstrap\codegen.ll
+   python bootstrap\compiler.py compiler\src\main.tsn -o bootstrap\main.ll
+   ```
 
-### 2. Explicit Over Implicit
-- Không dùng register caching
-- Mỗi lần cần value → load mới
-- Rõ ràng hơn là clever
+2. **Build the compiler executable:**
+   ```powershell
+   .\bootstrap\build-v2.ps1
+   ```
 
-### 3. Test-Driven
-- Test mỗi module riêng lẻ
-- Regression tests cho mọi bug
-- Examples làm integration tests
+   This will:
+   - Verify LLVM IR files
+   - Compile the C runtime (`runtime/tsn_runtime.c`)
+   - Link everything into `compiler/tsnc.exe`
 
-## Phase 1: Minimal Compiler
+## Current Status (Phase 9)
 
-**Mục tiêu**: Compile được function đơn giản
+**✅ Working Features:**
+- ✓ Lexer - Tokenizes TSN source code
+- ✓ Parser - Parses tokens into AST
+- ✓ Codegen - Generates LLVM IR from AST
+- ✓ Function declarations
+- ✓ Function parameters
+- ✓ Binary expressions (`+`, `-`, `*`, `/`)
+- ✓ Number literals
+- ✓ Return statements
+- ✓ Identifier references (parameters)
 
+**Test Example:**
 ```typescript
 function add(a: i32, b: i32): i32 {
     return a + b;
 }
 ```
 
-**Features**:
-- ✅ Lexer: keywords, identifiers, numbers, operators
-- ✅ Parser: function declarations, expressions, statements
-- ✅ AST: minimal nodes
-- ✅ MIR Builder: function → MIR
-- ✅ Codegen: MIR → LLVM IR
+Successfully compiles to working LLVM IR!
 
-**Không support**:
-- ❌ Classes
-- ❌ Loops
-- ❌ Imports
-- ❌ Generics
+**🔧 Known Limitations:**
+- No polymorphism/inheritance support yet (workaround implemented for Phase 9)
+- Complex nested expressions not fully supported
+- Local variables (`let x = value;`) not implemented
+- No control flow (if/while/for)
+- No classes/methods yet
 
-## Phase 2: Add Control Flow
-
-```typescript
-function max(a: i32, b: i32): i32 {
-    if (a > b) {
-        return a;
-    } else {
-        return b;
-    }
-}
-```
-
-## Phase 3: Add Loops
-
-```typescript
-function sum(n: i32): i32 {
-    let result: i32 = 0;
-    let i: i32 = 0;
-    while (i < n) {
-        result = result + i;
-        i = i + 1;
-    }
-    return result;
-}
-```
-
-## Phase 4: Add Classes
-
-```typescript
-class Point {
-    x: i32;
-    y: i32;
-    
-    constructor(x: i32, y: i32) {
-        this.x = x;
-        this.y = y;
-    }
-}
-```
-
-## Phase 5: Self-hosting
-
-Compile compiler chính nó!
-
-## So sánh với version cũ
-
-| Feature | Old | New |
-|---------|-----|-----|
-| Files | 70+ .ll files | Clean build/ dir |
-| Complexity | High nesting | Flat, simple |
-| Debuggability | Hard | Easy |
-| Array bug | Yes | Fixed by design |
-| Code size | ~3000 lines/file | ~500 lines/file |
-
-## Build
+## Testing
 
 ```powershell
-# Build script sẽ được tạo sau
-.\build-compiler-v2.ps1
+# Run the compiler
+.\compiler\tsnc.exe compiler\src\test-simple.tsn -o output.ll
+
+# Compile and run the output
+clang output.ll compiler\runtime\tsn_runtime.c -o test.exe
+.\test.exe
 ```
+
+## Next Steps (Phase 10+)
+
+1. Fix polymorphism (proper vtables or type tags)
+2. Support local variables
+3. Add control flow (if/while/for)
+4. Implement classes and methods
+5. Full self-hosting (compiler compiles itself)
+
+## Dependencies
+
+- Python 3.8+ (for bootstrap compiler)
+- LLVM/Clang (for compiling LLVM IR)
+- Windows (PowerShell scripts)
+
+## License
+
+See LICENSE file in the root directory.

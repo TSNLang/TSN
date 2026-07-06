@@ -5,12 +5,13 @@ import { log } from "std:console";
 import { readText } from "std:fs";
 import { Lexer } from "./lexer.tsn";
 import { Parser } from "./parser.tsn";
+import { Codegen } from "./codegen.tsn";
 
 function main(): void {
-    log("=== TSN Compiler v2 - Phase 1 Test ===");
+    log("=== TSN Compiler v2 - Phase 9 Test ===");
     
-    // Read source file
-    let source = readText("../test-phase1.tsn");
+    // Test with parameters
+    let source = "function add(a: i32, b: i32): i32 { return a + b; }";
     
     log("Source code loaded");
     log("Length: " + intToString(source.length));
@@ -22,14 +23,6 @@ function main(): void {
     
     log("Tokens count: " + intToString(tokens.length));
     
-    // Print first 10 tokens
-    let i = 0;
-    while (i < 10 && i < tokens.length) {
-        let token = tokens.get(i);
-        log(token.type + " : " + token.lexeme);
-        i = i + 1;
-    }
-    
     // Parser
     log("\n=== PARSER ===");
     let parser = new Parser(tokens);
@@ -37,17 +30,15 @@ function main(): void {
     
     log("Functions parsed: " + intToString(program.functions.length));
     
-    // Print function names
-    let j = 0;
-    while (j < program.functions.length) {
-        let func = program.functions.get(j);
-        log("Function: " + func.name);
-        log("  Return type: " + func.returnType);
-        log("  Params: " + intToString(func.params.length));
-        j = j + 1;
-    }
+    // Codegen
+    log("\n=== CODEGEN ===");
+    let codegen = new Codegen(program);
+    let llvmIR = codegen.generate();
     
-    log("\n=== Phase 1 Complete ===");
+    log("First 100 chars of IR:");
+    log(llvmIR);
+    
+    log("\n=== Phase 9 Complete ===");
 }
 
 function intToString(n: i32): string {

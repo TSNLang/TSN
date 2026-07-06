@@ -756,8 +756,9 @@ class Codegen:
         self.label_counter = 0
         self.imports: Dict[str, str] = {}
         self.extern_classes = []
-        # Build class field type map: {ClassName: {fieldName: llvm_type}}
-        self.class_fields: Dict[str, Dict[str, str]] = {}
+        # Build class field type map: {ClassName: {fieldName: (llvm_type, gep_idx)}}
+        self.class_fields: Dict[str, Dict[str, tuple]] = {}
+        self.class_methods: Dict[str, Dict[str, str]] = {}
         self._collect_imports()
         self._collect_class_fields()
         
@@ -773,11 +774,133 @@ class Codegen:
                     self.extern_classes.append(name)
     
     def _collect_class_fields(self):
-        """Build map of class field types for emit_member type inference"""
+        """Build map of class field types and GEP indices for emit_member"""
+        # Also build method return type map
+        self.class_methods: Dict[str, Dict[str, str]] = {}  # {ClassName: {methodName: ret_type}}
+        
+        # Process classes defined in current module first
+        for cls in self.program.classes:
+            if cls.name not in self.class_fields:
+                self.class_fields[cls.name] = {}
+            if cls.name not in self.class_methods:
+                self.class_methods[cls.name] = {}
+            for i, field in enumerate(cls.fields):
+                llvm_type = self.get_llvm_type(field.type_name)
+                gep_idx = i + 2
+                self.class_fields[cls.name][field.name] = (llvm_type, gep_idx)
+            for method in cls.methods:
+                ret = self.get_llvm_type(method.return_type)
+                self.class_methods[cls.name][method.name] = ret
+        
+        # Then add hardcoded external classes (only if not already defined)
+        # Token: { type: string, lexeme: string, line: i32, column: i32 }
+        if 'Token' not in self.class_fields:
+            self.class_fields['Token'] = {
+                'type': ('ptr', 2),
+                'lexeme': ('ptr', 3),
+                'line': ('i32', 4),
+                'column': ('i32', 5)
+            }
+        # Parser: { tokens: Array<Token>, current: i32 }
+        if 'Parser' not in self.class_fields:
+            self.class_fields['Parser'] = {
+                'tokens': ('ptr', 2),
+                'current': ('i32', 3)
+            }
+        # Program: { functions: Array<FunctionDecl> }
+        if 'Program' not in self.class_fields:
+            self.class_fields['Program'] = {
+                'functions': ('ptr', 2)
+            }
+        # FunctionDecl: { name: string, params: Array, returnType: string, body: BlockStmt }
+        if 'FunctionDecl' not in self.class_fields:
+            self.class_fields['FunctionDecl'] = {
+                'name': ('ptr', 2),
+                'params': ('ptr', 3),
+                'returnType': ('ptr', 4),
+                'body': ('ptr', 5)
+            }
+        # Parameter: { name: string, typeAnnotation: string }
+        if 'Parameter' not in self.class_fields:
+            self.class_fields['Parameter'] = {
+                'name': ('ptr', 2),
+                'typeAnnotation': ('ptr', 3)
+            }
+        # BlockStmt: { statements: Array<Stmt> }
+        if 'BlockStmt' not in self.class_fields:
+            self.class_fields['BlockStmt'] = {
+                'statements': ('ptr', 2)
+            }
+        # Stmt: { kind: string }
+        self.class_fields['Stmt'] = {
+            'kind': ('ptr', 2)
+        }
+        # ReturnStmt: { kind: string, value: Expr }
+        self.class_fields['ReturnStmt'] = {
+            'kind': ('ptr', 2),
+            'value': ('ptr', 3)
+        }
+        # ExprStmt: { kind: string, expr: Expr }
+        self.class_fields['ExprStmt'] = {
+            'kind': ('ptr', 2),
+            'expr': ('ptr', 3)
+        }
+        # VarDeclStmt: { kind: string, name: string, typeAnnotation: string, init: Expr }
+        self.class_fields['VarDeclStmt'] = {
+            'kind': ('ptr', 2),
+            'name': ('ptr', 3),
+            'typeAnnotation': ('ptr', 4),
+            'init': ('ptr', 5)
+        }
+        # Expr: { kind: string }
+        self.class_fields['Expr'] = {
+            'kind': ('ptr', 2)
+        }
+        # NumberLiteral: { kind: string, value: i32 }
+        self.class_fields['NumberLiteral'] = {
+            'kind': ('ptr', 2),
+            'value': ('i32', 3)
+        }
+        # Identifier: { kind: string, name: string }
+        self.class_fields['Identifier'] = {
+            'kind': ('ptr', 2),
+            'name': ('ptr', 3)
+        }
+        # BinaryExpr: { kind: string, left: Expr, operator: string, right: Expr }
+        self.class_fields['BinaryExpr'] = {
+            'kind': ('ptr', 2),
+            'left': ('ptr', 3),
+            'operator': ('ptr', 4),
+            'right': ('ptr', 5)
+        }
+        # CallExpr: { kind: string, callee: string, args: Array<Expr> }
+        self.class_fields['CallExpr'] = {
+            'kind': ('ptr', 2),
+            'callee': ('ptr', 3),
+            'args': ('ptr', 4)
+        }
+        
         for cls in self.program.classes:
             self.class_fields[cls.name] = {}
-            for field in cls.fields:
-                self.class_fields[cls.name][field.name] = self.get_llvm_type(field.type_name)
+            self.class_methods[cls.name] = {}
+            for i, field in enumerate(cls.fields):
+                llvm_type = self.get_llvm_type(field.type_name)
+                gep_idx = i + 2
+                self.class_fields[cls.name][field.name] = (llvm_type, gep_idx)
+            for method in cls.methods:
+                ret = self.get_llvm_type(method.return_type)
+                self.class_methods[cls.name][method.name] = ret
+    
+    def _get_method_return_type(self, cls_name: str, method_name: str) -> str:
+        """Return LLVM return type of a class method, default ptr"""
+        if cls_name in self.class_methods:
+            return self.class_methods[cls_name].get(method_name, 'ptr')
+        # Common known void methods
+        VOID_METHODS = {'scanToken', 'addToken', 'advance', 'push', 'scanIdentifier',
+                        'scanNumber', 'scanString'}
+        if method_name in VOID_METHODS:
+            return 'void'
+        return 'ptr'
     
     def generate(self) -> str:
         """Generate LLVM IR from AST"""
@@ -812,6 +935,7 @@ class Codegen:
             "declare void @print_i32(i32)",
             "declare i32 @charCodeAt(ptr, i32)",
             "declare ptr @slice(ptr, i32, i32)",
+            "declare i32 @tsn_string_length(ptr)",
             ""
         ]
         
@@ -824,7 +948,8 @@ class Codegen:
             common_methods = ['tokenize', 'parse', 'scanToken', 'addToken',
                               'isAlpha', 'isDigit', 'isAlphaNumeric', 'current',
                               'advance', 'peek', 'parseFunction', 'parseClass',
-                              'parseStatement', 'parseExpression', 'parseBlock']
+                              'parseStatement', 'parseExpression', 'parseBlock',
+                              'generate', 'emit', 'emitFunction', 'emitStatement']
             for m in common_methods:
                 self.output.append(f"declare ptr @{cls_name}_{m}(...)")
         if self.extern_classes:
@@ -832,6 +957,7 @@ class Codegen:
     
     def emit_class_structs(self):
         """Emit struct definitions for classes"""
+        # Emit classes from current module only
         for cls in self.program.classes:
             # struct { i32 refcount, ptr vtable, fields... }
             fields = ["i32", "ptr"]  # refcount, vtable
@@ -888,8 +1014,11 @@ class Codegen:
                 struct_size = 16 + 8 * len(cls.fields)
                 obj_reg = self.new_register()
                 self.output.append(f"  {obj_reg} = call ptr @class_alloc(i32 {struct_size})")
-                self.local_vars['this'] = (obj_reg, 'ptr')
-                self.local_vars['__obj'] = (obj_reg, 'ptr')  # direct ref
+                # Store obj ptr in an alloca so 'this' loads work consistently
+                this_alloca = self.new_register()
+                self.output.append(f"  {this_alloca} = alloca ptr, align 8")
+                self.output.append(f"  store ptr {obj_reg}, ptr {this_alloca}, align 8")
+                self.local_vars['this'] = (this_alloca, 'ptr')
                 
                 # Store constructor params in local vars
                 for param in func.params:
@@ -1377,44 +1506,174 @@ class Codegen:
                 full_method = f"{cls_prefix}{method_name}"
                 result_reg = self.new_register()
                 self.output.append(f"  ; method call: {full_method}")
-                self.output.append(f"  {result_reg} = call ptr @{full_method}({args_str})")
-                return (result_reg, "ptr")
+                # Determine return type
+                cls_name_clean = cls_prefix.rstrip('_')
+                ret_type = self._get_method_return_type(cls_name_clean, method_name)
+                if ret_type == 'void':
+                    self.output.append(f"  call void @{full_method}({args_str})")
+                    return ("0", "i32")
+                else:
+                    self.output.append(f"  {result_reg} = call {ret_type} @{full_method}({args_str})")
+                    return (result_reg, ret_type)
         
         return ("0", "i32")
     
     def emit_member(self, expr: MemberExpr) -> tuple:
-        """Emit member access - field read"""
+        """Emit member access - real GEP field read"""
         obj_reg, obj_type = self.emit_expression(expr.object)
         member = expr.member
         
-        # .length property on arrays → call Array_length_impl
+        # .length → could be Array or String length
         if member == 'length':
+            # If we can determine it's a string field, use tsn_string_length
+            # Otherwise use Array_length_impl (works for arrays)
+            # Heuristic: if object is an IdentifierExpr referring to a string field → tsn_string_length
+            is_string = self._is_string_expr(expr.object)
             result_reg = self.new_register()
-            self.output.append(f"  {result_reg} = call i32 @Array_length_impl(ptr {obj_reg})")
+            if is_string:
+                self.output.append(f"  {result_reg} = call i32 @tsn_string_length(ptr {obj_reg})")
+            else:
+                self.output.append(f"  {result_reg} = call i32 @Array_length_impl(ptr {obj_reg})")
             return (result_reg, "i32")
         
-        # Try to find type from current class field definitions
-        field_type = None
-        for cls_name, fields in self.class_fields.items():
-            if member in fields:
-                field_type = fields[member]
-                break
+        # Look up field in known classes (GEP)
+        field_info = self._lookup_field(member)
+        if field_info is not None:
+            field_type, gep_idx = field_info
+            # Determine struct name from object expression context
+            struct_name = self._get_obj_struct_name(expr.object)
+            gep_reg = self.new_register()
+            load_reg = self.new_register()
+            if struct_name:
+                # Check if this struct is defined in current module (not external)
+                is_local_class = any(cls.name == struct_name for cls in self.program.classes)
+                if is_local_class:
+                    # Use typed GEP for local classes
+                    self.output.append(
+                        f"  {gep_reg} = getelementptr inbounds %{struct_name}, ptr {obj_reg}, i32 0, i32 {gep_idx}")
+                    self.output.append(f"  {load_reg} = load {field_type}, ptr {gep_reg}, align 8")
+                    return (load_reg, field_type)
+                else:
+                    # External class - use byte offset calculation
+                    # Calculate offset: skip refcount (4 bytes) + padding (4) + vtable (8) = 16 bytes base
+                    # Then each field: i32=4, ptr=8, aligned to 8-byte boundaries
+                    # Simplified: assume all fields are 8-byte aligned
+                    byte_offset = 8 * gep_idx  # Simple: each slot is 8 bytes
+                    self.output.append(
+                        f"  {gep_reg} = getelementptr inbounds i8, ptr {obj_reg}, i32 {byte_offset}")
+                    self.output.append(f"  {load_reg} = load {field_type}, ptr {gep_reg}, align 8")
+                    return (load_reg, field_type)
+            else:
+                # No struct name but field is known - search all classes to find which one has this field
+                for cls_name, fields in self.class_fields.items():
+                    if member in fields:
+                        struct_name = cls_name
+                        break
+                if struct_name:
+                    # Check if this is a local class
+                    is_local_class = any(cls.name == struct_name for cls in self.program.classes)
+                    if is_local_class:
+                        self.output.append(
+                            f"  {gep_reg} = getelementptr inbounds %{struct_name}, ptr {obj_reg}, i32 0, i32 {gep_idx}")
+                        self.output.append(f"  {load_reg} = load {field_type}, ptr {gep_reg}, align 8")
+                        return (load_reg, field_type)
+                    else:
+                        # External - byte offset
+                        byte_offset = 8 * gep_idx
+                        self.output.append(
+                            f"  {gep_reg} = getelementptr inbounds i8, ptr {obj_reg}, i32 {byte_offset}")
+                        self.output.append(f"  {load_reg} = load {field_type}, ptr {gep_reg}, align 8")
+                        return (load_reg, field_type)
+                # Still can't determine struct - fallback to heuristic null value
+                pass
         
-        if field_type is None:
-            # Heuristic fallback
-            I32_FIELDS = {'pos', 'line', 'col', 'column', 'index', 'count', 'size',
-                          'capacity', 'tag', 'refcount', 'start', 'end', 'current',
-                          'tokenCount', 'charCode'}
-            field_type = 'i32' if member in I32_FIELDS else 'ptr'
+        # Heuristic fallback (unknown field)
+        I32_FIELDS = {'pos', 'line', 'col', 'column', 'index', 'count', 'size',
+                      'capacity', 'tag', 'refcount', 'start', 'end', 'current',
+                      'tokenCount', 'charCode', 'value'}
+        field_type = 'i32' if member in I32_FIELDS else 'ptr'
         
         result_reg = self.new_register()
         if field_type == 'i32':
-            self.output.append(f"  ; field .{member} → i32 placeholder")
+            self.output.append(f"  ; unknown field .{member} → i32 (heuristic)")
             self.output.append(f"  {result_reg} = add i32 0, 0")
         else:
-            self.output.append(f"  ; field .{member} → ptr placeholder")
+            self.output.append(f"  ; unknown field .{member} → ptr (heuristic)")
             self.output.append(f"  {result_reg} = inttoptr i32 0 to ptr")
         return (result_reg, field_type)
+    
+    def _lookup_field(self, field_name: str):
+        """Search all known classes for a field, return (type, gep_idx) or None"""
+        for cls_name, fields in self.class_fields.items():
+            if field_name in fields:
+                return fields[field_name]
+        return None
+    
+    def _is_string_expr(self, expr) -> bool:
+        """Heuristic: is this expression a string (ptr to TsnStr)?"""
+        # Direct string var name heuristics
+        if isinstance(expr, IdentifierExpr):
+            name = expr.name
+            STRING_VARS = {'source', 'lexeme', 'type', 'name', 'typeAnnotation',
+                           'returnType', 'message', 'str', 's', 'text', 'content'}
+            if name in STRING_VARS:
+                return True
+            # Array-like vars are NOT strings
+            ARRAY_VARS = {'tokens', 'functions', 'statements', 'params', 'args', 'fields', 'methods'}
+            if name in ARRAY_VARS:
+                return False
+            # Check local var type
+            if name in self.local_vars:
+                _, t = self.local_vars[name]
+                # All strings are ptr, but we can check if field is string type
+                pass
+        # Member access like this.source → check field name
+        if isinstance(expr, MemberExpr):
+            member_name = expr.member
+            # Known array fields
+            ARRAY_FIELDS = {'tokens', 'functions', 'statements', 'params', 'args', 'fields', 'methods'}
+            if member_name in ARRAY_FIELDS:
+                return False
+            # Known string fields
+            STRING_FIELDS = {'source', 'lexeme', 'type', 'name', 'typeAnnotation', 'returnType', 'message'}
+            if member_name in STRING_FIELDS:
+                return True
+            # Default: if it's a ptr field, assume NOT string (could be array or object)
+            field_info = self._lookup_field(member_name)
+            if field_info:
+                ftype, _ = field_info
+                # Only return True if we're confident it's a string
+                return False
+        # StringLiteral is always string
+        if isinstance(expr, StringLiteral):
+            return True
+        return False
+    
+    def _get_obj_struct_name(self, obj_expr) -> str:
+        """Try to determine class name of object expression"""
+        if isinstance(obj_expr, IdentifierExpr):
+            var_name = obj_expr.name
+            if var_name == 'this' and self.current_class:
+                return self.current_class.name
+            if hasattr(self, 'var_class_types') and var_name in self.var_class_types:
+                return self.var_class_types[var_name]
+            # Heuristic name mapping
+            NAME_TO_CLASS = {
+                'token': 'Token',
+                'lexer': 'Lexer',
+                'parser': 'Parser',
+                'program': 'Program',
+                'func': 'FunctionDecl',
+                'funcDecl': 'FunctionDecl',
+                'stmt': 'Statement',
+                'expr': 'Expression',
+            }
+            if var_name in NAME_TO_CLASS:
+                return NAME_TO_CLASS[var_name]
+        elif isinstance(obj_expr, ThisExpr):
+            if self.current_class:
+                return self.current_class.name
+        return ""
     
     def emit_new(self, expr: NewExpr) -> tuple:
         """Emit new expression - call ClassName_new(args)"""
@@ -1433,22 +1692,71 @@ class Codegen:
         return (result_reg, "ptr")
     
     def emit_assign(self, expr: AssignExpr) -> tuple:
-        """Emit assignment"""
-        # Get target address
+        """Emit assignment - variable or field write"""
+        # Simple variable assignment
         if isinstance(expr.target, IdentifierExpr):
             if expr.target.name in self.local_vars:
                 alloca_reg, var_type = self.local_vars[expr.target.name]
-                
-                # Evaluate value
                 value_reg, value_type = self.emit_expression(expr.value)
-                
-                # Store
-                self.output.append(f"  store {value_type} {value_reg}, ptr {alloca_reg}, align 8")
-                
+                # Cast if needed
+                if value_type != var_type:
+                    value_reg, value_type = self._cast(value_reg, value_type, var_type)
+                self.output.append(f"  store {var_type} {value_reg}, ptr {alloca_reg}, align 8")
+                return (value_reg, var_type)
+        
+        # Field assignment: this.field = value  OR  obj.field = value
+        if isinstance(expr.target, MemberExpr):
+            member = expr.target.member
+            obj_expr = expr.target.object
+            obj_reg, _ = self.emit_expression(obj_expr)
+            value_reg, value_type = self.emit_expression(expr.value)
+            
+            # Look up field info
+            field_info = self._lookup_field(member)
+            struct_name = self._get_obj_struct_name(obj_expr)
+            
+            if field_info is not None:
+                field_type, gep_idx = field_info
+                # Cast value if needed
+                if value_type != field_type:
+                    value_reg, value_type = self._cast(value_reg, value_type, field_type)
+                gep_reg = self.new_register()
+                if struct_name:
+                    # Check if local class or external
+                    is_local_class = any(cls.name == struct_name for cls in self.program.classes)
+                    if is_local_class:
+                        self.output.append(
+                            f"  {gep_reg} = getelementptr inbounds %{struct_name}, ptr {obj_reg}, i32 0, i32 {gep_idx}")
+                    else:
+                        # External - use byte offset
+                        byte_offset = 8 * gep_idx
+                        self.output.append(
+                            f"  {gep_reg} = getelementptr inbounds i8, ptr {obj_reg}, i32 {byte_offset}")
+                else:
+                    byte_offset = 8 * gep_idx
+                    self.output.append(
+                        f"  {gep_reg} = getelementptr inbounds i8, ptr {obj_reg}, i32 {byte_offset}")
+                self.output.append(f"  store {field_type} {value_reg}, ptr {gep_reg}, align 8")
+                return (value_reg, field_type)
+            else:
+                # Unknown field - best effort
+                self.output.append(f"  ; field write .{member} (unknown class - skipped)")
                 return (value_reg, value_type)
         
-        # TODO: Handle member assignment
         return ("0", "i32")
+    
+    def _cast(self, reg: str, from_type: str, to_type: str) -> tuple:
+        """Emit type cast instruction, return (new_reg, to_type)"""
+        if from_type == to_type:
+            return (reg, to_type)
+        cast_reg = self.new_register()
+        if from_type == 'i32' and to_type == 'ptr':
+            self.output.append(f"  {cast_reg} = inttoptr i32 {reg} to ptr")
+        elif from_type == 'ptr' and to_type == 'i32':
+            self.output.append(f"  {cast_reg} = ptrtoint ptr {reg} to i32")
+        else:
+            return (reg, from_type)  # can't cast, return original
+        return (cast_reg, to_type)
     
     def emit_string_literals(self):
         """Emit string literal definitions"""
