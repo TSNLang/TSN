@@ -58,31 +58,66 @@ export class Parser {
         return func;
     }
     
-    // Simple block parser - only handles "return NUMBER;"
+    // Block parser - handles multiple statements
     private parseSimpleBlock(): BlockStmt {
         this.consume("LBRACE", "Expected '{'");
         let block = new BlockStmt();
         
-        // Create full ReturnStmt with NumberLiteral value
-        if (this.check("RETURN")) {
-            this.consume("RETURN", "Expected 'return'");
-            
-            // Parse number
-            let token = this.consume("NUMBER", "Expected number");
-            
-            this.consume("SEMICOLON", "Expected ';'");
-            
-            // WORKAROUND: Use name field to store number value
-            let numExpr = new Expr();
-            numExpr.kind = "NumberLiteral";
-            numExpr.name = token.lexeme;  // Store value in name field!
-            
-            // Create Stmt with value
-            let stmt = new Stmt();
-            stmt.kind = "ReturnStmt";
-            stmt.value = numExpr;
-            
-            block.statements.push(stmt);
+        // Parse multiple statements
+        while (this.check("RBRACE") == false && this.isAtEnd() == false) {
+            if (this.check("RETURN")) {
+                // Return statement
+                this.consume("RETURN", "Expected 'return'");
+                
+                // For now, only support identifier or literal
+                let valueExpr = new Expr();
+                
+                if (this.check("NUMBER")) {
+                    let token = this.consume("NUMBER", "Expected number");
+                    valueExpr.kind = "NumberLiteral";
+                    valueExpr.name = token.lexeme;
+                } else if (this.check("IDENTIFIER")) {
+                    let token = this.consume("IDENTIFIER", "Expected identifier");
+                    valueExpr.kind = "Identifier";
+                    valueExpr.name = token.lexeme;
+                }
+                
+                this.consume("SEMICOLON", "Expected ';'");
+                
+                let stmt = new Stmt();
+                stmt.kind = "ReturnStmt";
+                stmt.value = valueExpr;
+                block.statements.push(stmt);
+                
+            } else if (this.check("LET")) {
+                // Variable declaration
+                this.consume("LET", "Expected 'let'");
+                let name = this.consume("IDENTIFIER", "Expected variable name").lexeme;
+                this.consume("COLON", "Expected ':'");
+                let type = this.consume("IDENTIFIER", "Expected type").lexeme;
+                this.consume("ASSIGN", "Expected '='");
+                
+                // Parse initializer (only literal for now)
+                let initExpr = new Expr();
+                if (this.check("NUMBER")) {
+                    let token = this.consume("NUMBER", "Expected number");
+                    initExpr.kind = "NumberLiteral";
+                    initExpr.name = token.lexeme;
+                }
+                
+                this.consume("SEMICOLON", "Expected ';'");
+                
+                let stmt = new Stmt();
+                stmt.kind = "VarDeclStmt";
+                stmt.name = name;
+                stmt.typeAnnotation = type;
+                stmt.init = initExpr;
+                block.statements.push(stmt);
+                
+            } else {
+                // Unknown statement, skip token
+                this.advance();
+            }
         }
         
         this.consume("RBRACE", "Expected '}'");

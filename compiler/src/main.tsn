@@ -8,10 +8,10 @@ import { Parser } from "./parser.tsn";
 import { Codegen } from "./codegen.tsn";
 
 function main(): void {
-    log("=== TSN Compiler v2 - Phase 12 ===");
+    log("=== TSN Compiler v2 - Phase 13 ===");
     
-    // Test case
-    let source = "function test(): i32 { return 42; }";
+    // Test case: multiple variables
+    let source = "function test(): i32 { let x: i32 = 5; let y: i32 = 7; return y; }";
     
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
@@ -21,7 +21,6 @@ function main(): void {
     let program = parser.parse();
     log("Functions: " + intToString(program.functions.length));
     
-    // Check if function has body statements
     let func = program.functions.get(0);
     log("Statements: " + intToString(func.body.statements.length));
     
@@ -32,7 +31,7 @@ function main(): void {
     log(llvmIR);
     
     log("");
-    log("Phase 12 Complete!");
+    log("Phase 13 Complete: Multiple statements + variables working!");
 }
 
 function intToString(n: i32): string {
