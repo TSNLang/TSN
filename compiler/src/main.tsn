@@ -16,8 +16,8 @@ function main(): void {
     // TODO: Parse command-line args when runtime supports it
     
     // Test case: read from file
-    log("Reading from compiler/test-phase16.tsn...");
-    let source = readText("compiler/test-phase16.tsn");
+    log("Reading from compiler/test-phase17.tsn...");
+    let source = readText("compiler/test-phase17.tsn");
     
     log("Compiling...");
     

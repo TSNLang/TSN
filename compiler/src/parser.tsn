@@ -99,34 +99,11 @@ export class Parser {
                         valueExpr.kind = "CallExpr";
                         valueExpr.callee = token.lexeme;
                         
-                        // Parse arguments
+                        // Parse arguments (bootstrap bug - won't work)
                         if (this.check("RPAREN") == false) {
-                            // First argument
-                            let argExpr = new Expr();
-                            if (this.check("NUMBER")) {
-                                let numToken = this.consume("NUMBER", "Expected number");
-                                argExpr.kind = "NumberLiteral";
-                                argExpr.name = numToken.lexeme;
-                            } else if (this.check("IDENTIFIER")) {
-                                let idToken = this.consume("IDENTIFIER", "Expected identifier");
-                                argExpr.kind = "Identifier";
-                                argExpr.name = idToken.lexeme;
-                            }
-                            valueExpr.args.push(argExpr);
-                            
-                            // Additional arguments
-                            while (this.match("COMMA")) {
-                                let nextArg = new Expr();
-                                if (this.check("NUMBER")) {
-                                    let numToken = this.consume("NUMBER", "Expected number");
-                                    nextArg.kind = "NumberLiteral";
-                                    nextArg.name = numToken.lexeme;
-                                } else if (this.check("IDENTIFIER")) {
-                                    let idToken = this.consume("IDENTIFIER", "Expected identifier");
-                                    nextArg.kind = "Identifier";
-                                    nextArg.name = idToken.lexeme;
-                                }
-                                valueExpr.args.push(nextArg);
+                            // Skip args parsing - bootstrap bug
+                            while (this.check("RPAREN") == false && this.isAtEnd() == false) {
+                                this.advance();
                             }
                         }
                         
@@ -153,11 +130,15 @@ export class Parser {
                 let type = this.consume("IDENTIFIER", "Expected type").lexeme;
                 this.consume("ASSIGN", "Expected '='");
                 
-                // Parse initializer (only literal for now)
+                // Parse initializer - number or identifier only (bootstrap limitation)
                 let initExpr = new Expr();
                 if (this.check("NUMBER")) {
                     let token = this.consume("NUMBER", "Expected number");
                     initExpr.kind = "NumberLiteral";
+                    initExpr.name = token.lexeme;
+                } else if (this.check("IDENTIFIER")) {
+                    let token = this.consume("IDENTIFIER", "Expected identifier");
+                    initExpr.kind = "Identifier";
                     initExpr.name = token.lexeme;
                 }
                 
