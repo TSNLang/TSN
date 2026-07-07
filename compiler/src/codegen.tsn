@@ -186,10 +186,15 @@ export class Codegen {
     
     private emitExpression(expr: Expr): string {
         // WORKAROUND: Can't check kind due to bootstrap bug
+        // Check distinctive fields to determine type
+        
+        // Check if has callee field -> CallExpr
+        if (expr.callee != "") {
+            return this.emitCall(expr);
+        }
+        
         // Check if name is a number or identifier
         let name = expr.name;
-        
-        // If name is all digits, treat as number
         let isNumber = this.isDigits(name);
         
         if (isNumber) {
@@ -271,12 +276,9 @@ export class Codegen {
     }
     
     private emitCall(expr: Expr): string {
-        // Cast to CallExpr
-        let call = expr;
-        
         // Simple call without args for now
         let resultReg = this.newRegister();
-        this.output.push("  " + resultReg + " = call i32 @" + call.callee + "()");
+        this.output.push("  " + resultReg + " = call i32 @" + expr.callee + "()");
         
         return resultReg;
     }

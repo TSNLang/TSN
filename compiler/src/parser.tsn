@@ -69,7 +69,7 @@ export class Parser {
                 // Return statement
                 this.consume("RETURN", "Expected 'return'");
                 
-                // For now, only support identifier or literal
+                // Parse return value: number, identifier, or function call
                 let valueExpr = new Expr();
                 
                 if (this.check("NUMBER")) {
@@ -78,8 +78,19 @@ export class Parser {
                     valueExpr.name = token.lexeme;
                 } else if (this.check("IDENTIFIER")) {
                     let token = this.consume("IDENTIFIER", "Expected identifier");
-                    valueExpr.kind = "Identifier";
-                    valueExpr.name = token.lexeme;
+                    
+                    // Check if it's a function call
+                    if (this.check("LPAREN")) {
+                        this.consume("LPAREN", "Expected '('");
+                        this.consume("RPAREN", "Expected ')' - no args yet");
+                        
+                        valueExpr.kind = "CallExpr";
+                        valueExpr.callee = token.lexeme;
+                    } else {
+                        // Just an identifier
+                        valueExpr.kind = "Identifier";
+                        valueExpr.name = token.lexeme;
+                    }
                 }
                 
                 this.consume("SEMICOLON", "Expected ';'");

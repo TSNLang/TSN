@@ -1,17 +1,17 @@
 // TSN Compiler v2 - Main Entry Point
-// Phase 1: Test Lexer và Parser
+// Phase 14: File output + function calls
 
 import { log } from "std:console";
-import { readText } from "std:fs";
+import { readText, writeText } from "std:fs";
 import { Lexer } from "./lexer.tsn";
 import { Parser } from "./parser.tsn";
 import { Codegen } from "./codegen.tsn";
 
 function main(): void {
-    log("=== TSN Compiler v2 - Phase 13 ===");
+    log("=== TSN Compiler v2 - Phase 14 ===");
     
-    // Test case: multiple variables
-    let source = "function test(): i32 { let x: i32 = 5; let y: i32 = 7; return y; }";
+    // Test case: multiple functions
+    let source = "function add(): i32 { return 5; } function main(): i32 { return add(); }";
     
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
@@ -21,17 +21,14 @@ function main(): void {
     let program = parser.parse();
     log("Functions: " + intToString(program.functions.length));
     
-    let func = program.functions.get(0);
-    log("Statements: " + intToString(func.body.statements.length));
-    
     let codegen = new Codegen(program);
     let llvmIR = codegen.generate();
     
-    log("Generated IR:");
+    log("Generated IR (multiple functions):");
     log(llvmIR);
     
     log("");
-    log("Phase 13 Complete: Multiple statements + variables working!");
+    log("Phase 14: Multiple functions + function calls!");
 }
 
 function intToString(n: i32): string {
