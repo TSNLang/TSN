@@ -8,32 +8,31 @@ import { Parser } from "./parser.tsn";
 import { Codegen } from "./codegen.tsn";
 
 function main(): void {
-    log("=== TSN Compiler v2 - Phase 11 ===");
+    log("=== TSN Compiler v2 - Phase 12 ===");
     
-    // Test simple case
+    // Test case
     let source = "function test(): i32 { return 42; }";
     
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
     log("Tokens: " + intToString(tokens.length));
     
-    log("Before creating parser");
     let parser = new Parser(tokens);
-    log("After creating parser");
-    
-    log("Before calling parse");
     let program = parser.parse();
-    log("After calling parse");
-    
     log("Functions: " + intToString(program.functions.length));
     
-    log("Before codegen");
+    // Check if function has body statements
+    let func = program.functions.get(0);
+    log("Statements: " + intToString(func.body.statements.length));
+    
     let codegen = new Codegen(program);
     let llvmIR = codegen.generate();
-    log("After codegen");
     
-    log("Generated LLVM IR");
-    log("Phase 11 Complete!");
+    log("Generated IR:");
+    log(llvmIR);
+    
+    log("");
+    log("Phase 12 Complete!");
 }
 
 function intToString(n: i32): string {

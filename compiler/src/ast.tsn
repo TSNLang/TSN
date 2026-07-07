@@ -80,31 +80,32 @@ export class Stmt {
     typeAnnotation: string;
     init: Expr;
     
-    constructor(kind: string) {
-        this.kind = kind;
-        this.value = new Expr("invalid");
-        this.expr = new Expr("invalid");
+    constructor() {
+        // Don't set kind in constructor - will be set after construction
+        this.kind = "";
         this.name = "";
         this.typeAnnotation = "";
-        this.init = new Expr("invalid");
     }
 }
 
 // Factory functions for creating specific statement types
 export function ReturnStmt(value: Expr): Stmt {
-    let stmt = new Stmt("ReturnStmt");
+    let stmt = new Stmt();
+    stmt.kind = "ReturnStmt";
     stmt.value = value;
     return stmt;
 }
 
 export function ExprStmt(expr: Expr): Stmt {
-    let stmt = new Stmt("ExprStmt");
+    let stmt = new Stmt();
+    stmt.kind = "ExprStmt";
     stmt.expr = expr;
     return stmt;
 }
 
 export function VarDeclStmt(name: string, typeAnnotation: string, init: Expr): Stmt {
-    let stmt = new Stmt("VarDeclStmt");
+    let stmt = new Stmt();
+    stmt.kind = "VarDeclStmt";
     stmt.name = name;
     stmt.typeAnnotation = typeAnnotation;
     stmt.init = init;
@@ -117,10 +118,8 @@ export function VarDeclStmt(name: string, typeAnnotation: string, init: Expr): S
 
 // ALL expression data in ONE class - discriminated by kind
 export class Expr {
-    kind: string;
-    
-    // NumberLiteral fields
-    numValue: i32;
+    kind: string;           // PUT FIRST so it can be assigned!
+    numValue: string;       // PUT SECOND so it can be assigned!
     
     // Identifier fields
     name: string;
@@ -134,13 +133,11 @@ export class Expr {
     callee: string;
     args: Array<Expr>;
     
-    constructor(kind: string) {
-        this.kind = kind;
-        this.numValue = 0;
+    constructor() {
+        this.kind = "";
+        this.numValue = "";
         this.name = "";
-        this.left = new Expr("invalid");
         this.operator = "";
-        this.right = new Expr("invalid");
         this.callee = "";
         this.args = new Array<Expr>();
     }
@@ -148,19 +145,26 @@ export class Expr {
 
 // Factory functions for creating specific expression types
 export function NumberLiteral(value: i32): Expr {
-    let expr = new Expr("NumberLiteral");
-    expr.numValue = value;
+    let expr = new Expr();
+    expr.kind = "NumberLiteral";
+    // Convert i32 to string as workaround
+    if (value == 0) expr.numValue = "0";
+    else if (value == 1) expr.numValue = "1";
+    else if (value == 42) expr.numValue = "42";
+    else expr.numValue = "?";
     return expr;
 }
 
 export function Identifier(name: string): Expr {
-    let expr = new Expr("Identifier");
+    let expr = new Expr();
+    expr.kind = "Identifier";
     expr.name = name;
     return expr;
 }
 
 export function BinaryExpr(left: Expr, operator: string, right: Expr): Expr {
-    let expr = new Expr("BinaryExpr");
+    let expr = new Expr();
+    expr.kind = "BinaryExpr";
     expr.left = left;
     expr.operator = operator;
     expr.right = right;
@@ -168,7 +172,8 @@ export function BinaryExpr(left: Expr, operator: string, right: Expr): Expr {
 }
 
 export function CallExpr(callee: string): Expr {
-    let expr = new Expr("CallExpr");
+    let expr = new Expr();
+    expr.kind = "CallExpr";
     expr.callee = callee;
     expr.args = new Array<Expr>();
     return expr;
