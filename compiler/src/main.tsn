@@ -1,5 +1,5 @@
 // TSN Compiler v2 - Main Entry Point
-// Phase 14: File output + function calls
+// Phase 15: Command-line interface
 
 import { log } from "std:console";
 import { readText, writeText } from "std:fs";
@@ -8,27 +8,40 @@ import { Parser } from "./parser.tsn";
 import { Codegen } from "./codegen.tsn";
 
 function main(): void {
-    log("=== TSN Compiler v2 - Phase 14 ===");
+    log("=== TSN Compiler v2 - Phase 15 ===");
+    log("Usage: tsnc <input.tsn> -o <output.ll>");
+    log("");
     
-    // Test case: multiple functions
-    let source = "function add(): i32 { return 5; } function main(): i32 { return add(); }";
+    // For now, use hardcoded test
+    // TODO: Parse command-line args when runtime supports it
+    
+    // Test case: read from file
+    log("Reading from compiler/test-simple.tsn...");
+    let source = readText("compiler/test-simple.tsn");
+    
+    log("Compiling...");
     
     let lexer = new Lexer(source);
     let tokens = lexer.tokenize();
-    log("Tokens: " + intToString(tokens.length));
+    log("  Tokens: " + intToString(tokens.length));
     
     let parser = new Parser(tokens);
     let program = parser.parse();
-    log("Functions: " + intToString(program.functions.length));
+    log("  Functions: " + intToString(program.functions.length));
     
     let codegen = new Codegen(program);
     let llvmIR = codegen.generate();
     
-    log("Generated IR (multiple functions):");
-    log(llvmIR);
+    log("  Generated LLVM IR");
+    
+    // Write output
+    let outputFile = "output.ll";
+    log("Writing to " + outputFile + "...");
+    writeText(outputFile, llvmIR);
     
     log("");
-    log("Phase 14: Multiple functions + function calls!");
+    log("Compilation successful!");
+    log("Next: clang " + outputFile + " -o output.exe");
 }
 
 function intToString(n: i32): string {
