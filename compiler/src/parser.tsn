@@ -130,7 +130,7 @@ export class Parser {
                 let type = this.consume("IDENTIFIER", "Expected type").lexeme;
                 this.consume("ASSIGN", "Expected '='");
                 
-                // Parse initializer - number or identifier only (bootstrap limitation)
+                // Parse initializer - VERY simple: number or identifier only
                 let initExpr = new Expr();
                 if (this.check("NUMBER")) {
                     let token = this.consume("NUMBER", "Expected number");
