@@ -276,9 +276,30 @@ export class Codegen {
     }
     
     private emitCall(expr: Expr): string {
-        // Simple call without args for now
+        // Build argument list
+        let args = "";
+        let argRegs: Array<string> = new Array<string>();
+        
+        let i = 0;
+        while (i < expr.args.length) {
+            let argExpr = expr.args.get(i);
+            let argReg = this.emitExpression(argExpr);
+            argRegs.push(argReg);
+            i = i + 1;
+        }
+        
+        // Build argument string: i32 %r0, i32 %r1
+        i = 0;
+        while (i < argRegs.length) {
+            if (i > 0) {
+                args = args + ", ";
+            }
+            args = args + "i32 " + argRegs.get(i);
+            i = i + 1;
+        }
+        
         let resultReg = this.newRegister();
-        this.output.push("  " + resultReg + " = call i32 @" + expr.callee + "()");
+        this.output.push("  " + resultReg + " = call i32 @" + expr.callee + "(" + args + ")");
         
         return resultReg;
     }

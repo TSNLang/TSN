@@ -45,6 +45,19 @@ export class Parser {
         
         let func = new FunctionDecl(name, "void");
         
+        // Parse parameters: (a: i32, b: i32)
+        if (this.check("RPAREN") == false) {
+            // First parameter
+            let param = this.parseParameter();
+            func.params.push(param);
+            
+            // Additional parameters
+            while (this.match("COMMA")) {
+                let nextParam = this.parseParameter();
+                func.params.push(nextParam);
+            }
+        }
+        
         this.consume("RPAREN", "Expected ')'");
         
         // Parse return type
@@ -82,10 +95,42 @@ export class Parser {
                     // Check if it's a function call
                     if (this.check("LPAREN")) {
                         this.consume("LPAREN", "Expected '('");
-                        this.consume("RPAREN", "Expected ')' - no args yet");
                         
                         valueExpr.kind = "CallExpr";
                         valueExpr.callee = token.lexeme;
+                        
+                        // Parse arguments
+                        if (this.check("RPAREN") == false) {
+                            // First argument
+                            let argExpr = new Expr();
+                            if (this.check("NUMBER")) {
+                                let numToken = this.consume("NUMBER", "Expected number");
+                                argExpr.kind = "NumberLiteral";
+                                argExpr.name = numToken.lexeme;
+                            } else if (this.check("IDENTIFIER")) {
+                                let idToken = this.consume("IDENTIFIER", "Expected identifier");
+                                argExpr.kind = "Identifier";
+                                argExpr.name = idToken.lexeme;
+                            }
+                            valueExpr.args.push(argExpr);
+                            
+                            // Additional arguments
+                            while (this.match("COMMA")) {
+                                let nextArg = new Expr();
+                                if (this.check("NUMBER")) {
+                                    let numToken = this.consume("NUMBER", "Expected number");
+                                    nextArg.kind = "NumberLiteral";
+                                    nextArg.name = numToken.lexeme;
+                                } else if (this.check("IDENTIFIER")) {
+                                    let idToken = this.consume("IDENTIFIER", "Expected identifier");
+                                    nextArg.kind = "Identifier";
+                                    nextArg.name = idToken.lexeme;
+                                }
+                                valueExpr.args.push(nextArg);
+                            }
+                        }
+                        
+                        this.consume("RPAREN", "Expected ')'");
                     } else {
                         // Just an identifier
                         valueExpr.kind = "Identifier";
