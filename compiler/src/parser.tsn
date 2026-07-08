@@ -82,38 +82,8 @@ export class Parser {
                 // Return statement
                 this.consume("RETURN", "Expected 'return'");
                 
-                // Parse return value: number, identifier, or function call
-                let valueExpr = new Expr();
-                
-                if (this.check("NUMBER")) {
-                    let token = this.consume("NUMBER", "Expected number");
-                    valueExpr.kind = "NumberLiteral";
-                    valueExpr.name = token.lexeme;
-                } else if (this.check("IDENTIFIER")) {
-                    let token = this.consume("IDENTIFIER", "Expected identifier");
-                    
-                    // Check if it's a function call
-                    if (this.check("LPAREN")) {
-                        this.consume("LPAREN", "Expected '('");
-                        
-                        valueExpr.kind = "CallExpr";
-                        valueExpr.callee = token.lexeme;
-                        
-                        // Parse arguments (bootstrap bug - won't work)
-                        if (this.check("RPAREN") == false) {
-                            // Skip args parsing - bootstrap bug
-                            while (this.check("RPAREN") == false && this.isAtEnd() == false) {
-                                this.advance();
-                            }
-                        }
-                        
-                        this.consume("RPAREN", "Expected ')'");
-                    } else {
-                        // Just an identifier
-                        valueExpr.kind = "Identifier";
-                        valueExpr.name = token.lexeme;
-                    }
-                }
+                // Parse return value using parseExpression for arithmetic!
+                let valueExpr = this.parseExpression();
                 
                 this.consume("SEMICOLON", "Expected ';'");
                 

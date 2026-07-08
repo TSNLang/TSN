@@ -852,9 +852,16 @@ class Codegen:
             'typeAnnotation': ('ptr', 4),
             'init': ('ptr', 5)
         }
-        # Expr: { kind: string }
+        # Expr: { kind: string, numValue: string, name: string, left: Expr, operator: string, right: Expr, callee: string, args: Array }
         self.class_fields['Expr'] = {
-            'kind': ('ptr', 2)
+            'kind': ('ptr', 2),
+            'numValue': ('ptr', 3),
+            'name': ('ptr', 4),
+            'left': ('ptr', 5),
+            'operator': ('ptr', 6),
+            'right': ('ptr', 7),
+            'callee': ('ptr', 8),
+            'args': ('ptr', 9)
         }
         # NumberLiteral: { kind: string, value: i32 }
         self.class_fields['NumberLiteral'] = {

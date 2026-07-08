@@ -188,20 +188,28 @@ export class Codegen {
         // WORKAROUND: Can't check kind due to bootstrap bug
         // Check distinctive fields to determine type
         
+        // Check operator field -> BinaryExpr
+        if (expr.operator != "") {
+            return this.emitBinary(expr);
+        }
+        
         // Check if has callee field -> CallExpr
         if (expr.callee != "") {
             return this.emitCall(expr);
         }
         
-        // Check if name is a number or identifier
-        let name = expr.name;
-        let isNumber = this.isDigits(name);
+        // Check numValue field -> NumberLiteral
+        if (expr.numValue != "") {
+            return expr.numValue;
+        }
         
-        if (isNumber) {
-            return this.emitNumber(expr);
-        } else {
+        // Check if name is set -> Identifier
+        if (expr.name != "") {
             return this.emitIdentifier(expr);
         }
+        
+        // Fallback
+        return "0";
     }
     
     private isDigits(s: string): bool {
