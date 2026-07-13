@@ -157,13 +157,33 @@ class Lexer:
     def scan_string(self):
         self.advance()  # Skip opening "
         start = self.pos
+        result = []
         
         while self.pos < len(self.source) and self.current() != '"':
             if self.current() == '\\':
-                self.advance()  # Skip escape char
-            self.advance()
+                self.advance()  # Skip backslash
+                # Process escape sequences
+                ch = self.current()
+                if ch == 'n':
+                    result.append('\n')
+                elif ch == 't':
+                    result.append('\t')
+                elif ch == 'r':
+                    result.append('\r')
+                elif ch == '\\':
+                    result.append('\\')
+                elif ch == '"':
+                    result.append('"')
+                else:
+                    # Unknown escape - keep literal
+                    result.append('\\')
+                    result.append(ch)
+                self.advance()
+            else:
+                result.append(self.current())
+                self.advance()
         
-        value = self.source[start:self.pos]
+        value = ''.join(result)
         self.advance()  # Skip closing "
         self.add_token('STRING', value)
     
@@ -759,8 +779,90 @@ class Codegen:
         # Build class field type map: {ClassName: {fieldName: (llvm_type, gep_idx)}}
         self.class_fields: Dict[str, Dict[str, tuple]] = {}
         self.class_methods: Dict[str, Dict[str, str]] = {}
+        # Function return type map: {funcName: llvm_return_type}
+        self.func_return_types: Dict[str, str] = {}
         self._collect_imports()
         self._collect_class_fields()
+        self._collect_func_signatures()
+
+    def _collect_func_signatures(self):
+        """Pre-pass: collect all top-level function return types"""
+        for func in self.program.functions:
+            ret = self.get_llvm_type(func.return_type)
+            self.func_return_types[func.name] = ret
+        # Also collect class method return types
+        for cls in self.program.classes:
+            for method in cls.methods:
+                mangled = f"{cls.name}_{method.name}"
+                ret = self.get_llvm_type(method.return_type)
+                self.func_return_types[mangled] = ret
+
+    def _collect_called_methods(self) -> list:
+        """Scan AST for method calls on extern class objects, return declare strings"""
+        decls = []
+        seen = set()
+        # Walk all functions and classes to find CallExpr(MemberExpr)
+        all_funcs = list(self.program.functions)
+        for cls in self.program.classes:
+            all_funcs.extend(cls.methods)
+        for func in all_funcs:
+            self._scan_block_for_calls(func.body, seen, decls)
+        return decls
+
+    def _scan_block_for_calls(self, block: 'BlockStmt', seen: set, decls: list):
+        for stmt in block.statements:
+            self._scan_stmt_for_calls(stmt, seen, decls)
+
+    def _scan_stmt_for_calls(self, stmt, seen, decls):
+        if isinstance(stmt, BlockStmt):
+            self._scan_block_for_calls(stmt, seen, decls)
+            return
+        if isinstance(stmt, ReturnStmt):
+            if stmt.value: self._scan_expr_for_calls(stmt.value, seen, decls)
+        elif isinstance(stmt, VarDeclStmt):
+            self._scan_expr_for_calls(stmt.init, seen, decls)
+        elif isinstance(stmt, ExprStmt):
+            self._scan_expr_for_calls(stmt.expr, seen, decls)
+        elif isinstance(stmt, IfStmt):
+            self._scan_expr_for_calls(stmt.condition, seen, decls)
+            self._scan_stmt_for_calls(stmt.then_branch, seen, decls)
+            if stmt.else_branch:
+                self._scan_stmt_for_calls(stmt.else_branch, seen, decls)
+        elif isinstance(stmt, WhileStmt):
+            self._scan_expr_for_calls(stmt.condition, seen, decls)
+            self._scan_stmt_for_calls(stmt.body, seen, decls)
+
+    def _scan_expr_for_calls(self, expr, seen, decls):
+        if expr is None: return
+        if isinstance(expr, CallExpr):
+            if isinstance(expr.callee, MemberExpr):
+                method = expr.callee.member
+                # Try to determine class from object type
+                obj = expr.callee.object
+                cls_prefix = ""
+                if isinstance(obj, IdentifierExpr):
+                    vname = obj.name
+                    if hasattr(self, 'var_class_types') and vname in self.var_class_types:
+                        cls_prefix = self.var_class_types[vname]
+                key = f"{cls_prefix}_{method}" if cls_prefix else None
+                # Also declare if method not in known (local) methods
+                if key and key not in seen:
+                    seen.add(key)
+                    # Determine ret type
+                    rtype = self._get_method_return_type(cls_prefix, method)
+                    if rtype == 'void':
+                        decls.append(f"declare void @{key}(...)")
+                    elif rtype == 'i32':
+                        decls.append(f"declare i32 @{key}(...)")
+                    else:
+                        decls.append(f"declare ptr @{key}(...)")
+            for arg in expr.args:
+                self._scan_expr_for_calls(arg, seen, decls)
+        elif isinstance(expr, BinaryExpr):
+            self._scan_expr_for_calls(expr.left, seen, decls)
+            self._scan_expr_for_calls(expr.right, seen, decls)
+        elif isinstance(expr, MemberExpr):
+            self._scan_expr_for_calls(expr.object, seen, decls)
         
     def _collect_imports(self):
         """Collect imported names → C function names, and external class declarations"""
@@ -831,9 +933,18 @@ class Codegen:
             self.class_fields['BlockStmt'] = {
                 'statements': ('ptr', 2)
             }
-        # Stmt: { kind: string }
+        # Stmt: { kind: string, value: Expr, expr: Expr, name: string, typeAnnotation: string, init: Expr, condition: Expr, thenBlock: BlockStmt, elseBlock: BlockStmt, body: BlockStmt }
         self.class_fields['Stmt'] = {
-            'kind': ('ptr', 2)
+            'kind': ('ptr', 2),
+            'value': ('ptr', 3),
+            'expr': ('ptr', 4),
+            'name': ('ptr', 5),
+            'typeAnnotation': ('ptr', 6),
+            'init': ('ptr', 7),
+            'condition': ('ptr', 8),
+            'thenBlock': ('ptr', 9),
+            'elseBlock': ('ptr', 10),
+            'body': ('ptr', 11)
         }
         # ReturnStmt: { kind: string, value: Expr }
         self.class_fields['ReturnStmt'] = {
@@ -852,7 +963,7 @@ class Codegen:
             'typeAnnotation': ('ptr', 4),
             'init': ('ptr', 5)
         }
-        # Expr: { kind: string, numValue: string, name: string, left: Expr, operator: string, right: Expr, callee: string, args: Array }
+        # Expr: { kind: string, numValue: string, name: string, left: Expr, operator: string, right: Expr, callee: string, args: Array, object: Expr, member: string }
         self.class_fields['Expr'] = {
             'kind': ('ptr', 2),
             'numValue': ('ptr', 3),
@@ -861,7 +972,9 @@ class Codegen:
             'operator': ('ptr', 6),
             'right': ('ptr', 7),
             'callee': ('ptr', 8),
-            'args': ('ptr', 9)
+            'args': ('ptr', 9),
+            'object': ('ptr', 10),
+            'member': ('ptr', 11)
         }
         # NumberLiteral: { kind: string, value: i32 }
         self.class_fields['NumberLiteral'] = {
@@ -932,6 +1045,10 @@ class Codegen:
             "declare ptr @Array_get_impl(ptr, i32)",
             "declare void @Array_push_impl(ptr, ptr)",
             "declare i32 @Array_length_impl(ptr)",
+            "declare ptr @tsn_box_i32(i32)",
+            "declare i32 @tsn_unbox_i32(ptr)",
+            "declare i32 @Array_get_i32(ptr, i32)",
+            "declare void @Array_push_i32(ptr, i32)",
             "declare void @tsn_incref(ptr)",
             "declare void @tsn_decref(ptr)",
             "declare ptr @_T_string_concat_P_ptr_ptr(ptr, ptr)",
@@ -948,17 +1065,39 @@ class Codegen:
         
         self.output.extend(runtime_decls)
         
+        # Declare imported functions
+        # For now, we don't have signature info, so we need to be clever
+        # Option 1: Declare as vararg (unsafe but links)
+        # Option 2: Skip and hope linker resolves (doesn't work with LLVM)
+        # Option 3: Track function signatures (complex)
+        # We'll use Option 1 for now
+        for imp in self.program.imports:
+            if not imp.module.startswith('std:'):
+                # Local module import
+                for name in imp.names:
+                    # Check if it's a class (starts with capital) or function (lowercase)
+                    if name and not name[0].isupper():
+                        # Likely a function - declare as i32(...) for now
+                        # This is a hack but allows linking
+                        self.output.append(f"declare i32 @{name}(...)")
+        self.output.append("")
+        
         # Declare external class constructors (from imports)
+        # Also declare all methods that get called in this module
         for cls_name in self.extern_classes:
-            self.output.append(f"declare ptr @{cls_name}_new(...)")
-            # Declare common methods as variadic (avoids type errors)
-            common_methods = ['tokenize', 'parse', 'scanToken', 'addToken',
-                              'isAlpha', 'isDigit', 'isAlphaNumeric', 'current',
-                              'advance', 'peek', 'parseFunction', 'parseClass',
-                              'parseStatement', 'parseExpression', 'parseBlock',
-                              'generate', 'emit', 'emitFunction', 'emitStatement']
-            for m in common_methods:
-                self.output.append(f"declare ptr @{cls_name}_{m}(...)")
+            if cls_name and cls_name[0].isupper():
+                self.output.append(f"declare ptr @{cls_name}_new(...)")
+                # Declare known methods for each compiler class
+                # Using vararg so we don't need exact signatures
+                KNOWN_CLASS_METHODS = {
+                    'Lexer':   [('tokenize', 'ptr')],
+                    'Parser':  [('parse', 'ptr')],
+                    'Codegen': [('generate', 'ptr')],
+                }
+                methods = KNOWN_CLASS_METHODS.get(cls_name, [])
+                for mname, rtype in methods:
+                    self.output.append(f"declare {rtype} @{cls_name}_{mname}(...)")
+        
         if self.extern_classes:
             self.output.append("")
     
@@ -1164,6 +1303,13 @@ class Codegen:
             ext_reg = self.new_register()
             self.output.append(f"  {ext_reg} = inttoptr i32 {init_reg} to ptr")
             self.output.append(f"  store ptr {ext_reg}, ptr {alloca_reg}, align 8")
+        elif init_type != var_type and init_type == 'ptr' and var_type == 'i32':
+            # ptr → i32: use tsn_unbox_i32 to read boxed value
+            unbox_reg = self.new_register()
+            self.output.append(f"  {unbox_reg} = call i32 @tsn_unbox_i32(ptr {init_reg})")
+            self.output.append(f"  store i32 {unbox_reg}, ptr {alloca_reg}, align 8")
+            init_reg = unbox_reg
+            init_type = 'i32'
         else:
             self.output.append(f"  store {init_type} {init_reg}, ptr {alloca_reg}, align 8")
         
@@ -1233,7 +1379,8 @@ class Codegen:
         if cond_type == 'ptr':
             self.output.append(f"  {cond_i1} = icmp ne ptr {cond_reg}, null")
         else:
-            self.output.append(f"  {cond_i1} = trunc i32 {cond_reg} to i1")
+            # Use icmp instead of trunc for proper boolean conversion
+            self.output.append(f"  {cond_i1} = icmp ne i32 {cond_reg}, 0")
         self.output.append(f"  br i1 {cond_i1}, label %{body_label}, label %{end_label}")
         
         # Body
@@ -1452,7 +1599,8 @@ class Codegen:
                 ret_type = info[1] if info else 'ptr'
             else:
                 c_name = self.mangle_function_name(name, False)
-                ret_type = 'ptr'
+                # Look up return type from collected signatures
+                ret_type = self.func_return_types.get(name, 'ptr')
             
             # Evaluate arguments
             args = []
@@ -1492,6 +1640,24 @@ class Codegen:
             
             if method_name in method_map and method_map[method_name][0]:
                 c_name, ret_type = method_map[method_name]
+                
+                # Special handling for push: box i32 args to ptr
+                if method_name == 'push':
+                    # args = [obj_ptr, arg...]  already has obj as first
+                    # Re-emit args with boxing
+                    new_args = [f"ptr {obj_reg}"]
+                    for arg in expr.args:
+                        arg_reg2, arg_type2 = self.emit_expression(arg)
+                        if arg_type2 == 'i32':
+                            # Box i32 → ptr via tsn_box_i32
+                            box_reg = self.new_register()
+                            self.output.append(f"  {box_reg} = call ptr @tsn_box_i32(i32 {arg_reg2})")
+                            new_args.append(f"ptr {box_reg}")
+                        else:
+                            new_args.append(f"ptr {arg_reg2}")
+                    self.output.append(f"  call void @Array_push_impl({', '.join(new_args)})")
+                    return ("0", "i32")
+                
                 if ret_type == 'void':
                     self.output.append(f"  call void @{c_name}({args_str})")
                     return ("0", "i32")
@@ -1530,6 +1696,11 @@ class Codegen:
         obj_reg, obj_type = self.emit_expression(expr.object)
         member = expr.member
         
+        # DEBUG
+        if member == 'name':
+            struct_name_test = self._get_obj_struct_name(expr.object)
+            self.output.append(f"  ; DEBUG: member={member}, struct_name={struct_name_test}")
+        
         # .length → could be Array or String length
         if member == 'length':
             # If we can determine it's a string field, use tsn_string_length
@@ -1544,11 +1715,17 @@ class Codegen:
             return (result_reg, "i32")
         
         # Look up field in known classes (GEP)
-        field_info = self._lookup_field(member)
+        # First determine struct name, then do class-specific lookup
+        struct_name = self._get_obj_struct_name(expr.object)
+        field_info = None
+        if struct_name and struct_name in self.class_fields:
+            # Class-specific lookup (correct!)
+            field_info = self.class_fields[struct_name].get(member)
+        if field_info is None:
+            # Fallback: search all classes
+            field_info = self._lookup_field(member)
         if field_info is not None:
             field_type, gep_idx = field_info
-            # Determine struct name from object expression context
-            struct_name = self._get_obj_struct_name(expr.object)
             gep_reg = self.new_register()
             load_reg = self.new_register()
             if struct_name:
@@ -1556,16 +1733,23 @@ class Codegen:
                 is_local_class = any(cls.name == struct_name for cls in self.program.classes)
                 if is_local_class:
                     # Use typed GEP for local classes
+                    # DEBUG
+                    if struct_name == 'Expr' and member == 'name':
+                        self.output.append(f"  ; DEBUG: Expr.name LOCAL access - gep_idx={gep_idx}")
                     self.output.append(
                         f"  {gep_reg} = getelementptr inbounds %{struct_name}, ptr {obj_reg}, i32 0, i32 {gep_idx}")
                     self.output.append(f"  {load_reg} = load {field_type}, ptr {gep_reg}, align 8")
                     return (load_reg, field_type)
                 else:
                     # External class - use byte offset calculation
-                    # Calculate offset: skip refcount (4 bytes) + padding (4) + vtable (8) = 16 bytes base
-                    # Then each field: i32=4, ptr=8, aligned to 8-byte boundaries
-                    # Simplified: assume all fields are 8-byte aligned
-                    byte_offset = 8 * gep_idx  # Simple: each slot is 8 bytes
+                    # For 64-bit: refcount=i32(4) + pad(4) + vtable=ptr(8) = 16 bytes base
+                    # Then each field ptr=8 bytes, i32=4 bytes (but padded to 8)
+                    # Simplified: treat all fields as 8-byte aligned
+                    # gep_idx 2 → offset 16, gep_idx 3 → offset 24, gep_idx 4 → offset 32
+                    byte_offset = 8 * gep_idx  # Each GEP index = 8 bytes (64-bit aligned)
+                    # DEBUG
+                    if struct_name == 'Expr' and member == 'name':
+                        self.output.append(f"  ; DEBUG: Expr.name access - gep_idx={gep_idx}, byte_offset={byte_offset}")
                     self.output.append(
                         f"  {gep_reg} = getelementptr inbounds i8, ptr {obj_reg}, i32 {byte_offset}")
                     self.output.append(f"  {load_reg} = load {field_type}, ptr {gep_reg}, align 8")
@@ -1672,8 +1856,13 @@ class Codegen:
                 'program': 'Program',
                 'func': 'FunctionDecl',
                 'funcDecl': 'FunctionDecl',
-                'stmt': 'Statement',
-                'expr': 'Expression',
+                'stmt': 'Stmt',
+                'expr': 'Expr',
+                'target': 'Expr',
+                'value': 'Expr',
+                'left': 'Expr',
+                'right': 'Expr',
+                'argExpr': 'Expr',
             }
             if var_name in NAME_TO_CLASS:
                 return NAME_TO_CLASS[var_name]
@@ -1718,9 +1907,13 @@ class Codegen:
             obj_reg, _ = self.emit_expression(obj_expr)
             value_reg, value_type = self.emit_expression(expr.value)
             
-            # Look up field info
-            field_info = self._lookup_field(member)
+            # Look up field info - prefer class-specific lookup
             struct_name = self._get_obj_struct_name(obj_expr)
+            field_info = None
+            if struct_name and struct_name in self.class_fields:
+                field_info = self.class_fields[struct_name].get(member)
+            if field_info is None:
+                field_info = self._lookup_field(member)
             
             if field_info is not None:
                 field_type, gep_idx = field_info
@@ -1812,12 +2005,9 @@ class Codegen:
     
     def mangle_function_name(self, name: str, is_export: bool) -> str:
         """Mangle function name for LLVM"""
-        if name == "main":
-            return "main"
-        
-        if is_export:
-            return f"_T.{name}$P"
-        
+        # Don't mangle - use simple names for easier linking
+        # Mangling was: _T.{name}$P for exports
+        # Now: just use the plain name
         return name
     
     def escape_string(self, s: str) -> str:

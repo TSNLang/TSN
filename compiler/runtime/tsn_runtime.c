@@ -7,6 +7,23 @@
 #include <windows.h>
 #endif
 
+// ========================================
+// Boxing helpers for Array<i32>
+// ========================================
+
+// Box i32 into a heap pointer (for Array_push_impl)
+void* tsn_box_i32(int32_t value) {
+    int32_t* p = (int32_t*)malloc(sizeof(int32_t));
+    *p = value;
+    return (void*)p;
+}
+
+// Unbox ptr back to i32 (for Array_get_impl result)
+int32_t tsn_unbox_i32(void* p) {
+    if (!p) return 0;
+    return *((int32_t*)p);
+}
+
 void* class_alloc(int32_t size) {
     void* p = calloc(1, size);
     if (p) {
@@ -382,6 +399,17 @@ void* Array_pop_impl(Array_Generic* arr) {
     if (!arr || arr->length == 0) return NULL;
     arr->length--;
     return ((void**)arr->data)[arr->length];
+}
+
+// i32 boxing helpers (after Array_push_impl and Array_get_impl are defined)
+void Array_push_i32(void* arr, int32_t value) {
+    void* boxed = tsn_box_i32(value);
+    Array_push_impl((Array_Generic*)arr, boxed);
+}
+
+int32_t Array_get_i32(void* arr, int32_t index) {
+    void* item = Array_get_impl((Array_Generic*)arr, index);
+    return tsn_unbox_i32(item);
 }
 
 // Generic Array set

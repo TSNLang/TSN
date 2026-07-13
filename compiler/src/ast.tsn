@@ -80,11 +80,25 @@ export class Stmt {
     typeAnnotation: string;
     init: Expr;
     
+    // IfStmt fields
+    condition: Expr;
+    thenBlock: BlockStmt;
+    elseBlock: BlockStmt;
+    
+    // WhileStmt fields
+    // condition: Expr (reuse from IfStmt)
+    body: BlockStmt;
+    
     constructor() {
         // Don't set kind in constructor - will be set after construction
         this.kind = "";
         this.name = "";
         this.typeAnnotation = "";
+        
+        // Initialize block fields to avoid null pointer issues
+        this.thenBlock = new BlockStmt();
+        this.elseBlock = new BlockStmt();
+        this.body = new BlockStmt();
     }
 }
 
@@ -133,6 +147,10 @@ export class Expr {
     callee: string;
     args: Array<Expr>;
     
+    // MemberExpr fields (obj.field, this.field)
+    object: Expr;
+    member: string;
+    
     constructor() {
         this.kind = "";
         this.numValue = "";
@@ -140,6 +158,7 @@ export class Expr {
         this.operator = "";
         this.callee = "";
         this.args = new Array<Expr>();
+        this.member = "";
     }
 }
 

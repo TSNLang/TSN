@@ -95,9 +95,12 @@ export class Lexer {
         if (ch == 41) { this.addToken("RPAREN", ")"); this.advance(); return; }  // )
         if (ch == 123) { this.addToken("LBRACE", "{"); this.advance(); return; } // {
         if (ch == 125) { this.addToken("RBRACE", "}"); this.advance(); return; } // }
+        if (ch == 91) { this.addToken("LBRACK", "["); this.advance(); return; }  // [
+        if (ch == 93) { this.addToken("RBRACK", "]"); this.advance(); return; }  // ]
         if (ch == 44) { this.addToken("COMMA", ","); this.advance(); return; }   // ,
         if (ch == 59) { this.addToken("SEMICOLON", ";"); this.advance(); return; } // ;
         if (ch == 58) { this.addToken("COLON", ":"); this.advance(); return; }   // :
+        if (ch == 46) { this.addToken("DOT", "."); this.advance(); return; }     // .
         
         // Operators
         if (ch == 43) { this.addToken("PLUS", "+"); this.advance(); return; }    // +
@@ -105,7 +108,19 @@ export class Lexer {
         if (ch == 42) { this.addToken("STAR", "*"); this.advance(); return; }    // *
         if (ch == 47) { this.addToken("SLASH", "/"); this.advance(); return; }   // /
         
-        // Comparison operators
+        // Comparison and logical operators
+        if (ch == 33) {  // !
+            if (this.peek() == 61) {  // !=
+                this.addToken("NE", "!=");
+                this.advance();
+                this.advance();
+                return;
+            }
+            this.addToken("NOT", "!");
+            this.advance();
+            return;
+        }
+        
         if (ch == 61) {  // =
             if (this.peek() == 61) {  // ==
                 this.addToken("EQ", "==");
@@ -142,7 +157,39 @@ export class Lexer {
             return;
         }
         
-        // Unknown character - skip
+        if (ch == 38) {  // &
+            if (this.peek() == 38) {  // &&
+                this.addToken("AND", "&&");
+                this.advance();
+                this.advance();
+                return;
+            }
+            // Single & not supported yet
+            log("Lexer: Unexpected & at line " + this.intToString(this.line));
+            this.advance();
+            return;
+        }
+        
+        if (ch == 124) {  // |
+            if (this.peek() == 124) {  // ||
+                this.addToken("OR", "||");
+                this.advance();
+                this.advance();
+                return;
+            }
+            // Single | not supported yet
+            log("Lexer: Unexpected | at line " + this.intToString(this.line));
+            this.advance();
+            return;
+        }
+        
+        // String literals
+        if (ch == 34) {  // "
+            this.scanString();
+            return;
+        }
+        
+        // Unknown character - skip with debug info
         log("Lexer: Unknown character at line " + this.intToString(this.line));
         this.advance();
     }
@@ -171,15 +218,49 @@ export class Lexer {
         this.addToken("NUMBER", lexeme);
     }
     
+    private scanString(): void {
+        this.advance(); // Skip opening "
+        let start = this.pos;
+        
+        while (this.pos < this.source.length && this.current() != 34) {  // 34 = "
+            if (this.current() == 92) {  // 92 = backslash
+                this.advance(); // Skip escape char
+                if (this.pos < this.source.length) {
+                    this.advance(); // Skip escaped char
+                }
+            } else {
+                this.advance();
+            }
+        }
+        
+        let lexeme = this.source.slice(start, this.pos);
+        
+        if (this.pos < this.source.length) {
+            this.advance(); // Skip closing "
+        }
+        
+        this.addToken("STRING", lexeme);
+    }
+    
     private getKeywordType(lexeme: string): string {
         if (lexeme == "function") return "FUNCTION";
         if (lexeme == "return") return "RETURN";
         if (lexeme == "let") return "LET";
+        if (lexeme == "const") return "CONST";
         if (lexeme == "if") return "IF";
         if (lexeme == "else") return "ELSE";
         if (lexeme == "while") return "WHILE";
         if (lexeme == "true") return "TRUE";
         if (lexeme == "false") return "FALSE";
+        if (lexeme == "class") return "CLASS";
+        if (lexeme == "constructor") return "CONSTRUCTOR";
+        if (lexeme == "new") return "NEW";
+        if (lexeme == "this") return "THIS";
+        if (lexeme == "export") return "EXPORT";
+        if (lexeme == "import") return "IMPORT";
+        if (lexeme == "from") return "FROM";
+        if (lexeme == "public") return "PUBLIC";
+        if (lexeme == "private") return "PRIVATE";
         return "IDENTIFIER";
     }
     

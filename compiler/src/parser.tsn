@@ -100,17 +100,8 @@ export class Parser {
                 let type = this.consume("IDENTIFIER", "Expected type").lexeme;
                 this.consume("ASSIGN", "Expected '='");
                 
-                // Parse initializer - VERY simple: number or identifier only
-                let initExpr = new Expr();
-                if (this.check("NUMBER")) {
-                    let token = this.consume("NUMBER", "Expected number");
-                    initExpr.kind = "NumberLiteral";
-                    initExpr.name = token.lexeme;
-                } else if (this.check("IDENTIFIER")) {
-                    let token = this.consume("IDENTIFIER", "Expected identifier");
-                    initExpr.kind = "Identifier";
-                    initExpr.name = token.lexeme;
-                }
+                // Parse initializer using parseExpression for full support!
+                let initExpr = this.parseExpression();
                 
                 this.consume("SEMICOLON", "Expected ';'");
                 
@@ -120,6 +111,16 @@ export class Parser {
                 stmt.typeAnnotation = type;
                 stmt.init = initExpr;
                 block.statements.push(stmt);
+                
+            } else if (this.check("IF")) {
+                // If statement - use parseIfStatement for proper else-if handling
+                let ifStmt = this.parseIfStatement();
+                block.statements.push(ifStmt);
+                
+            } else if (this.check("WHILE")) {
+                // While statement
+                let whileStmt = this.parseWhileStatement();
+                block.statements.push(whileStmt);
                 
             } else {
                 // Unknown statement, skip token
@@ -138,6 +139,124 @@ export class Parser {
         
         return new Parameter(name, type);
     }
+    
+    private parseIfStatement(): Stmt {
+        // Parse IF statement (used for else-if chains)
+        this.consume("IF", "Expected 'if'");
+        this.consume("LPAREN", "Expected '('");
+        
+        let condExpr = this.parseExpression();
+        
+        this.consume("RPAREN", "Expected ')'");
+        
+        // Parse then block: could be { block } or single statement
+        let thenBlock = this.parseBlockOrStatement();
+        
+        let elseBlock = new BlockStmt();
+        if (this.check("ELSE")) {
+            this.consume("ELSE", "Expected 'else'");
+            
+            if (this.check("IF")) {
+                // Recursive else-if
+                let elseIfStmt = this.parseIfStatement();
+                elseBlock.statements.push(elseIfStmt);
+            } else {
+                // Parse else block: could be { block } or single statement
+                elseBlock = this.parseBlockOrStatement();
+            }
+        }
+        
+        let stmt = new Stmt();
+        stmt.kind = "IfStmt";
+        stmt.condition = condExpr;
+        stmt.thenBlock = thenBlock;
+        stmt.elseBlock = elseBlock;
+        
+        return stmt;
+    }
+    
+    private parseBlockOrStatement(): BlockStmt {
+        // If next token is {, parse block; otherwise parse single statement
+        if (this.check("LBRACE")) {
+            return this.parseSimpleBlock();
+        } else {
+            // Parse single statement and wrap in BlockStmt
+            let block = new BlockStmt();
+            let stmt = this.parseSingleStatement();
+            block.statements.push(stmt);
+            return block;
+        }
+    }
+    
+    private parseSingleStatement(): Stmt {
+        // Parse a single statement (no braces)
+        if (this.check("RETURN")) {
+            return this.parseReturnStmt();
+        }
+        
+        if (this.check("LET")) {
+            return this.parseVarDeclStmt();
+        }
+        
+        if (this.check("IF")) {
+            return this.parseIfStatement();
+        }
+        
+        if (this.check("WHILE")) {
+            return this.parseWhileStatement();
+        }
+        
+        // Expression statement as fallback
+        let expr = this.parseExpression();
+        this.consume("SEMICOLON", "Expected ';'");
+        let stmt = new Stmt();
+        stmt.kind = "ExprStmt";
+        stmt.expr = expr;
+        return stmt;
+    }
+    
+    private parseReturnStmt(): Stmt {
+        this.consume("RETURN", "Expected 'return'");
+        let valueExpr = this.parseExpression();
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        let stmt = new Stmt();
+        stmt.kind = "ReturnStmt";
+        stmt.value = valueExpr;
+        return stmt;
+    }
+    
+    private parseVarDeclStmt(): Stmt {
+        this.consume("LET", "Expected 'let'");
+        let name = this.consume("IDENTIFIER", "Expected variable name").lexeme;
+        this.consume("COLON", "Expected ':'");
+        let type = this.consume("IDENTIFIER", "Expected type").lexeme;
+        this.consume("ASSIGN", "Expected '='");
+        let initExpr = this.parseExpression();
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        let stmt = new Stmt();
+        stmt.kind = "VarDeclStmt";
+        stmt.name = name;
+        stmt.typeAnnotation = type;
+        stmt.init = initExpr;
+        return stmt;
+    }
+    
+    private parseWhileStatement(): Stmt {
+        this.consume("WHILE", "Expected 'while'");
+        this.consume("LPAREN", "Expected '('");
+        let condExpr = this.parseExpression();
+        this.consume("RPAREN", "Expected ')'");
+        let bodyBlock = this.parseBlockOrStatement();
+        
+        let stmt = new Stmt();
+        stmt.kind = "WhileStmt";
+        stmt.condition = condExpr;
+        stmt.body = bodyBlock;
+        return stmt;
+    }
+    
     
     // ========================================
     // STATEMENTS
@@ -230,7 +349,28 @@ export class Parser {
     // ========================================
     
     private parseExpression(): Expr {
-        return this.parseComparison();
+        return this.parseAssignment();
+    }
+    
+    private parseAssignment(): Expr {
+        let expr = this.parseComparison();
+        
+        // Check for assignment: identifier = value  OR  member.field = value
+        if (this.match("ASSIGN")) {
+            let value = this.parseAssignment();
+            
+            // Create assignment expression - use BinaryExpr with "=" operator
+            // Target is expr (Identifier or MemberExpr)
+            // Value is value
+            let assign = new Expr();
+            assign.kind = "AssignExpr";
+            assign.operator = "=";
+            assign.left = expr;
+            assign.right = value;
+            return assign;
+        }
+        
+        return expr;
     }
     
     private parseComparison(): Expr {
@@ -295,10 +435,10 @@ export class Parser {
         if (this.check("NUMBER")) {
             let token = this.advance();
             
-            // Store in numValue (first field in Expr)
+            // Create Expr and set fields in order
             let expr = new Expr();
-            expr.numValue = token.lexeme;  // Assign to first field!
-            expr.kind = "NumberLiteral";
+            expr.kind = "NumberLiteral";  // Set kind first!
+            expr.numValue = token.lexeme;
             return expr;
         }
         
