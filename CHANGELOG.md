@@ -2,6 +2,41 @@
 
 All notable changes to the TSN compiler and standard library will be documented in this file.
 
+---
+
+## [Unreleased] - v0.40.0 Target 🎯 ZERO DEPENDENCY
+
+### Goal: 100% Bootstrap Independence
+**Mission**: First compiler with ZERO external tool dependencies
+
+**Target Features**:
+- [ ] Parser self-compilation without Python
+- [ ] All new features added using TSN compiler only
+- [ ] Gen4 → Gen5 fixed point with pure TSN build
+- [ ] Remove Python from development workflow
+- [ ] `build-tsnc.tsn` script (TSN builds TSN!)
+
+**Status**: Planning complete, implementation pending Phase 39
+
+---
+
+## [Unreleased] - v0.39.0 Target 🚀 PARSER SELF-HOSTING
+
+### Goal: Parser Can Compile Itself
+**Blockers Removed**: Deep recursion limitation
+
+**Target Features**:
+- [ ] Increase executable stack size (16 MB via `/STACK:16777216`)
+- [ ] Enable parser.tsn to compile itself using TSN compiler
+- [ ] Implement tail-call optimization (TCO)
+- [ ] Generate Gen4 using only TSN compiler (no Python)
+- [ ] Maintain fixed point: Gen4 == Gen5 (SHA256 verified)
+
+**Timeline**: 3 weeks (2 weeks stack fix, 1 week TCO)  
+**Status**: Planning complete, ready to implement
+
+---
+
 ## 🎊🎉🚀 Phase 37 (2026-08-02): FIXED POINT ACHIEVED - ULTIMATE VICTORY!
 
 **HISTORIC MILESTONE**: True self-hosting with mathematical proof of fixed point!
