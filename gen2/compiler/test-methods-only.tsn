@@ -1,0 +1,18 @@
+// Test class with only methods, no field declarations
+export class Calculator {
+    function add(a: i32, b: i32): i32 {
+        return a + b;
+    }
+    
+    function subtract(a: i32, b: i32): i32 {
+        return a - b;
+    }
+    
+    function multiply(x: i32, y: i32): i32 {
+        return x * y;
+    }
+}
+
+export function helper(): i32 {
+    return 100;
+}

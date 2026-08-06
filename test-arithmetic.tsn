@@ -1,0 +1,10 @@
+// Test: Simplest possible arithmetic
+// Just 5 + 7 = 12
+
+function test(): i32 {
+    return 5 + 7;
+}
+
+function main(): i32 {
+    return test();
+}

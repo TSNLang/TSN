@@ -1,0 +1,17 @@
+// Phase 29 Test: Array methods with explicit types
+
+import { Array } from "std:array";
+
+function main(): i32 {
+    let arr = new Array<i32>();
+    
+    arr.push(10);
+    arr.push(20);
+    arr.push(30);
+    
+    let len: i32 = arr.length;        // 3
+    let first: i32 = arr.get(0);      // 10
+    let second: i32 = arr.get(1);     // 20
+    
+    return len + first + second; // 3 + 10 + 20 = 33
+}

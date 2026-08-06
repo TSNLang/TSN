@@ -1,0 +1,14 @@
+// Phase 28 Test: String methods
+
+function main(): i32 {
+    let s = "Hello";
+    
+    // Test .length
+    let len = s.length;
+    
+    // Test charCodeAt - 'H' = 72
+    let firstChar = s.charCodeAt(0);
+    
+    // 72 - 5 = 67 (just to combine both results)
+    return len + firstChar;  // 5 + 72 = 77
+}

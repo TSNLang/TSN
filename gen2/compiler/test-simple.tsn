@@ -1,0 +1,9 @@
+// Simple test for Phase 15
+function getValue(): i32 {
+    let x: i32 = 7;
+    return x;
+}
+
+function main(): i32 {
+    return getValue();
+}

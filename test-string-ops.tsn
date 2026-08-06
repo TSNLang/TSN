@@ -1,0 +1,34 @@
+// Phase 28 Test: String operations
+
+function testEquality(): i32 {
+    let s1 = "hello";
+    let s2 = "hello";
+    let s3 = "world";
+    
+    if (s1 == s2) {
+        if (s1 == s3) {
+            return 1;  // Wrong
+        } else {
+            return 2;  // Correct: "hello" == "hello", "hello" != "world"
+        }
+    } else {
+        return 3;  // Wrong
+    }
+}
+
+function testInequality(): i32 {
+    let s1 = "foo";
+    let s2 = "bar";
+    
+    if (s1 != s2) {
+        return 4;  // Correct: "foo" != "bar"
+    } else {
+        return 5;  // Wrong
+    }
+}
+
+function main(): i32 {
+    let a = testEquality();   // Should be 2
+    let b = testInequality();  // Should be 4
+    return a + b;              // Should be 6
+}

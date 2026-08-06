@@ -1,0 +1,19 @@
+// Test lexer new features
+class TestClass {
+    value: i32;
+    
+    constructor(val: i32) {
+        this.value = val;
+    }
+}
+
+function test(): i32 {
+    let arr: Array<i32> = new Array<i32>();
+    let str: string = "hello";
+    
+    if (true && false || true) {
+        return 1;
+    }
+    
+    return 0;
+}

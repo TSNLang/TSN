@@ -1,0 +1,16 @@
+// Phase 34 Test: Simple class method
+class Calculator {
+    function add(a: i32, b: i32): i32 {
+        return a + b;
+    }
+    
+    function double(x: i32): i32 {
+        return x + x;
+    }
+}
+
+function main(): i32 {
+    let calc = new Calculator();
+    let result = calc.add(5, 7);
+    return result;  // Should return 12
+}

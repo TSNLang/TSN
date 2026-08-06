@@ -1,0 +1,14 @@
+// Phase 28 Test: String concatenation
+
+import { log } from "std:console";
+
+function main(): i32 {
+    let s1 = "Hello";
+    let s2 = " ";
+    let s3 = "World";
+    
+    let result = s1 + s2 + s3;  // "Hello World"
+    log(result);
+    
+    return 0;
+}

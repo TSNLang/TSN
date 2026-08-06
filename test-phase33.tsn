@@ -1,0 +1,15 @@
+// Phase 33: new + member access test
+function main(): i32 {
+    // Test assignment chain
+    let x: i32 = 5;
+    let y: i32 = x + 3;
+    
+    // Test function call with arg
+    let z: i32 = add(x, y);
+    
+    return z;
+}
+
+function add(a: i32, b: i32): i32 {
+    return a + b;
+}

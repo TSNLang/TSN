@@ -1,0 +1,150 @@
+// AST Node Definitions - Phase 10: Tagged Union Approach
+// No inheritance - all fields in base class with type tag
+
+import { Array } from "std:array";
+
+// ========================================
+// BASE TYPES
+// ========================================
+
+export class SourceLocation {
+    line: i32;
+    column: i32;
+    
+    constructor(line: i32, column: i32) {
+        this.line = line;
+        this.column = column;
+    }
+}
+
+// ========================================
+// PROGRAM & DECLARATIONS
+// ========================================
+
+export class Program {
+    functions: Array<FunctionDecl>;
+    
+    constructor() {
+        this.functions = new Array<FunctionDecl>();
+    }
+}
+
+export class FunctionDecl {
+    name: string;
+    params: Array<Parameter>;
+    returnType: string;
+    body: BlockStmt;
+    
+    constructor(name: string, returnType: string) {
+        this.name = name;
+        this.returnType = returnType;
+        this.params = new Array<Parameter>();
+        this.body = new BlockStmt();
+    }
+}
+
+export class Parameter {
+    name: string;
+    typeAnnotation: string;
+    
+    constructor(name: string, typeAnnotation: string) {
+        this.name = name;
+        this.typeAnnotation = typeAnnotation;
+    }
+}
+
+// ========================================
+// STATEMENTS - Tagged Union Style
+// ========================================
+
+export class BlockStmt {
+    statements: Array<Stmt>;
+    
+    constructor() {
+        this.statements = new Array<Stmt>();
+    }
+}
+
+// ALL statement data in ONE class - discriminated by kind
+export class Stmt {
+    kind: string;
+    
+    // ReturnStmt fields
+    value: Expr;
+    
+    // ExprStmt fields
+    expr: Expr;
+    
+    // VarDeclStmt fields
+    name: string;
+    typeAnnotation: string;
+    init: Expr;
+    
+    // IfStmt fields
+    condition: Expr;
+    thenBlock: BlockStmt;
+    elseBlock: BlockStmt;
+    
+    // WhileStmt fields
+    // condition: Expr (reuse from IfStmt)
+    body: BlockStmt;
+    
+    constructor() {
+        // Don't set kind in constructor - will be set after construction
+        this.kind = "";
+        this.name = "";
+        this.typeAnnotation = "";
+        
+        // Initialize block fields to avoid null pointer issues
+        this.thenBlock = new BlockStmt();
+        this.elseBlock = new BlockStmt();
+        this.body = new BlockStmt();
+    }
+}
+
+// Factory functions for creating specific statement types
+export function ReturnStmt(value: Expr): Stmt {
+    let stmt = new Stmt();
+    stmt.kind = "ReturnStmt";
+    stmt.value = value;
+    return stmt;
+}
+
+export function ExprStmt(expr: Expr): Stmt {
+    let stmt = new Stmt();
+    stmt.kind = "ExprStmt";
+    stmt.expr = expr;
+    return stmt;
+}
+
+export function VarDeclStmt(name: string, typeAnnotation: string, init: Expr): Stmt {
+    let stmt = new Stmt();
+    stmt.kind = "VarDeclStmt";
+    stmt.name = name;
+    stmt.typeAnnotation = typeAnnotation;
+    stmt.init = init;
+    return stmt;
+}
+
+// ========================================
+// EXPRESSIONS - Tagged Union Style
+// ========================================
+
+// ALL expression data in ONE class - discriminated by kind
+export class Expr {
+    kind: string;           // PUT FIRST so it can be assigned!
+    numValue: string;       // PUT SECOND so it can be assigned!
+    
+    // Identifier fields
+    name: string;
+    
+    // BinaryExpr fields
+    left: Expr;
+    operator: string;
+    right: Expr;
+    
+    // CallExpr fields
+    callee: string;
+    args: Array<Expr>;
+    
+    // MemberExpr fields (obj.field, this.field)

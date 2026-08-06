@@ -1,0 +1,18 @@
+// Simplified AST for testing
+import { Array } from "std:array";
+
+export class Program {
+    functions: Array<string>;
+    
+    constructor() {
+        this.functions = new Array<string>();
+    }
+}
+
+export class ClassDecl {
+    name: string;
+    
+    constructor(name: string) {
+        this.name = name;
+    }
+}

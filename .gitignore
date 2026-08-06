@@ -1,53 +1,34 @@
-# Executables
-*.exe
-*.obj
+# Temporary output files
 *.ll
-*.meta
 *.o
-*.s
-*.pdb
-*.ilk
+*.exe
+!compiler/tsnc.exe
+!gen1/tsnc-gen1.exe
+!gen2/tsnc-gen2.exe
+!gen2-test/tsnc-gen2.exe
+!gen3-test/tsnc-gen3.exe
 
-# Python
-__pycache__/
+# Debug files
+debug-*.py
 *.pyc
-*.pyo
-
-# Node.js
-node_modules/
-npm-debug.log
-
-# Deno
-.deno/
-.deno_cache_test
-
-# IDE
-.vscode/
-.idea/
-
-# Compiler Build artifacts
-dist/
-build/
+__pycache__/
 
 # Temporary test files
-test_*.ts
-test_*.tsn
-test*
-!test_class.ts
-!test_struct_vs_class.ts
-!test_namespace.ts
-!test_enum.ts
-!test_ts.ts
-*.txt
-# Logs
-*.log
+ca.ll
+ca*.ll
+cc*.ll
+cl*.ll
+cm*.ll
+test-*.ll
+!bootstrap/test-*.ll
 
-# Standard Library
-!src/std/
-!test_option.tsn
-!test_string_utf8.tsn
-!test_string_includes.tsn
-!test_string_search.tsn
-!test_ptr.tsn
-!test_rawptr.tsn
-!test_numbers.tsn
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

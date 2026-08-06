@@ -1,0 +1,7 @@
+// Module B - imports from A
+
+import { add, multiply } from "./test-import-a.tsn";
+
+function main(): i32 {
+    return 16;
+}

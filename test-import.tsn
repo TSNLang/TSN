@@ -1,0 +1,14 @@
+// Test import
+import { Array } from "std:array";
+
+export class Test {
+    items: Array<i32>;
+    
+    constructor() {
+        this.items = new Array<i32>();
+    }
+}
+
+export function testFunc(): i32 {
+    return 42;
+}

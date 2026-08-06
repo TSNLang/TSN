@@ -1,0 +1,10 @@
+// Phase 19 Test: Direct return
+// No variable, just return literal
+
+function test(): i32 {
+    return 12;
+}
+
+function main(): i32 {
+    return test();
+}

@@ -1,0 +1,9 @@
+// Module A - exports a function
+
+export function add(a: i32, b: i32): i32 {
+    return a + b;
+}
+
+export function multiply(x: i32, y: i32): i32 {
+    return x * y;
+}

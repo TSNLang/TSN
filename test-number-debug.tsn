@@ -1,0 +1,9 @@
+// Test number literal parsing
+
+function test(): i32 {
+    return 10;
+}
+
+function main(): i32 {
+    return test();
+}

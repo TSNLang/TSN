@@ -1,0 +1,12 @@
+// Phase 28 Test: Minimal string test
+
+function main(): i32 {
+    let s1 = "hello";
+    let s2 = "hello";
+    
+    if (s1 == s2) {
+        return 1;  // Equal
+    } else {
+        return 0;  // Not equal
+    }
+}

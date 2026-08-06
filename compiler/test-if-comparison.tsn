@@ -1,0 +1,13 @@
+// Phase 23 Test: if with comparison
+
+function test(x: i32): i32 {
+    if (x > 5) {
+        return 10;
+    } else {
+        return 20;
+    }
+}
+
+function main(): i32 {
+    return test(8);
+}

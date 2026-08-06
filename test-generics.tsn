@@ -1,0 +1,27 @@
+// Phase 27 Test: Generic types
+
+import { Array } from "std:array";
+
+export class Container {
+    items: Array<i32>;
+    
+    constructor() {
+        this.items = new Array<i32>();
+    }
+    
+    public add(value: i32): void {
+        this.items.push(value);
+    }
+    
+    public getCount(): i32 {
+        return this.items.length;
+    }
+}
+
+function main(): i32 {
+    let container = new Container();
+    container.add(10);
+    container.add(20);
+    container.add(30);
+    return container.getCount();  // Should return 3
+}

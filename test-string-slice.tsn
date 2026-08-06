@@ -1,0 +1,18 @@
+// Phase 28 Test: String slice and comparison
+
+function main(): i32 {
+    let s = "Hello World";
+    
+    let hello = s.slice(0, 5);   // "Hello"
+    let world = s.slice(6, 11);  // "World"
+    
+    if (hello == "Hello") {
+        if (world == "World") {
+            return 42;  // Both correct
+        } else {
+            return 2;
+        }
+    } else {
+        return 1;
+    }
+}

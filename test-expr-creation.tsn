@@ -1,0 +1,39 @@
+// Test: Creating BinaryExpr like parser does
+// This mimics what happens in parseAddition()
+
+class Expr {
+    kind: string;
+    name: string;
+    left: Expr;
+    right: Expr;
+    operator: string;
+    
+    constructor() {
+        this.kind = "";
+        this.name = "";
+        this.operator = "";
+    }
+}
+
+function createBinary(): Expr {
+    let leftExpr = new Expr();
+    leftExpr.kind = "NumberLiteral";
+    leftExpr.name = "5";
+    
+    let rightExpr = new Expr();
+    rightExpr.kind = "NumberLiteral";
+    rightExpr.name = "7";
+    
+    let binExpr = new Expr();
+    binExpr.kind = "BinaryExpr";
+    binExpr.left = leftExpr;      // ← CRITICAL ASSIGNMENT
+    binExpr.right = rightExpr;    // ← CRITICAL ASSIGNMENT
+    binExpr.operator = "+";
+    
+    return binExpr;
+}
+
+function main(): i32 {
+    let expr = createBinary();
+    return 42;
+}

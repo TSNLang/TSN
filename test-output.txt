@@ -1,0 +1,6 @@
+=== TSN Compiler v2 - Phase 10: Nested Expressions ===
+Source code loaded
+Test: add3(a, b, c) = a + b + c
+\n=== LEXER ===
+Tokens count: ?
+\n=== PARSER ===

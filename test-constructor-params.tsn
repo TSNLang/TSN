@@ -1,0 +1,41 @@
+// Phase 30 Test: Constructor parameters
+
+export class Token {
+    type: string;
+    lexeme: string;
+    line: i32;
+    
+    constructor(type: string, lexeme: string, line: i32) {
+        this.type = type;
+        this.lexeme = lexeme;
+        this.line = line;
+    }
+    
+    public getType(): string {
+        return this.type;
+    }
+    
+    public getLexeme(): string {
+        return this.lexeme;
+    }
+    
+    public getLine(): i32 {
+        return this.line;
+    }
+}
+
+function main(): i32 {
+    let tok = new Token("IDENTIFIER", "hello", 42);
+    
+    let t: string = tok.getType();
+    let l: string = tok.getLexeme();
+    let n: i32 = tok.getLine();
+    
+    if (t == "IDENTIFIER") {
+        if (l == "hello") {
+            return n;  // Should return 42
+        }
+        return 2;
+    }
+    return 1;
+}

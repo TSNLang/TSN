@@ -1,0 +1,13 @@
+// Phase 23 Test: if/else control flow
+
+function test(x: i32): i32 {
+    if (x) {
+        return 5;
+    } else {
+        return 7;
+    }
+}
+
+function main(): i32 {
+    return test(1);
+}

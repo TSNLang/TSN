@@ -1,0 +1,77 @@
+// Phase 30 Test: Complex constructor - like Lexer/Parser
+
+import { Array } from "std:array";
+
+export class Lexer {
+    source: string;
+    pos: i32;
+    tokens: Array<string>;
+    
+    constructor(source: string) {
+        this.source = source;
+        this.pos = 0;
+        this.tokens = new Array<string>();
+    }
+    
+    public getSource(): string {
+        return this.source;
+    }
+    
+    public getPos(): i32 {
+        return this.pos;
+    }
+    
+    public addToken(tok: string): void {
+        this.tokens.push(tok);
+    }
+    
+    public getTokenCount(): i32 {
+        return this.tokens.length;
+    }
+}
+
+export class Parser {
+    tokens: Array<string>;
+    current: i32;
+    
+    constructor(tokens: Array<string>) {
+        this.tokens = tokens;
+        this.current = 0;
+    }
+    
+    public getCurrent(): i32 {
+        return this.current;
+    }
+    
+    public advance(): void {
+        this.current = this.current + 1;
+    }
+    
+    public getToken(i: i32): string {
+        return this.tokens.get(i);
+    }
+}
+
+function main(): i32 {
+    // Test Lexer constructor
+    let lexer = new Lexer("hello world");
+    lexer.addToken("HELLO");
+    lexer.addToken("WORLD");
+    lexer.addToken("EOF");
+    
+    let count: i32 = lexer.getTokenCount();  // 3
+    
+    // Test Parser constructor
+    let toks = new Array<string>();
+    toks.push("A");
+    toks.push("B");
+    toks.push("C");
+    
+    let parser = new Parser(toks);
+    parser.advance();
+    parser.advance();
+    
+    let cur: i32 = parser.getCurrent();  // 2
+    
+    return count + cur;  // 3 + 2 = 5
+}
