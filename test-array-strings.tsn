@@ -1,0 +1,23 @@
+// Phase 29 Test: Array of strings
+
+import { Array } from "std:array";
+import { log } from "std:console";
+
+function main(): i32 {
+    let tokens = new Array<string>();
+    
+    tokens.push("hello");
+    tokens.push("world");
+    tokens.push("tsn");
+    
+    let len: i32 = tokens.length;   // 3
+    
+    let first: string = tokens.get(0);
+    log(first);                      // prints "hello"
+    
+    if (first == "hello") {
+        return len;  // 3
+    } else {
+        return 0;
+    }
+}

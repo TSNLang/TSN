@@ -1,0 +1,25 @@
+// Phase 25 Test: this.field access
+
+export class Counter {
+    value: i32;
+    
+    constructor() {
+        this.value = 0;
+    }
+    
+    public increment(): void {
+        this.value = this.value + 1;
+    }
+    
+    public getValue(): i32 {
+        return this.value;
+    }
+}
+
+function main(): i32 {
+    let counter = new Counter();
+    counter.increment();
+    counter.increment();
+    counter.increment();
+    return counter.getValue();
+}

@@ -1,0 +1,5 @@
+import { log } from "std:console";
+
+function main(): void {
+    log("Hello from compiler v2!");
+}

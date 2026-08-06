@@ -1,0 +1,10 @@
+// Test: Can Python compile this with arithmetic?
+// This will be compiled BY Python, not by tsnc.exe
+
+function test(): i32 {
+    return 5 + 7;
+}
+
+function main(): i32 {
+    return test();
+}

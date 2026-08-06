@@ -1,0 +1,12 @@
+// Phase 28 Test: String inequality
+
+function main(): i32 {
+    let s1 = "hello";
+    let s2 = "world";
+    
+    if (s1 != s2) {
+        return 5;  // Not equal (correct)
+    } else {
+        return 0;  // Equal (wrong)
+    }
+}

@@ -1,0 +1,24 @@
+// Test without constructor bodies
+import { Array } from "std:array";
+
+export class Program {
+    functions: Array<FunctionDecl>;
+    classes: Array<ClassDecl>;
+}
+
+export class FunctionDecl {
+    name: string;
+    returnType: string;
+}
+
+export class ClassDecl {
+    name: string;
+    
+    function getName(): string {
+        return this.name;
+    }
+}
+
+function main(): i32 {
+    return 0;
+}

@@ -1,0 +1,12 @@
+// Test export handling
+import { Array } from "std:array";
+
+export class Simple {
+    function test(): i32 {
+        return 1;
+    }
+}
+
+export function helper(): i32 {
+    return 2;
+}

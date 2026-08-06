@@ -1,0 +1,36 @@
+// Phase 27 Test: Nested generics
+
+import { Array } from "std:array";
+
+export class Matrix {
+    rows: Array<Array<i32>>;
+    
+    constructor() {
+        this.rows = new Array<Array<i32>>();
+    }
+    
+    public addRow(row: Array<i32>): void {
+        this.rows.push(row);
+    }
+    
+    public getRowCount(): i32 {
+        return this.rows.length;
+    }
+}
+
+function main(): i32 {
+    let matrix = new Matrix();
+    
+    let row1 = new Array<i32>();
+    row1.push(1);
+    row1.push(2);
+    
+    let row2 = new Array<i32>();
+    row2.push(3);
+    row2.push(4);
+    
+    matrix.addRow(row1);
+    matrix.addRow(row2);
+    
+    return matrix.getRowCount();  // Should return 2
+}

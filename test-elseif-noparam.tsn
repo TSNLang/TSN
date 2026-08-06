@@ -1,0 +1,11 @@
+// Else-if without parameters
+function test(): i32 {
+    let x: i32 = 1;
+    if (x == 0) return 0;
+    else if (x == 1) return 1;
+    else return 2;
+}
+
+function main(): i32 {
+    return test();
+}

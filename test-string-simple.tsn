@@ -1,0 +1,19 @@
+// Phase 28 Test: Simple string operations
+
+function main(): i32 {
+    let s1 = "hello";
+    let s2 = "hello";
+    let s3 = "world";
+    
+    // Test equality
+    if (s1 == s2) {
+        // s1 == s2 is true
+        if (s1 == s3) {
+            return 1;  // Wrong branch
+        } else {
+            return 2;  // Correct: s1 != s3
+        }
+    } else {
+        return 3;  // Wrong branch
+    }
+}

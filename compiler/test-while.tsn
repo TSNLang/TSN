@@ -1,0 +1,17 @@
+// Phase 23 Test: while loop
+
+function test(): i32 {
+    let x: i32 = 0;
+    let count: i32 = 3;
+    
+    while (count) {
+        x = x + 1;
+        count = count - 1;
+    }
+    
+    return x;
+}
+
+function main(): i32 {
+    return test();
+}

@@ -1,0 +1,28 @@
+// Phase 34 Showcase: Classes + Methods + Export
+// Demonstrates all Phase 34 features
+
+import { Array } from "std:array";
+
+export class Math {
+    function square(x: i32): i32 {
+        return x * x;
+    }
+    
+    function add(a: i32, b: i32): i32 {
+        return a + b;
+    }
+}
+
+export class Calculator {
+    function multiply(a: i32, b: i32): i32 {
+        return a * b;
+    }
+}
+
+export function helper(n: i32): i32 {
+    return n + 10;
+}
+
+function main(): i32 {
+    return 42;
+}

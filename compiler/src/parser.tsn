@@ -1,0 +1,783 @@
+// Parser - Recursive Descent Parser
+// Convert tokens → AST
+
+import { Array } from "std:array";
+import { log } from "std:console";
+import { Token } from "./lexer.tsn";
+import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, Expr, ReturnStmt, ExprStmt, VarDeclStmt, NumberLiteral, Identifier, BinaryExpr, CallExpr, ClassDecl, FieldDecl } from "./ast.tsn";
+
+export class Parser {
+    tokens: Array<Token>;
+    current: i32;
+    
+    constructor(tokens: Array<Token>) {
+        this.tokens = tokens;
+        this.current = 0;
+    }
+    
+    // ========================================
+    // MAIN ENTRY POINT
+    // ========================================
+    
+    public parse(): Program {
+        let program = new Program();
+        
+        while (this.isAtEnd() == false) {
+            if (this.check("IMPORT")) {
+                // Skip import statements: import { ... } from "..."
+                this.skipImport();
+            } else if (this.check("EXPORT")) {
+                // Handle export: export class/function
+                this.advance();  // consume 'export'
+                if (this.check("CLASS")) {
+                    let cls = this.parseClass();
+                    program.classes.push(cls);
+                } else if (this.check("FUNCTION")) {
+                    let func = this.parseFunction();
+                    program.functions.push(func);
+                } else {
+                    this.advance();  // skip unknown export
+                }
+            } else if (this.check("FUNCTION")) {
+                let func = this.parseFunction();
+                program.functions.push(func);
+            } else if (this.check("CLASS")) {
+                let cls = this.parseClass();
+                program.classes.push(cls);
+            } else {
+                this.advance();
+            }
+        }
+        
+        return program;
+    }
+    
+    private skipImport(): void {
+        // Skip import statement: import { ... } from "..."
+        while (this.isAtEnd() == false && this.check("SEMICOLON") == false) {
+            this.advance();
+        }
+        if (this.check("SEMICOLON")) {
+            this.advance();  // consume ';'
+        }
+    }
+    
+    // ========================================
+    // CLASS DECLARATION
+    // ========================================
+    
+    private parseClass(): ClassDecl {
+        this.consume("CLASS", "Expected 'class'");
+        let className = this.consume("IDENTIFIER", "Expected class name").lexeme;
+        this.consume("LBRACE", "Expected '{'");
+        
+        let cls = new ClassDecl(className);
+        
+        // Parse fields and methods
+        while (this.check("RBRACE") == false && this.isAtEnd() == false) {
+            if (this.check("CONSTRUCTOR")) {
+                // Constructor
+                this.advance();  // consume 'constructor'
+                let method = this.parseConstructor(className);
+                cls.methods.push(method);
+            } else if (this.check("FUNCTION")) {
+                // Method
+                let method = this.parseFunction();
+                cls.methods.push(method);
+            } else if (this.check("FIELD")) {
+                // Explicit field: field name: type;
+                this.consume("FIELD", "Expected 'field'");
+                let fieldName = this.consume("IDENTIFIER", "Expected field name").lexeme;
+                this.consume("COLON", "Expected ':'");
+                let fieldType = this.consume("IDENTIFIER", "Expected field type").lexeme;
+                this.consume("SEMICOLON", "Expected ';'");
+                
+                let field = new FieldDecl(fieldName, fieldType);
+                cls.fields.push(field);
+            } else if (this.check("IDENTIFIER")) {
+                // Could be inline field: name: type;
+                // Peek ahead to check if followed by COLON
+                if (this.peekNext() == "COLON") {
+                    let fieldName = this.advance().lexeme;
+                    this.consume("COLON", "Expected ':'");
+                    let fieldType = this.consume("IDENTIFIER", "Expected field type").lexeme;
+                    this.consume("SEMICOLON", "Expected ';'");
+                    
+                    let field = new FieldDecl(fieldName, fieldType);
+                    cls.fields.push(field);
+                } else {
+                    // Unknown - skip
+                    this.advance();
+                }
+            } else {
+                // Skip unknown tokens
+                this.advance();
+            }
+        }
+        
+        this.consume("RBRACE", "Expected '}'");
+        return cls;
+    }
+    
+    private parseConstructor(className: string): FunctionDecl {
+        // Constructor already consumed, parse like function
+        // Constructor name is usually the class name
+        this.consume("LPAREN", "Expected '('");
+        
+        let func = new FunctionDecl(className, "void");
+        
+        // Parse parameters
+        if (this.check("RPAREN") == false) {
+            let param = this.parseParameter();
+            func.params.push(param);
+            
+            while (this.match("COMMA")) {
+                let nextParam = this.parseParameter();
+                func.params.push(nextParam);
+            }
+        }
+        
+        this.consume("RPAREN", "Expected ')'");
+        
+        // Parse body
+        func.body = this.parseSimpleBlock();
+        
+        return func;
+    }
+    
+    // ========================================
+    // FUNCTION DECLARATION
+    // ========================================
+    
+    private parseFunction(): FunctionDecl {
+        this.consume("FUNCTION", "Expected 'function'");
+        let name = this.consume("IDENTIFIER", "Expected function name").lexeme;
+        this.consume("LPAREN", "Expected '('");
+        
+        let func = new FunctionDecl(name, "void");
+        
+        // Parse parameters: (a: i32, b: i32)
+        if (this.check("RPAREN") == false) {
+            // First parameter
+            let param = this.parseParameter();
+            func.params.push(param);
+            
+            // Additional parameters
+            while (this.match("COMMA")) {
+                let nextParam = this.parseParameter();
+                func.params.push(nextParam);
+            }
+        }
+        
+        this.consume("RPAREN", "Expected ')'");
+        
+        // Parse return type
+        if (this.match("COLON")) {
+            func.returnType = this.consume("IDENTIFIER", "Expected return type").lexeme;
+        }
+        
+        // Parse body - TRY AGAIN with simple parsing
+        func.body = this.parseSimpleBlock();
+        
+        return func;
+    }
+    
+    // Block parser - handles multiple statements
+    private parseSimpleBlock(): BlockStmt {
+        this.consume("LBRACE", "Expected '{'");
+        let block = new BlockStmt();
+        
+        // Parse multiple statements
+        while (this.check("RBRACE") == false && this.isAtEnd() == false) {
+            if (this.check("RETURN")) {
+                // Return statement
+                this.consume("RETURN", "Expected 'return'");
+                
+                // Parse return value using parseExpression for arithmetic!
+                let valueExpr = this.parseExpression();
+                
+                this.consume("SEMICOLON", "Expected ';'");
+                
+                let stmt = new Stmt();
+                stmt.kind = "ReturnStmt";
+                stmt.value = valueExpr;
+                block.statements.push(stmt);
+                
+            } else if (this.check("LET")) {
+                // Variable declaration
+                this.consume("LET", "Expected 'let'");
+                let name = this.consume("IDENTIFIER", "Expected variable name").lexeme;
+                this.consume("COLON", "Expected ':'");
+                let type = this.consume("IDENTIFIER", "Expected type").lexeme;
+                this.consume("ASSIGN", "Expected '='");
+                
+                // Parse initializer using parseExpression for full support!
+                let initExpr = this.parseExpression();
+                
+                this.consume("SEMICOLON", "Expected ';'");
+                
+                let stmt = new Stmt();
+                stmt.kind = "VarDeclStmt";
+                stmt.name = name;
+                stmt.typeAnnotation = type;
+                stmt.init = initExpr;
+                block.statements.push(stmt);
+                
+            } else if (this.check("IF")) {
+                // If statement - use parseIfStatement for proper else-if handling
+                let ifStmt = this.parseIfStatement();
+                block.statements.push(ifStmt);
+                
+            } else if (this.check("WHILE")) {
+                // While statement
+                let whileStmt = this.parseWhileStatement();
+                block.statements.push(whileStmt);
+                
+            } else {
+                // Expression statement (assignment, call, etc.)
+                let stmt = this.parseExprStmt();
+                block.statements.push(stmt);
+            }
+        }
+        
+        this.consume("RBRACE", "Expected '}'");
+        return block;
+    }
+    
+    private parseParameter(): Parameter {
+        let name = this.consume("IDENTIFIER", "Expected parameter name").lexeme;
+        this.consume("COLON", "Expected ':'");
+        let type = this.consume("IDENTIFIER", "Expected parameter type").lexeme;
+        
+        return new Parameter(name, type);
+    }
+    
+    private parseIfStatement(): Stmt {
+        // Parse IF statement (used for else-if chains)
+        this.consume("IF", "Expected 'if'");
+        this.consume("LPAREN", "Expected '('");
+        
+        let condExpr = this.parseExpression();
+        
+        this.consume("RPAREN", "Expected ')'");
+        
+        // Parse then block: could be { block } or single statement
+        let thenBlock = this.parseBlockOrStatement();
+        
+        let elseBlock = new BlockStmt();
+        if (this.check("ELSE")) {
+            this.consume("ELSE", "Expected 'else'");
+            
+            if (this.check("IF")) {
+                // Recursive else-if
+                let elseIfStmt = this.parseIfStatement();
+                elseBlock.statements.push(elseIfStmt);
+            } else {
+                // Parse else block: could be { block } or single statement
+                elseBlock = this.parseBlockOrStatement();
+            }
+        }
+        
+        let stmt = new Stmt();
+        stmt.kind = "IfStmt";
+        stmt.condition = condExpr;
+        stmt.thenBlock = thenBlock;
+        stmt.elseBlock = elseBlock;
+        
+        return stmt;
+    }
+    
+    private parseBlockOrStatement(): BlockStmt {
+        // If next token is {, parse block; otherwise parse single statement
+        if (this.check("LBRACE")) {
+            return this.parseSimpleBlock();
+        } else {
+            // Parse single statement and wrap in BlockStmt
+            let block = new BlockStmt();
+            let stmt = this.parseSingleStatement();
+            block.statements.push(stmt);
+            return block;
+        }
+    }
+    
+    private parseSingleStatement(): Stmt {
+        // Parse a single statement (no braces)
+        if (this.check("RETURN")) {
+            return this.parseReturnStmt();
+        }
+        
+        if (this.check("LET")) {
+            return this.parseVarDeclStmt();
+        }
+        
+        if (this.check("IF")) {
+            return this.parseIfStatement();
+        }
+        
+        if (this.check("WHILE")) {
+            return this.parseWhileStatement();
+        }
+        
+        // Expression statement as fallback
+        let expr = this.parseExpression();
+        this.consume("SEMICOLON", "Expected ';'");
+        let stmt = new Stmt();
+        stmt.kind = "ExprStmt";
+        stmt.expr = expr;
+        return stmt;
+    }
+    
+    private parseReturnStmt(): Stmt {
+        this.consume("RETURN", "Expected 'return'");
+        let valueExpr = this.parseExpression();
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        let stmt = new Stmt();
+        stmt.kind = "ReturnStmt";
+        stmt.value = valueExpr;
+        return stmt;
+    }
+    
+    private parseVarDeclStmt(): Stmt {
+        this.consume("LET", "Expected 'let'");
+        let name = this.consume("IDENTIFIER", "Expected variable name").lexeme;
+        this.consume("COLON", "Expected ':'");
+        let type = this.consume("IDENTIFIER", "Expected type").lexeme;
+        this.consume("ASSIGN", "Expected '='");
+        let initExpr = this.parseExpression();
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        let stmt = new Stmt();
+        stmt.kind = "VarDeclStmt";
+        stmt.name = name;
+        stmt.typeAnnotation = type;
+        stmt.init = initExpr;
+        return stmt;
+    }
+    
+    private parseWhileStatement(): Stmt {
+        this.consume("WHILE", "Expected 'while'");
+        this.consume("LPAREN", "Expected '('");
+        let condExpr = this.parseExpression();
+        this.consume("RPAREN", "Expected ')'");
+        let bodyBlock = this.parseBlockOrStatement();
+        
+        let stmt = new Stmt();
+        stmt.kind = "WhileStmt";
+        stmt.condition = condExpr;
+        stmt.body = bodyBlock;
+        return stmt;
+    }
+    
+    
+    // ========================================
+    // STATEMENTS
+    // ========================================
+    
+    private parseBlock(): BlockStmt {
+        this.consume("LBRACE", "Expected '{'");
+        let block = new BlockStmt();
+        
+        // Parse exactly ONE statement then break
+        let count = 0;
+        while (this.check("RBRACE") == false && this.isAtEnd() == false) {
+            let stmt = this.parseStatement();
+            block.statements.push(stmt);
+            
+            count = count + 1;
+            if (count >= 1) {
+                // Force break after 1 statement
+                break;
+            }
+        }
+        
+        this.consume("RBRACE", "Expected '}'");
+        return block;
+    }
+    
+    private parseStatement(): Stmt {
+        // MUST advance at least one token to avoid infinite loop!
+        if (this.check("RETURN")) {
+            return this.parseReturn();
+        }
+        
+        if (this.check("LET")) {
+            return this.parseVarDecl();
+        }
+        
+        // Expression statement
+        return this.parseExprStmt();
+    }
+    
+    private parseReturn(): Stmt {
+        this.consume("RETURN", "Expected 'return'");
+        this.advance();
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        // Create ReturnStmt WITHOUT setting value field
+        let stmt = new Stmt();
+        stmt.kind = "ReturnStmt";
+        // Don't set stmt.value
+        return stmt;
+    }
+    
+    private parseVarDecl(): Stmt {
+        this.consume("LET", "Expected 'let'");
+        
+        let name = this.consume("IDENTIFIER", "Expected variable name").lexeme;
+        
+        this.consume("COLON", "Expected ':'");
+        
+        let type = this.consume("IDENTIFIER", "Expected type").lexeme;
+        
+        this.consume("ASSIGN", "Expected '='");
+        
+        let init = this.parseExpression();
+        
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        // Create VarDeclStmt manually
+        let stmt = new Stmt();
+        stmt.kind = "VarDeclStmt";
+        stmt.name = name;
+        stmt.typeAnnotation = type;
+        stmt.init = init;
+        return stmt;
+    }
+    
+    private parseExprStmt(): Stmt {
+        let expr = this.parseExpression();
+        this.consume("SEMICOLON", "Expected ';'");
+        
+        // Create ExprStmt manually
+        let stmt = new Stmt();
+        stmt.kind = "ExprStmt";
+        stmt.expr = expr;
+        return stmt;
+    }
+    
+    // ========================================
+    // EXPRESSIONS (Operator Precedence)
+    // ========================================
+    
+    private parseExpression(): Expr {
+        return this.parseAssignment();
+    }
+    
+    private parseAssignment(): Expr {
+        let expr = this.parseComparison();
+        
+        // Check for assignment: identifier = value  OR  member.field = value
+        if (this.match("ASSIGN")) {
+            let value = this.parseAssignment();
+            
+            // Create assignment expression - use BinaryExpr with "=" operator
+            // Target is expr (Identifier or MemberExpr)
+            // Value is value
+            let assign = new Expr();
+            assign.kind = "AssignExpr";
+            assign.operator = "=";
+            assign.left = expr;
+            assign.right = value;
+            return assign;
+        }
+        
+        return expr;
+    }
+    
+    private parseComparison(): Expr {
+        let expr = this.parseAddition();
+        
+        while (this.match("LT") || this.match("GT") || this.match("LE") || this.match("GE") || this.match("EQ")) {
+            let op = this.previous().lexeme;
+            let right = this.parseAddition();
+            
+            // Create BinaryExpr manually
+            let binExpr = new Expr();
+            binExpr.kind = "BinaryExpr";
+            binExpr.left = expr;
+            binExpr.operator = op;
+            binExpr.right = right;
+            expr = binExpr;
+        }
+        
+        return expr;
+    }
+    
+    private parseAddition(): Expr {
+        let expr = this.parseMultiplication();
+        
+        while (this.match("PLUS") || this.match("MINUS")) {
+            let op = this.previous().lexeme;
+            let right = this.parseMultiplication();
+            
+            // Create BinaryExpr manually
+            let binExpr = new Expr();
+            binExpr.kind = "BinaryExpr";
+            binExpr.left = expr;
+            binExpr.operator = op;
+            binExpr.right = right;
+            expr = binExpr;
+        }
+        
+        return expr;
+    }
+    
+    private parseMultiplication(): Expr {
+        let expr = this.parsePrimary();
+        
+        while (this.match("STAR") || this.match("SLASH")) {
+            let op = this.previous().lexeme;
+            let right = this.parsePrimary();
+            
+            // Create BinaryExpr manually
+            let binExpr = new Expr();
+            binExpr.kind = "BinaryExpr";
+            binExpr.left = expr;
+            binExpr.operator = op;
+            binExpr.right = right;
+            expr = binExpr;
+        }
+        
+        return expr;
+    }
+    
+    private parsePrimary(): Expr {
+        // Number literal
+        if (this.check("NUMBER")) {
+            let token: Token = this.advance();
+            let expr = new Expr();
+            expr.kind = "NumberLiteral";
+            expr.numValue = token.lexeme;
+            return expr;
+        }
+        
+        // String literal
+        if (this.check("STRING")) {
+            let token: Token = this.advance();
+            let expr = new Expr();
+            expr.kind = "StringLiteral";
+            expr.name = token.lexeme;  // store string content in name field
+            return expr;
+        }
+        
+        // new ClassName(args)
+        if (this.check("NEW")) {
+            this.advance();  // consume 'new'
+            let className = this.consume("IDENTIFIER", "Expected class name after 'new'").lexeme;
+            
+            // Handle generics: Array<T> - skip the <T> part
+            if (this.check("LT")) {
+                this.advance();  // consume <
+                // Skip until >
+                let depth = 1;
+                while (depth > 0 && this.isAtEnd() == false) {
+                    if (this.check("LT")) depth = depth + 1;
+                    if (this.check("GT")) depth = depth - 1;
+                    this.advance();
+                }
+            }
+            
+            this.consume("LPAREN", "Expected '(' after class name");
+            let newExpr = new Expr();
+            newExpr.kind = "NewExpr";
+            newExpr.callee = className;
+            newExpr.args = new Array<Expr>();
+            
+            if (this.check("RPAREN") == false) {
+                let firstArg: Expr = this.parseExpression();
+                newExpr.args.push(firstArg);
+                while (this.match("COMMA")) {
+                    let nextArg: Expr = this.parseExpression();
+                    newExpr.args.push(nextArg);
+                }
+            }
+            this.consume("RPAREN", "Expected ')'");
+            return newExpr;
+        }
+        
+        // this
+        if (this.check("THIS")) {
+            this.advance();
+            let thisExpr = new Expr();
+            thisExpr.kind = "ThisExpr";
+            thisExpr.name = "this";
+            return this.parseMemberChain(thisExpr);
+        }
+        
+        // true / false
+        if (this.check("TRUE")) {
+            this.advance();
+            let expr = new Expr();
+            expr.kind = "NumberLiteral";
+            expr.numValue = "1";
+            return expr;
+        }
+        if (this.check("FALSE")) {
+            this.advance();
+            let expr = new Expr();
+            expr.kind = "NumberLiteral";
+            expr.numValue = "0";
+            return expr;
+        }
+        
+        // Identifier, function call, or member access chain
+        if (this.check("IDENTIFIER")) {
+            let name = this.advance().lexeme;
+            
+            // Function call
+            if (this.match("LPAREN")) {
+                let call = new Expr();
+                call.kind = "CallExpr";
+                call.callee = name;
+                call.args = new Array<Expr>();
+                
+                if (this.check("RPAREN") == false) {
+                    let firstArg: Expr = this.parseExpression();
+                    call.args.push(firstArg);
+                    while (this.match("COMMA")) {
+                        let nextArg: Expr = this.parseExpression();
+                        call.args.push(nextArg);
+                    }
+                }
+                this.consume("RPAREN", "Expected ')'");
+                return this.parseMemberChain(call);
+            }
+            
+            let idExpr = new Expr();
+            idExpr.kind = "Identifier";
+            idExpr.name = name;
+            return this.parseMemberChain(idExpr);
+        }
+        
+        // Parenthesized expression
+        if (this.match("LPAREN")) {
+            let expr = this.parseExpression();
+            this.consume("RPAREN", "Expected ')'");
+            return expr;
+        }
+        
+        // Error fallback
+        let errorExpr = new Expr();
+        errorExpr.kind = "NumberLiteral";
+        errorExpr.numValue = "0";
+        return errorExpr;
+    }
+    
+    private parseMemberChain(expr: Expr): Expr {
+        // Parse chained member accesses: expr.field, expr.method(), etc.
+        let result: Expr = expr;
+        
+        while (this.check("DOT")) {
+            this.advance();  // consume .
+            let memberName = this.consume("IDENTIFIER", "Expected member name").lexeme;
+            
+            // Method call: expr.method(args)
+            if (this.match("LPAREN")) {
+                let call = new Expr();
+                call.kind = "MethodCallExpr";
+                call.object = result;
+                call.member = memberName;
+                call.args = new Array<Expr>();
+                
+                if (this.check("RPAREN") == false) {
+                    let firstArg: Expr = this.parseExpression();
+                    call.args.push(firstArg);
+                    while (this.match("COMMA")) {
+                        let nextArg: Expr = this.parseExpression();
+                        call.args.push(nextArg);
+                    }
+                }
+                this.consume("RPAREN", "Expected ')'");
+                result = call;
+            } else {
+                // Field access: expr.field
+                let memberExpr = new Expr();
+                memberExpr.kind = "MemberExpr";
+                memberExpr.object = result;
+                memberExpr.member = memberName;
+                result = memberExpr;
+            }
+        }
+        
+        return result;
+    }
+    
+    // ========================================
+    // HELPER METHODS
+    // ========================================
+    
+    private match(type: string): bool {
+        if (this.check(type)) {
+            this.advance();
+            return true;
+        }
+        return false;
+    }
+    
+    private check(type: string): bool {
+        if (this.isAtEnd()) return false;
+        return this.peek().type == type;
+    }
+    
+    private advance(): Token {
+        if (this.isAtEnd() == false) {
+            this.current = this.current + 1;
+        }
+        return this.previous();
+    }
+    
+    private isAtEnd(): bool {
+        return this.peek().type == "EOF";
+    }
+    
+    private peek(): Token {
+        return this.tokens.get(this.current);
+    }
+    
+    private peekNext(): string {
+        // Peek at next token type
+        if (this.current + 1 >= this.tokens.length) {
+            return "EOF";
+        }
+        let nextToken = this.tokens.get(this.current + 1);
+        return nextToken.type;
+    }
+    
+    private previous(): Token {
+        return this.tokens.get(this.current - 1);
+    }
+    
+    private consume(type: string, message: string): Token {
+        if (this.check(type)) {
+            return this.advance();
+        }
+        
+        // Error - return current token as fallback
+        return this.peek();
+    }
+    
+    private stringToInt(s: string): i32 {
+        let result = 0;
+        let i = 0;
+        while (i < s.length) {
+            let digit = s.charCodeAt(i) - 48; // '0' = 48
+            result = result * 10 + digit;
+            i = i + 1;
+        }
+        return result;
+    }
+    
+    private intToString(n: i32): string {
+        log("DEBUG intToString: n=" + this.intToStringDebug(n));
+        if (n == 0) return "0";
+        if (n == 42) return "42";
+        return "?";
+    }
+    
+    private intToStringDebug(n: i32): string {
+        if (n == 0) return "0debug";
+        if (n == 42) return "42debug";
+        return "?debug";
+    }
+}

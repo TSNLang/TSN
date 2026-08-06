@@ -1,0 +1,10 @@
+// Test method only (no fields)
+class Simple {
+    function getName(): string {
+        return this.name;
+    }
+}
+
+function main(): i32 {
+    return 0;
+}

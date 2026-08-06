@@ -1,0 +1,18 @@
+// Phase 28 Test: String ops like lexer uses them
+
+function isKeyword(word: string): i32 {
+    if (word == "function") { return 1; }
+    if (word == "return") { return 2; }
+    if (word == "let") { return 3; }
+    if (word == "if") { return 4; }
+    if (word == "while") { return 5; }
+    return 0;
+}
+
+function main(): i32 {
+    let a = isKeyword("function");  // 1
+    let b = isKeyword("return");    // 2
+    let c = isKeyword("hello");     // 0 - not a keyword
+    
+    return a + b + c;  // 3
+}

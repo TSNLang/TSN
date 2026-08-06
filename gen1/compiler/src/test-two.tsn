@@ -1,0 +1,12 @@
+// Two classes
+class Simple {
+    name: string;
+}
+
+class Another {
+    count: i32;
+}
+
+function main(): i32 {
+    return 0;
+}

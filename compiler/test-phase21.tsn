@@ -1,0 +1,10 @@
+// Phase 22 Test: ARITHMETIC!
+// Testing fixed bootstrap compiler
+
+function test(): i32 {
+    return 5 + 7;
+}
+
+function main(): i32 {
+    return test();
+}

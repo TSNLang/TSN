@@ -1,0 +1,29 @@
+// Test: Nested object assignment
+// Simplest possible case
+
+class Container {
+    value: Expr;
+    
+    constructor() {
+        this.value = new Expr();
+    }
+}
+
+class Expr {
+    name: string;
+    
+    constructor() {
+        this.name = "";
+    }
+}
+
+function test(): i32 {
+    let container = new Container();
+    let expr = new Expr();
+    container.value = expr;  // ← This is the critical assignment
+    return 42;
+}
+
+function main(): i32 {
+    return test();
+}

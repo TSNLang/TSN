@@ -1,0 +1,8 @@
+// Test export
+export class Simple {
+    name: string;
+}
+
+function main(): i32 {
+    return 0;
+}

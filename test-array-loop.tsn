@@ -1,0 +1,25 @@
+// Phase 29 Test: Loop through array like compiler does
+
+import { Array } from "std:array";
+
+function sumArray(arr: Array<i32>): i32 {
+    let total: i32 = 0;
+    let i: i32 = 0;
+    while (i < arr.length) {
+        let val: i32 = arr.get(i);
+        total = total + val;
+        i = i + 1;
+    }
+    return total;
+}
+
+function main(): i32 {
+    let nums = new Array<i32>();
+    nums.push(1);
+    nums.push(2);
+    nums.push(3);
+    nums.push(4);
+    nums.push(5);
+    
+    return sumArray(nums);  // 1+2+3+4+5 = 15
+}

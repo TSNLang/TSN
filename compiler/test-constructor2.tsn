@@ -1,0 +1,10 @@
+// Test constructor parsing - no field declarations
+class Simple {
+    constructor(n: i32) {
+        let x: i32 = n;
+    }
+}
+
+function main(): i32 {
+    return 0;
+}

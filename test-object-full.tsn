@@ -1,0 +1,5 @@
+function main(): i32 {
+    let tok: Token = new Token("ID", "hello", 1, 1);
+    let s: string = tok.lexeme;
+    return 0;
+}

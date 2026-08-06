@@ -1,0 +1,29 @@
+// Minimal test: Nested object assignment
+// This is the EXACT pattern that fails
+
+class Container {
+    inner: Inner;
+    
+    constructor() {
+        // CRITICAL: Assigning nested object field
+        let temp = new Inner();
+        this.inner = temp;  // ← This assignment must work!
+    }
+}
+
+class Inner {
+    value: i32;
+    
+    constructor() {
+        this.value = 42;
+    }
+}
+
+function test(): i32 {
+    let c = new Container();
+    return c.inner.value;  // Should return 42
+}
+
+function main(): i32 {
+    return test();
+}

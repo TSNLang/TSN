@@ -1,0 +1,12 @@
+// Test method
+class Simple {
+    name: string;
+    
+    function getName(): string {
+        return this.name;
+    }
+}
+
+function main(): i32 {
+    return 0;
+}

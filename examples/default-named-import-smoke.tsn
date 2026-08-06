@@ -1,5 +1,0 @@
-import optionDefault, { Some as makeSome, None } from "std:option";
-
-function main(): i32 {
-    return 0;
-}

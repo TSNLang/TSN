@@ -1,0 +1,14 @@
+// Test export
+export class Token {
+    type: string;
+    value: string;
+    
+    constructor(t: string, v: string) {
+        this.type = t;
+        this.value = v;
+    }
+}
+
+export function createToken(): Token {
+    return new Token("ID", "test");
+}

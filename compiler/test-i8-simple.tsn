@@ -1,0 +1,17 @@
+// Test i8 type support
+// This tests if we can add new features without bootstrap
+
+function testI8(): i32 {
+    let small: i8 = 42;
+    let result: i32 = small;
+    return result;
+}
+
+function main(): i32 {
+    let x: i8 = 10;
+    let y: i8 = 20;
+    let sum: i32 = x + y;
+    return sum;
+}
+
+export { testI8, main }

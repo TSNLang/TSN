@@ -1,0 +1,13 @@
+// Test inline field declarations
+class Person {
+    name: string;
+    age: i32;
+    
+    function getName(): string {
+        return this.name;
+    }
+}
+
+function main(): i32 {
+    return 0;
+}

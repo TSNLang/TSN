@@ -1,0 +1,11 @@
+// Phase 16 Test: Function Parameters
+// Test: Parameter passing and simple arithmetic
+
+function add(a: i32, b: i32): i32 {
+    let sum: i32 = 10;
+    return sum;
+}
+
+function main(): i32 {
+    return add(5, 7);
+}

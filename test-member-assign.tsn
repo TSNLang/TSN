@@ -1,0 +1,5 @@
+function main(): i32 {
+    let expr = new Expr();
+    expr.numValue = "0";
+    return 0;
+}

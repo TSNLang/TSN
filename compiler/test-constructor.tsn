@@ -1,0 +1,12 @@
+// Test constructor parsing
+class Simple {
+    name: string;
+    
+    constructor(n: string) {
+        this.name = n;
+    }
+}
+
+function main(): i32 {
+    return 0;
+}

@@ -1,9 +1,0 @@
-// Simple test file for minimal compiler
-
-function hello(): i32 {
-    return 42;
-}
-
-function main(): i32 {
-    return hello();
-}

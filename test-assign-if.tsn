@@ -1,0 +1,12 @@
+// Test assignment in if body (no braces)
+function test(value: i32): i32 {
+    let result: i32 = 0;
+    if (value == 0) result = 10;
+    else if (value == 1) result = 20;
+    else result = 30;
+    return result;
+}
+
+function main(): i32 {
+    return test(1);
+}

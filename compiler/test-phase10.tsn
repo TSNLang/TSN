@@ -1,0 +1,9 @@
+// Phase 10 Test: Nested expressions
+
+function complexAdd(a: i32, b: i32, c: i32): i32 {
+    return a + b + c;
+}
+
+function nestedMath(x: i32, y: i32): i32 {
+    return (x + y) * 2;
+}
