@@ -393,6 +393,15 @@ class Parser:
             if self.check('CONSTRUCTOR'):
                 method = self.parse_constructor()
                 methods.append(method)
+            elif self.check('FUNCTION'):
+                # Explicit function keyword
+                method = self.parse_function(False)
+                methods.append(method)
+            elif self.check('FIELD'):
+                # Explicit field keyword
+                self.advance()  # consume 'field'
+                field = self.parse_field()
+                fields.append(field)
             else:
                 # Need to look ahead to distinguish field from method
                 # Method: name ( ...
@@ -909,10 +918,11 @@ class Codegen:
                 'tokens': ('ptr', 2),
                 'current': ('i32', 3)
             }
-        # Program: { functions: Array<FunctionDecl> }
+        # Program: { functions: Array<FunctionDecl>, classes: Array<ClassDecl> }
         if 'Program' not in self.class_fields:
             self.class_fields['Program'] = {
-                'functions': ('ptr', 2)
+                'functions': ('ptr', 2),
+                'classes': ('ptr', 3)
             }
         # FunctionDecl: { name: string, params: Array, returnType: string, body: BlockStmt }
         if 'FunctionDecl' not in self.class_fields:
@@ -921,6 +931,19 @@ class Codegen:
                 'params': ('ptr', 3),
                 'returnType': ('ptr', 4),
                 'body': ('ptr', 5)
+            }
+        # ClassDecl: { name: string, fields: Array<FieldDecl>, methods: Array<FunctionDecl> }
+        if 'ClassDecl' not in self.class_fields:
+            self.class_fields['ClassDecl'] = {
+                'name': ('ptr', 2),
+                'fields': ('ptr', 3),
+                'methods': ('ptr', 4)
+            }
+        # FieldDecl: { name: string, typeAnnotation: string }
+        if 'FieldDecl' not in self.class_fields:
+            self.class_fields['FieldDecl'] = {
+                'name': ('ptr', 2),
+                'typeAnnotation': ('ptr', 3)
             }
         # Parameter: { name: string, typeAnnotation: string }
         if 'Parameter' not in self.class_fields:
@@ -1851,6 +1874,7 @@ class Codegen:
             # Heuristic name mapping
             NAME_TO_CLASS = {
                 'token': 'Token',
+                'tok': 'Token',
                 'lexer': 'Lexer',
                 'parser': 'Parser',
                 'program': 'Program',
@@ -1863,9 +1887,40 @@ class Codegen:
                 'left': 'Expr',
                 'right': 'Expr',
                 'argExpr': 'Expr',
+                'call': 'Expr',
+                'newExpr': 'Expr',
+                'memberExpr': 'Expr',
+                'idExpr': 'Expr',
+                'assign': 'Expr',
+                'binExpr': 'Expr',
+                'result': 'Expr',
             }
             if var_name in NAME_TO_CLASS:
                 return NAME_TO_CLASS[var_name]
+        elif isinstance(obj_expr, MemberExpr):
+            # Chain member access: determine result type from member name
+            obj_member = obj_expr.member
+            # Map common member names to their result class
+            MEMBER_TO_CLASS = {
+                'left': 'Expr', 'right': 'Expr', 'object': 'Expr',
+                'value': 'Expr', 'expr': 'Expr', 'init': 'Expr',
+                'condition': 'Expr',
+                'thenBlock': 'BlockStmt', 'elseBlock': 'BlockStmt', 'body': 'BlockStmt',
+                'params': 'Parameter', 'args': 'Expr',
+                'functions': 'FunctionDecl',
+            }
+            if obj_member in MEMBER_TO_CLASS:
+                return MEMBER_TO_CLASS[obj_member]
+            # Fallback: search all classes for field type
+            for cls_name, fields in self.class_fields.items():
+                if obj_member in fields:
+                    field_type, _ = fields[obj_member]
+                    if field_type != 'i32' and field_type != 'void':
+                        # Try to extract class name from field type
+                        if field_type == 'ptr':
+                            # ptr fields are often Expr references
+                            return 'Expr'
+                        return field_type
         elif isinstance(obj_expr, ThisExpr):
             if self.current_class:
                 return self.current_class.name

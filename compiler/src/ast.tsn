@@ -23,9 +23,33 @@ export class SourceLocation {
 
 export class Program {
     functions: Array<FunctionDecl>;
+    classes: Array<ClassDecl>;
     
     constructor() {
         this.functions = new Array<FunctionDecl>();
+        this.classes = new Array<ClassDecl>();
+    }
+}
+
+export class ClassDecl {
+    name: string;
+    fields: Array<FieldDecl>;
+    methods: Array<FunctionDecl>;
+    
+    constructor(name: string) {
+        this.name = name;
+        this.fields = new Array<FieldDecl>();
+        this.methods = new Array<FunctionDecl>();
+    }
+}
+
+export class FieldDecl {
+    name: string;
+    typeAnnotation: string;
+    
+    constructor(name: string, typeAnnotation: string) {
+        this.name = name;
+        this.typeAnnotation = typeAnnotation;
     }
 }
 

@@ -4,7 +4,7 @@
 import { Array } from "std:array";
 import { log } from "std:console";
 import { Token } from "./lexer.tsn";
-import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, Expr, ReturnStmt, ExprStmt, VarDeclStmt, NumberLiteral, Identifier, BinaryExpr, CallExpr } from "./ast.tsn";
+import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, Expr, ReturnStmt, ExprStmt, VarDeclStmt, NumberLiteral, Identifier, BinaryExpr, CallExpr, ClassDecl, FieldDecl } from "./ast.tsn";
 
 export class Parser {
     tokens: Array<Token>;
@@ -23,15 +23,126 @@ export class Parser {
         let program = new Program();
         
         while (this.isAtEnd() == false) {
-            if (this.check("FUNCTION")) {
+            if (this.check("IMPORT")) {
+                // Skip import statements: import { ... } from "..."
+                this.skipImport();
+            } else if (this.check("EXPORT")) {
+                // Handle export: export class/function
+                this.advance();  // consume 'export'
+                if (this.check("CLASS")) {
+                    let cls = this.parseClass();
+                    program.classes.push(cls);
+                } else if (this.check("FUNCTION")) {
+                    let func = this.parseFunction();
+                    program.functions.push(func);
+                } else {
+                    this.advance();  // skip unknown export
+                }
+            } else if (this.check("FUNCTION")) {
                 let func = this.parseFunction();
                 program.functions.push(func);
+            } else if (this.check("CLASS")) {
+                let cls = this.parseClass();
+                program.classes.push(cls);
             } else {
                 this.advance();
             }
         }
         
         return program;
+    }
+    
+    private skipImport(): void {
+        // Skip import statement: import { ... } from "..."
+        while (this.isAtEnd() == false && this.check("SEMICOLON") == false) {
+            this.advance();
+        }
+        if (this.check("SEMICOLON")) {
+            this.advance();  // consume ';'
+        }
+    }
+    
+    // ========================================
+    // CLASS DECLARATION
+    // ========================================
+    
+    private parseClass(): ClassDecl {
+        this.consume("CLASS", "Expected 'class'");
+        let className = this.consume("IDENTIFIER", "Expected class name").lexeme;
+        this.consume("LBRACE", "Expected '{'");
+        
+        let cls = new ClassDecl(className);
+        
+        // Parse fields and methods
+        while (this.check("RBRACE") == false && this.isAtEnd() == false) {
+            if (this.check("CONSTRUCTOR")) {
+                // Constructor
+                this.advance();  // consume 'constructor'
+                let method = this.parseConstructor(className);
+                cls.methods.push(method);
+            } else if (this.check("FUNCTION")) {
+                // Method
+                let method = this.parseFunction();
+                cls.methods.push(method);
+            } else if (this.check("FIELD")) {
+                // Explicit field: field name: type;
+                this.consume("FIELD", "Expected 'field'");
+                let fieldName = this.consume("IDENTIFIER", "Expected field name").lexeme;
+                this.consume("COLON", "Expected ':'");
+                let fieldType = this.consume("IDENTIFIER", "Expected field type").lexeme;
+                this.consume("SEMICOLON", "Expected ';'");
+                
+                let field = new FieldDecl(fieldName, fieldType);
+                cls.fields.push(field);
+            } else if (this.check("IDENTIFIER")) {
+                // Could be inline field: name: type;
+                // Peek ahead to check if followed by COLON
+                if (this.peekNext() == "COLON") {
+                    let fieldName = this.advance().lexeme;
+                    this.consume("COLON", "Expected ':'");
+                    let fieldType = this.consume("IDENTIFIER", "Expected field type").lexeme;
+                    this.consume("SEMICOLON", "Expected ';'");
+                    
+                    let field = new FieldDecl(fieldName, fieldType);
+                    cls.fields.push(field);
+                } else {
+                    // Unknown - skip
+                    this.advance();
+                }
+            } else {
+                // Skip unknown tokens
+                this.advance();
+            }
+        }
+        
+        this.consume("RBRACE", "Expected '}'");
+        return cls;
+    }
+    
+    private parseConstructor(className: string): FunctionDecl {
+        // Constructor already consumed, parse like function
+        // Constructor name is usually the class name
+        this.consume("LPAREN", "Expected '('");
+        
+        let func = new FunctionDecl(className, "void");
+        
+        // Parse parameters
+        if (this.check("RPAREN") == false) {
+            let param = this.parseParameter();
+            func.params.push(param);
+            
+            while (this.match("COMMA")) {
+                let nextParam = this.parseParameter();
+                func.params.push(nextParam);
+            }
+        }
+        
+        this.consume("RPAREN", "Expected ')'");
+        
+        // Parse body
+        func.body = this.parseSimpleBlock();
+        
+        return func;
     }
     
     // ========================================
@@ -123,8 +234,9 @@ export class Parser {
                 block.statements.push(whileStmt);
                 
             } else {
-                // Unknown statement, skip token
-                this.advance();
+                // Expression statement (assignment, call, etc.)
+                let stmt = this.parseExprStmt();
+                block.statements.push(stmt);
             }
         }
         
@@ -433,44 +545,109 @@ export class Parser {
     private parsePrimary(): Expr {
         // Number literal
         if (this.check("NUMBER")) {
-            let token = this.advance();
-            
-            // Create Expr and set fields in order
+            let token: Token = this.advance();
             let expr = new Expr();
-            expr.kind = "NumberLiteral";  // Set kind first!
+            expr.kind = "NumberLiteral";
             expr.numValue = token.lexeme;
             return expr;
         }
         
-        // Identifier or function call
+        // String literal
+        if (this.check("STRING")) {
+            let token: Token = this.advance();
+            let expr = new Expr();
+            expr.kind = "StringLiteral";
+            expr.name = token.lexeme;  // store string content in name field
+            return expr;
+        }
+        
+        // new ClassName(args)
+        if (this.check("NEW")) {
+            this.advance();  // consume 'new'
+            let className = this.consume("IDENTIFIER", "Expected class name after 'new'").lexeme;
+            
+            // Handle generics: Array<T> - skip the <T> part
+            if (this.check("LT")) {
+                this.advance();  // consume <
+                // Skip until >
+                let depth = 1;
+                while (depth > 0 && this.isAtEnd() == false) {
+                    if (this.check("LT")) depth = depth + 1;
+                    if (this.check("GT")) depth = depth - 1;
+                    this.advance();
+                }
+            }
+            
+            this.consume("LPAREN", "Expected '(' after class name");
+            let newExpr = new Expr();
+            newExpr.kind = "NewExpr";
+            newExpr.callee = className;
+            newExpr.args = new Array<Expr>();
+            
+            if (this.check("RPAREN") == false) {
+                let firstArg: Expr = this.parseExpression();
+                newExpr.args.push(firstArg);
+                while (this.match("COMMA")) {
+                    let nextArg: Expr = this.parseExpression();
+                    newExpr.args.push(nextArg);
+                }
+            }
+            this.consume("RPAREN", "Expected ')'");
+            return newExpr;
+        }
+        
+        // this
+        if (this.check("THIS")) {
+            this.advance();
+            let thisExpr = new Expr();
+            thisExpr.kind = "ThisExpr";
+            thisExpr.name = "this";
+            return this.parseMemberChain(thisExpr);
+        }
+        
+        // true / false
+        if (this.check("TRUE")) {
+            this.advance();
+            let expr = new Expr();
+            expr.kind = "NumberLiteral";
+            expr.numValue = "1";
+            return expr;
+        }
+        if (this.check("FALSE")) {
+            this.advance();
+            let expr = new Expr();
+            expr.kind = "NumberLiteral";
+            expr.numValue = "0";
+            return expr;
+        }
+        
+        // Identifier, function call, or member access chain
         if (this.check("IDENTIFIER")) {
             let name = this.advance().lexeme;
             
             // Function call
             if (this.match("LPAREN")) {
-                // Create CallExpr manually
                 let call = new Expr();
                 call.kind = "CallExpr";
                 call.callee = name;
                 call.args = new Array<Expr>();
                 
                 if (this.check("RPAREN") == false) {
-                    call.args.push(this.parseExpression());
-                    
+                    let firstArg: Expr = this.parseExpression();
+                    call.args.push(firstArg);
                     while (this.match("COMMA")) {
-                        call.args.push(this.parseExpression());
+                        let nextArg: Expr = this.parseExpression();
+                        call.args.push(nextArg);
                     }
                 }
-                
                 this.consume("RPAREN", "Expected ')'");
-                return call;
+                return this.parseMemberChain(call);
             }
             
-            // Just identifier  
             let idExpr = new Expr();
             idExpr.kind = "Identifier";
             idExpr.name = name;
-            return idExpr;
+            return this.parseMemberChain(idExpr);
         }
         
         // Parenthesized expression
@@ -482,9 +659,48 @@ export class Parser {
         
         // Error fallback
         let errorExpr = new Expr();
-        errorExpr.numValue = "0";  // First field!
         errorExpr.kind = "NumberLiteral";
+        errorExpr.numValue = "0";
         return errorExpr;
+    }
+    
+    private parseMemberChain(expr: Expr): Expr {
+        // Parse chained member accesses: expr.field, expr.method(), etc.
+        let result: Expr = expr;
+        
+        while (this.check("DOT")) {
+            this.advance();  // consume .
+            let memberName = this.consume("IDENTIFIER", "Expected member name").lexeme;
+            
+            // Method call: expr.method(args)
+            if (this.match("LPAREN")) {
+                let call = new Expr();
+                call.kind = "MethodCallExpr";
+                call.object = result;
+                call.member = memberName;
+                call.args = new Array<Expr>();
+                
+                if (this.check("RPAREN") == false) {
+                    let firstArg: Expr = this.parseExpression();
+                    call.args.push(firstArg);
+                    while (this.match("COMMA")) {
+                        let nextArg: Expr = this.parseExpression();
+                        call.args.push(nextArg);
+                    }
+                }
+                this.consume("RPAREN", "Expected ')'");
+                result = call;
+            } else {
+                // Field access: expr.field
+                let memberExpr = new Expr();
+                memberExpr.kind = "MemberExpr";
+                memberExpr.object = result;
+                memberExpr.member = memberName;
+                result = memberExpr;
+            }
+        }
+        
+        return result;
     }
     
     // ========================================
@@ -517,6 +733,15 @@ export class Parser {
     
     private peek(): Token {
         return this.tokens.get(this.current);
+    }
+    
+    private peekNext(): string {
+        // Peek at next token type
+        if (this.current + 1 >= this.tokens.length) {
+            return "EOF";
+        }
+        let nextToken = this.tokens.get(this.current + 1);
+        return nextToken.type;
     }
     
     private previous(): Token {

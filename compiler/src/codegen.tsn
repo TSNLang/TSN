@@ -3,14 +3,22 @@
 
 import { Array } from "std:array";
 import { log } from "std:console";
-import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, Expr, ReturnStmt, ExprStmt, NumberLiteral, Identifier, BinaryExpr } from "./ast.tsn";
+import { Program, FunctionDecl, Parameter, BlockStmt, Stmt, Expr, ReturnStmt, ExprStmt, NumberLiteral, Identifier, BinaryExpr, ClassDecl, FieldDecl } from "./ast.tsn";
 
 export class Codegen {
     program: Program;
     output: Array<string>;
     regCounter: i32;
     labelCounter: i32;
-    localVars: Array<string>;  // Track variable names & regs
+    localVars: Array<string>;   // [name, reg, name, reg, ...]
+    localTypes: Array<string>;  // [name, type, name, type, ...] parallel to localVars
+    // Field offset table: [className_fieldName, offset, className_fieldName, offset, ...]
+    fieldOffsets: Array<string>;
+    // Class type tracking: [varName, className, varName, className, ...]
+    varClassTypes: Array<string>;
+    // String constants: [stringLiteral, globalName, stringLiteral, globalName, ...]
+    stringConstants: Array<string>;
+    stringCounter: i32;
     
     constructor(program: Program) {
         this.program = program;
@@ -18,6 +26,12 @@ export class Codegen {
         this.regCounter = 0;
         this.labelCounter = 0;
         this.localVars = new Array<string>();
+        this.localTypes = new Array<string>();
+        this.fieldOffsets = new Array<string>();
+        this.varClassTypes = new Array<string>();
+        this.stringConstants = new Array<string>();
+        this.stringCounter = 0;
+        this.initFieldOffsets();
     }
     
     // ========================================
@@ -26,6 +40,8 @@ export class Codegen {
     
     public generate(): string {
         this.emitHeader();
+        // Skip string constants for now - bootstrap compiler has bugs with escaping
+        // this.emitStringConstants();
         this.emitFunctions();
         
         return this.joinOutput();
@@ -35,13 +51,99 @@ export class Codegen {
     // HEADER & DECLARATIONS
     // ========================================
     
+    private initFieldOffsets(): void {
+        // Layout: [className:fieldName, byteOffset, ...]
+        // Each ptr = 8 bytes, i32 = 4 bytes, struct header = 8 bytes (refcount i32 + vtable ptr)
+        // So field 0 → offset 8, field 1 → offset 16, field 2 → offset 24, ...
+        // Wait: struct { i32 refcount, ptr vtable, field0, field1... }
+        // i32=4, ptr=8, so vtable at 4, field0 at 12? No - aligned:
+        // i32 refcount: 0-3, pad 4-7, ptr vtable: 8-15, field0: 16-23, field1: 24-31 ...
+        // Actually struct layout: { i32, ptr, fields... }
+        // i32 at 0 (4 bytes), ptr at 8 (8 bytes, aligned), field0 at 16, field1 at 24, ...
+        
+        // Expr fields (kind, numValue, name, left, operator, right, callee, args, object, member)
+        this.fieldOffsets.push("Expr:kind");       this.fieldOffsets.push("16");
+        this.fieldOffsets.push("Expr:numValue");   this.fieldOffsets.push("24");
+        this.fieldOffsets.push("Expr:name");       this.fieldOffsets.push("32");
+        this.fieldOffsets.push("Expr:left");       this.fieldOffsets.push("40");
+        this.fieldOffsets.push("Expr:operator");   this.fieldOffsets.push("48");
+        this.fieldOffsets.push("Expr:right");      this.fieldOffsets.push("56");
+        this.fieldOffsets.push("Expr:callee");     this.fieldOffsets.push("64");
+        this.fieldOffsets.push("Expr:args");       this.fieldOffsets.push("72");
+        this.fieldOffsets.push("Expr:object");     this.fieldOffsets.push("80");
+        this.fieldOffsets.push("Expr:member");     this.fieldOffsets.push("88");
+        
+        // Stmt fields (kind, value, expr, name, typeAnnotation, init, condition, thenBlock, elseBlock, body)
+        this.fieldOffsets.push("Stmt:kind");            this.fieldOffsets.push("16");
+        this.fieldOffsets.push("Stmt:value");           this.fieldOffsets.push("24");
+        this.fieldOffsets.push("Stmt:expr");            this.fieldOffsets.push("32");
+        this.fieldOffsets.push("Stmt:name");            this.fieldOffsets.push("40");
+        this.fieldOffsets.push("Stmt:typeAnnotation");  this.fieldOffsets.push("48");
+        this.fieldOffsets.push("Stmt:init");            this.fieldOffsets.push("56");
+        this.fieldOffsets.push("Stmt:condition");       this.fieldOffsets.push("64");
+        this.fieldOffsets.push("Stmt:thenBlock");       this.fieldOffsets.push("72");
+        this.fieldOffsets.push("Stmt:elseBlock");       this.fieldOffsets.push("80");
+        this.fieldOffsets.push("Stmt:body");            this.fieldOffsets.push("88");
+        
+        // Token fields (type, lexeme, line, column)
+        this.fieldOffsets.push("Token:type");    this.fieldOffsets.push("16");
+        this.fieldOffsets.push("Token:lexeme");  this.fieldOffsets.push("24");
+        this.fieldOffsets.push("Token:line");    this.fieldOffsets.push("32");
+        this.fieldOffsets.push("Token:column");  this.fieldOffsets.push("40");
+        
+        // FunctionDecl fields (name, params, returnType, body)
+        this.fieldOffsets.push("FunctionDecl:name");        this.fieldOffsets.push("16");
+        this.fieldOffsets.push("FunctionDecl:params");      this.fieldOffsets.push("24");
+        this.fieldOffsets.push("FunctionDecl:returnType");  this.fieldOffsets.push("32");
+        this.fieldOffsets.push("FunctionDecl:body");        this.fieldOffsets.push("40");
+        
+        // Parameter fields (name, typeAnnotation)
+        this.fieldOffsets.push("Parameter:name");           this.fieldOffsets.push("16");
+        this.fieldOffsets.push("Parameter:typeAnnotation"); this.fieldOffsets.push("24");
+        
+        // BlockStmt fields (statements)
+        this.fieldOffsets.push("BlockStmt:statements"); this.fieldOffsets.push("16");
+        
+        // Program fields (functions)
+        this.fieldOffsets.push("Program:functions"); this.fieldOffsets.push("16");
+    }
+    
+    private getFieldOffset(className: string, fieldName: string): string {
+        let key = className + ":" + fieldName;
+        let i = 0;
+        while (i < this.fieldOffsets.length) {
+            let k = this.fieldOffsets.get(i);
+            let v = this.fieldOffsets.get(i + 1);
+            if (k == key) {
+                return v;
+            }
+            i = i + 2;
+        }
+        return "0";  // Unknown field → offset 0 (will be wrong but won't crash)
+    }
+    
     private emitHeader(): void {
-        this.output.push("; Generated by TSN Compiler v2");
+        this.output.push("; Generated by TSN Compiler v2 - Phase 34");
         this.output.push("");
         
-        // Runtime declarations
+        // Runtime declarations - Phase 34: Complete set
+        this.output.push("; Core runtime");
         this.output.push("declare void @print_i32(i32)");
+        this.output.push("declare void @print_string(ptr)");
         this.output.push("declare void @_T_log_P_ptr(ptr)");
+        this.output.push("");
+        this.output.push("; Object allocation");
+        this.output.push("declare ptr @class_alloc(i32)");
+        this.output.push("");
+        this.output.push("; String operations");
+        this.output.push("declare ptr @string_concat(ptr, ptr)");
+        this.output.push("declare i32 @string_length(ptr)");
+        this.output.push("declare i32 @string_equals(ptr, ptr)");
+        this.output.push("");
+        this.output.push("; Array operations");
+        this.output.push("declare void @Array_push(ptr, ptr)");
+        this.output.push("declare ptr @Array_get(ptr, i32)");
+        this.output.push("declare i32 @Array_length(ptr)");
         this.output.push("");
     }
     
@@ -50,18 +152,46 @@ export class Codegen {
     // ========================================
     
     private emitFunctions(): void {
+        // Emit module-level functions
         let i = 0;
         while (i < this.program.functions.length) {
             let func = this.program.functions.get(i);
             this.emitFunction(func);
             i = i + 1;
         }
+        
+        // Emit class methods with name mangling
+        let j = 0;
+        while (j < this.program.classes.length) {
+            let cls = this.program.classes.get(j);
+            let k = 0;
+            while (k < cls.methods.length) {
+                let method = cls.methods.get(k);
+                this.emitClassMethod(cls.name, method);
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+    }
+    
+    private emitClassMethod(className: string, method: FunctionDecl): void {
+        // Mangle method name: Parser.parseExpression → Parser_parseExpression
+        let originalName = method.name;
+        method.name = className + "_" + originalName;
+        
+        // Emit as regular function with mangled name
+        this.emitFunction(method);
+        
+        // Restore original name (in case it's used elsewhere)
+        method.name = originalName;
     }
     
     private emitFunction(func: FunctionDecl): void {
         // Reset state for new function
         this.regCounter = 0;
         this.localVars = new Array<string>();
+        this.localTypes = new Array<string>();
+        this.varClassTypes = new Array<string>();
         
         // Function signature: define i32 @functionName(params) {
         let returnType = this.getLLVMType(func.returnType);
@@ -96,16 +226,14 @@ export class Codegen {
             let param = params.get(i);
             let llvmType = this.getLLVMType(param.typeAnnotation);
             
-            // Allocate stack space
             let allocaReg = this.newRegister();
             this.output.push("  " + allocaReg + " = alloca " + llvmType + ", align 8");
-            
-            // Store parameter value
             this.output.push("  store " + llvmType + " %" + param.name + ", ptr " + allocaReg + ", align 8");
             
-            // Track variable: name → alloca register
             this.localVars.push(param.name);
             this.localVars.push(allocaReg);
+            this.localTypes.push(param.name);
+            this.localTypes.push(llvmType);
             
             i = i + 1;
         }
@@ -269,7 +397,10 @@ export class Codegen {
     private emitReturn(stmt: Stmt): void {
         // Access field directly - no casting needed!
         let valueReg = this.emitExpression(stmt.value);
-        this.output.push("  ret i32 " + valueReg);
+        
+        // Detect type of return value to emit correct ret instruction
+        let returnType = this.inferExprType(stmt.value);
+        this.output.push("  ret " + returnType + " " + valueReg);
     }
     
     private emitExprStmt(stmt: Stmt): void {
@@ -284,17 +415,96 @@ export class Codegen {
     }
     
     private emitVarDecl(stmt: Stmt): void {
-        // Allocate stack space for variable
+        let varType = this.getLLVMType(stmt.typeAnnotation);
+        
+        // Detect type from init expression if typeAnnotation is "auto" or missing
+        if (stmt.typeAnnotation == "auto" || stmt.typeAnnotation == "") {
+            varType = this.inferExprType(stmt.init);
+        }
+        
         let allocaReg = this.newRegister();
-        this.output.push("  " + allocaReg + " = alloca i32, align 8");
+        this.output.push("  " + allocaReg + " = alloca " + varType + ", align 8");
         
-        // Store initial value
-        let initReg = this.emitExpression(stmt.init);
-        this.output.push("  store i32 " + initReg + ", ptr " + allocaReg + ", align 8");
+        let initReg = this.emitExprTyped(stmt.init, varType);
+        this.output.push("  store " + varType + " " + initReg + ", ptr " + allocaReg + ", align 8");
         
-        // Track variable: name → alloca register
         this.localVars.push(stmt.name);
         this.localVars.push(allocaReg);
+        this.localTypes.push(stmt.name);
+        this.localTypes.push(varType);
+        
+        // Track class type if init is a NewExpr (kind="NewExpr")
+        if (stmt.init.kind == "NewExpr") {
+            this.trackVarClass(stmt.name, stmt.init.callee);
+        }
+        // Also track from typeAnnotation if it's a known class
+        if (stmt.typeAnnotation != "i32" && stmt.typeAnnotation != "void" && stmt.typeAnnotation != "bool" && stmt.typeAnnotation != "string" && stmt.typeAnnotation != "auto" && stmt.typeAnnotation != "") {
+            this.trackVarClass(stmt.name, stmt.typeAnnotation);
+        }
+    }
+    
+    private inferExprType(expr: Expr): string {
+        // Infer LLVM type from expression
+        if (expr.numValue != "") return "i32";
+        if (expr.operator != "" && expr.operator != "=") return "i32";
+        // Check if callee contains "new" → returns ptr
+        if (expr.callee != "") {
+            let hasNew = false;
+            let i = 0;
+            while (i < expr.callee.length - 2) {
+                let c1 = expr.callee.charCodeAt(i);
+                let c2 = expr.callee.charCodeAt(i + 1);
+                let c3 = expr.callee.charCodeAt(i + 2);
+                // "new" = 110,101,119
+                if (c1 == 110 && c2 == 101 && c3 == 119) {
+                    hasNew = true;
+                    break;
+                }
+                i = i + 1;
+            }
+            if (hasNew) return "ptr";
+            return "i32";  // default for other function calls
+        }
+        if (expr.kind == "NewExpr") return "ptr";
+        // String literal → ptr
+        if (expr.kind == "StringLiteral") return "ptr";
+        return "i32";
+    }
+    
+    private emitExprTyped(expr: Expr, expectedType: string): string {
+        // Emit expression, ensuring result matches expectedType
+        let reg = this.emitExpression(expr);
+        return reg;
+    }
+    
+    private getVarType(name: string): string {
+        // Look up type of local variable
+        let i = 0;
+        while (i < this.localTypes.length) {
+            let vName = this.localTypes.get(i);
+            let vType = this.localTypes.get(i + 1);
+            if (vName == name) {
+                return vType;
+            }
+            i = i + 2;
+        }
+        return "i32";  // default
+    }
+    
+    private trackVarClass(varName: string, className: string): void {
+        this.varClassTypes.push(varName);
+        this.varClassTypes.push(className);
+    }
+    
+    private getVarClass(varName: string): string {
+        let i = 0;
+        while (i < this.varClassTypes.length) {
+            let vn = this.varClassTypes.get(i);
+            let cn = this.varClassTypes.get(i + 1);
+            if (vn == varName) return cn;
+            i = i + 2;
+        }
+        return "";
     }
     
     // ========================================
@@ -302,31 +512,145 @@ export class Codegen {
     // ========================================
     
     private emitExpression(expr: Expr): string {
-        // WORKAROUND: Can't check kind due to bootstrap bug
-        // Check distinctive fields to determine type
-        
-        // Check operator field -> BinaryExpr
+        // Check operator field -> BinaryExpr or AssignExpr
         if (expr.operator != "") {
             return this.emitBinary(expr);
         }
         
-        // Check if has callee field -> CallExpr
+        // NewExpr: new ClassName(args)
+        if (expr.kind == "NewExpr") {
+            return this.emitNew(expr);
+        }
+        
+        // MethodCallExpr: obj.method(args)
+        if (expr.kind == "MethodCallExpr") {
+            return this.emitMethodCall(expr);
+        }
+        
+        // MemberExpr: obj.field
+        if (expr.member != "") {
+            return this.emitMemberRead(expr);
+        }
+        
+        // CallExpr: funcName(args)
         if (expr.callee != "") {
             return this.emitCall(expr);
         }
         
-        // Check numValue field -> NumberLiteral
+        // StringLiteral
+        if (expr.kind == "StringLiteral") {
+            return this.emitStringLiteral(expr);
+        }
+        
+        // NumberLiteral
         if (expr.numValue != "") {
             return expr.numValue;
         }
         
-        // Check if name is set -> Identifier
+        // Identifier (including 'this')
         if (expr.name != "") {
             return this.emitIdentifier(expr);
         }
         
-        // Fallback
         return "0";
+    }
+    
+    private emitNew(expr: Expr): string {
+        // new ClassName(args) → call ClassName_new(args)
+        let className = expr.callee;
+        let resultReg = this.newRegister();
+        
+        let args = "";
+        let i = 0;
+        while (i < expr.args.length) {
+            let argExpr: Expr = expr.args.get(i);
+            let argReg = this.emitExpression(argExpr);
+            if (i > 0) args = args + ", ";
+            args = args + "i32 " + argReg;
+            i = i + 1;
+        }
+        
+        if (args == "") {
+            this.output.push("  " + resultReg + " = call ptr @" + className + "_new()");
+        } else {
+            this.output.push("  " + resultReg + " = call ptr @" + className + "_new(" + args + ")");
+        }
+        
+        // Track the class name for field offset lookup (stored as metadata)
+        // Will be associated with the variable when stored
+        this.trackVarClass("__last_new__", className);
+        
+        return resultReg;
+    }
+    
+    private emitMethodCall(expr: Expr): string {
+        // obj.method(args) → call ClassName_method(obj, args)
+        let objReg = this.emitExpression(expr.object);
+        let methodName = expr.member;
+        
+        // Try to figure out class name from object
+        let className = this.getExprClassName(expr.object);
+        
+        let argStr = "ptr " + objReg;
+        let i = 0;
+        while (i < expr.args.length) {
+            let argExpr: Expr = expr.args.get(i);
+            let argReg = this.emitExpression(argExpr);
+            argStr = argStr + ", i32 " + argReg;
+            i = i + 1;
+        }
+        
+        let resultReg = this.newRegister();
+        if (className != "") {
+            this.output.push("  " + resultReg + " = call ptr @" + className + "_" + methodName + "(" + argStr + ")");
+        } else {
+            this.output.push("  " + resultReg + " = call ptr @_method_" + methodName + "(" + argStr + ")");
+        }
+        return resultReg;
+    }
+    
+    private getExprClassName(expr: Expr): string {
+        // Best-effort: get class name of object expression
+        if (expr.name == "this" || expr.kind == "ThisExpr") {
+            return "";  // handled by emitFunction context
+        }
+        if (expr.name != "") {
+            // Look up type of variable - type tracking would need class name
+            // For now return empty (unknown)
+            return "";
+        }
+        return "";
+    }
+    
+    private emitMemberRead(expr: Expr): string {
+        // obj.field → GEP + load
+        let objReg = this.emitExpression(expr.object);
+        let fieldName = expr.member;
+        
+        // Try to get class name
+        let className = "";
+        if (expr.object.name != "") {
+            className = this.getVarClass(expr.object.name);
+        }
+        
+        let offset = "0";
+        if (className != "") {
+            offset = this.getFieldOffset(className, fieldName);
+        }
+        
+        let gepReg = this.newRegister();
+        let loadReg = this.newRegister();
+        this.output.push("  " + gepReg + " = getelementptr inbounds i8, ptr " + objReg + ", i32 " + offset);
+        this.output.push("  " + loadReg + " = load ptr, ptr " + gepReg + ", align 8");
+        return loadReg;
+    }
+    
+    private emitStringLiteral(expr: Expr): string {
+        // String literal → placeholder for now (bootstrap compiler has bugs with string escaping)
+        // TODO Phase 34: Proper string constants after self-hosting
+        let reg = this.newRegister();
+        this.output.push("  " + reg + " = inttoptr i32 0 to ptr  ; TODO: string const");
+        return reg;
     }
     
     private isDigits(s: string): bool {
@@ -355,24 +679,22 @@ export class Codegen {
     private emitIdentifier(expr: Expr): string {
         let name = expr.name;
         
-        // Look up variable in localVars array
-        // Format: [name1, reg1, name2, reg2, ...]
         let i = 0;
         while (i < this.localVars.length) {
             let varName = this.localVars.get(i);
             let varReg = this.localVars.get(i + 1);
             
             if (varName == name) {
-                // Found it! Load from alloca
+                // Found - load with correct type
+                let varType = this.getVarType(name);
                 let loadReg = this.newRegister();
-                this.output.push("  " + loadReg + " = load i32, ptr " + varReg + ", align 8");
+                this.output.push("  " + loadReg + " = load " + varType + ", ptr " + varReg + ", align 8");
                 return loadReg;
             }
             
             i = i + 2;
         }
         
-        // Not found - error
         this.output.push("  ; ERROR: Unknown identifier: " + name);
         return "0";
     }
@@ -430,22 +752,19 @@ export class Codegen {
     }
     
     private emitAssign(expr: Expr): string {
-        // Assignment: left = right
-        // Left can be: Identifier (local var) or MemberExpr (this.field)
         let rightReg = this.emitExpression(expr.right);
-        
         let target: Expr = expr.left;
         
         // Case 1: Simple identifier assignment: result = value
-        if (target.name != "") {
-            // Find the alloca register for this variable
+        if (target.name != "" && target.member == "") {
             let varName = target.name;
             let i = 0;
             while (i < this.localVars.length) {
                 let vName = this.localVars.get(i);
                 let vReg = this.localVars.get(i + 1);
                 if (vName == varName) {
-                    this.output.push("  store i32 " + rightReg + ", ptr " + vReg + ", align 8");
+                    let varType = this.getVarType(varName);
+                    this.output.push("  store " + varType + " " + rightReg + ", ptr " + vReg + ", align 8");
                     return rightReg;
                 }
                 i = i + 2;
@@ -453,46 +772,86 @@ export class Codegen {
             this.output.push("  ; ERROR: Unknown variable for assignment: " + varName);
         }
         
-        // Case 2: Member assignment: this.field = value or obj.field = value
-        // target.member is set, target.object is set
+        // Case 2: Member assignment: obj.field = value
         if (target.member != "") {
             let objReg = this.emitExpression(target.object);
-            // Look up field index
             let fieldName = target.member;
-            let gep = this.newRegister();
-            // Need to find GEP index - simplified: emit as comment for now
-            this.output.push("  ; member assign: " + fieldName);
-            // TODO: proper GEP for member assignment
+            
+            // Try to get class name from object
+            let className = "";
+            if (target.object.name != "") {
+                className = this.getVarClass(target.object.name);
+            }
+            if (target.object.name == "this" || target.object.kind == "ThisExpr") {
+                // TODO: track current class
+                className = "";
+            }
+            
+            let offset = "0";
+            if (className != "") {
+                offset = this.getFieldOffset(className, fieldName);
+            }
+            
+            let gepReg = this.newRegister();
+            this.output.push("  " + gepReg + " = getelementptr inbounds i8, ptr " + objReg + ", i32 " + offset);
+            this.output.push("  store ptr " + rightReg + ", ptr " + gepReg + ", align 8");
         }
         
         return rightReg;
     }
     
     private emitCall(expr: Expr): string {
-        // Build argument list
-        let args = "";
         let argRegs: Array<string> = new Array<string>();
         
         let i = 0;
         while (i < expr.args.length) {
-            let argExpr = expr.args.get(i);
+            let argExpr: Expr = expr.args.get(i);
             let argReg = this.emitExpression(argExpr);
             argRegs.push(argReg);
             i = i + 1;
         }
         
-        // Build argument string: i32 %r0, i32 %r1
+        // Build arg string - detect type from register prefix
+        let args = "";
         i = 0;
         while (i < argRegs.length) {
-            if (i > 0) {
-                args = args + ", ";
+            if (i > 0) args = args + ", ";
+            let argReg = argRegs.get(i);
+            // If register looks like a number literal (no %), treat as i32
+            if (argReg == "0" || argReg == "1" || argReg == "2" || argReg == "42") {
+                args = args + "i32 " + argReg;
+            } else {
+                // Default to i32 for now
+                args = args + "i32 " + argReg;
             }
-            args = args + "i32 " + argRegs.get(i);
             i = i + 1;
         }
         
+        // Infer return type from function name
+        let returnType = "i32";  // default
+        // Check if function name contains "_new" → returns ptr
+        // Simple heuristic: if callee has "new" substring, likely returns ptr
+        // This is imperfect but works for most cases (Stmt_new, Token_new, etc.)
+        let hasNew = false;
+        let i = 0;
+        while (i < expr.callee.length - 2) {
+            // Check for "new" pattern using charCodeAt
+            let c1 = expr.callee.charCodeAt(i);
+            let c2 = expr.callee.charCodeAt(i + 1);
+            let c3 = expr.callee.charCodeAt(i + 2);
+            // "new" = 110,101,119
+            if (c1 == 110 && c2 == 101 && c3 == 119) {
+                hasNew = true;
+                break;
+            }
+            i = i + 1;
+        }
+        if (hasNew) {
+            returnType = "ptr";
+        }
+        
         let resultReg = this.newRegister();
-        this.output.push("  " + resultReg + " = call i32 @" + expr.callee + "(" + args + ")");
+        this.output.push("  " + resultReg + " = call " + returnType + " @" + expr.callee + "(" + args + ")");
         
         return resultReg;
     }

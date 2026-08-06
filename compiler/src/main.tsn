@@ -15,9 +15,9 @@ function main(): void {
     // For now, use hardcoded test
     // TODO: Parse command-line args when runtime supports it
     
-    // Test case: read from file
-    log("Reading from compiler/test-phase23.tsn...");
-    let source = readText("compiler/test-phase23.tsn");
+    // Test case: read from file - SELF-COMPILE TEST
+    log("Reading from compiler/test-methods-only.tsn...");
+    let source = readText("compiler/test-methods-only.tsn");
     
     log("Compiling...");
     
@@ -25,9 +25,12 @@ function main(): void {
     let tokens = lexer.tokenize();
     log("  Tokens: " + intToString(tokens.length));
     
+    log("Starting parser...");
     let parser = new Parser(tokens);
+    log("Parser created, calling parse()...");
     let program = parser.parse();
     log("  Functions: " + intToString(program.functions.length));
+    log("  Classes: " + intToString(program.classes.length));
     
     let codegen = new Codegen(program);
     let llvmIR = codegen.generate();
