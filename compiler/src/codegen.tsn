@@ -862,6 +862,7 @@ export class Codegen {
     
     private getLLVMType(tsnType: string): string {
         if (tsnType == "i8") return "i8";
+        if (tsnType == "i16") return "i16";  // NEW! Phase 40 feature
         if (tsnType == "i32") return "i32";
         if (tsnType == "void") return "void";
         if (tsnType == "bool") return "i1";

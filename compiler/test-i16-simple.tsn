@@ -1,0 +1,22 @@
+// Test i16 type support - Phase 40 feature addition
+// This tests adding new features with 67% Python-free workflow
+
+function testI16(): i32 {
+    let small: i16 = 1000;
+    let result: i32 = small;
+    return result;
+}
+
+function addI16(a: i16, b: i16): i32 {
+    let sum: i32 = a + b;
+    return sum;
+}
+
+function main(): i32 {
+    let x: i16 = 100;
+    let y: i16 = 200;
+    let total: i32 = addI16(x, y);
+    return total;
+}
+
+export { testI16, addI16, main }

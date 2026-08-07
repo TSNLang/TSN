@@ -15,9 +15,9 @@ function main(): void {
     // For now, use hardcoded test
     // TODO: Parse command-line args when runtime supports it
     
-    // Test case: Gen4 functionality test
-    log("Reading from test-gen4.tsn...");
-    let source = readText("test-gen4.tsn");
+    // Test i16 feature
+    log("Reading from compiler/test-i16-simple.tsn...");
+    let source = readText("compiler/test-i16-simple.tsn");
     
     log("Compiling...");
     
