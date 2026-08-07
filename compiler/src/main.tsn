@@ -15,9 +15,9 @@ function main(): void {
     // For now, use hardcoded test
     // TODO: Parse command-line args when runtime supports it
     
-    // Test case: read from file - SELF-COMPILE TEST
-    log("Reading from compiler/test-methods-only.tsn...");
-    let source = readText("compiler/test-methods-only.tsn");
+    // Test case: Gen4 functionality test
+    log("Reading from test-gen4.tsn...");
+    let source = readText("test-gen4.tsn");
     
     log("Compiling...");
     
@@ -107,3 +107,6 @@ function intToString(n: i32): string {
     if (n == 100) return "100";
     return "?";
 }
+
+
+

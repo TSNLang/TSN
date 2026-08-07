@@ -71,10 +71,11 @@ $outputExe = "compiler\tsnc.exe"
 # Create compiler directory if it doesn't exist
 New-Item -ItemType Directory -Force -Path "compiler" | Out-Null
 
-# Link with clang
+# Link with clang (with increased stack size for parser recursion)
 if (Get-Command clang -ErrorAction SilentlyContinue) {
     $llvmPaths = $llvmFiles | ForEach-Object { "bootstrap\$_" }
-    clang @llvmPaths $runtimeObj -o $outputExe
+    # /STACK:16777216 = 16 MB stack (vs 1 MB default) - enables parser self-compilation
+    clang @llvmPaths $runtimeObj -o $outputExe "-Wl,/STACK:16777216"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "      Error: Failed to link!" -ForegroundColor Red
         Write-Host "      Check for missing runtime functions" -ForegroundColor Yellow
